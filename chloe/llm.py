@@ -19,7 +19,8 @@ from .soul    import Soul, mbti_type, describe
 from .heart   import Vitals
 from .memory  import Memory, format_for_prompt
 
-MODEL     = "claude-opus-4-5"
+MODEL_CHAT = "claude-opus-4-5"            # full power — used only for live chat
+MODEL_FAST = "claude-haiku-4-5-20251001" # background tasks: memory, ideas, graph
 MAX_TOKENS = 1024
 
 # Initialise the client once — it reads ANTHROPIC_API_KEY from env automatically
@@ -28,10 +29,11 @@ _client = anthropic.Anthropic()
 
 # ── BASE CALLER ──────────────────────────────────────────────
 
-def _call(system: str, messages: list[dict], max_tokens: int = MAX_TOKENS) -> str:
+def _call(system: str, messages: list[dict], max_tokens: int = MAX_TOKENS,
+          model: str = MODEL_FAST) -> str:
     """Send a request and return the text response."""
     response = _client.messages.create(
-        model=MODEL,
+        model=model,
         max_tokens=max_tokens,
         system=system,
         messages=messages,
@@ -94,7 +96,7 @@ Respond in 1–4 sentences. Be real. Be yours."""
         {"role": "user", "content": message},
     ]
 
-    return _call(system, msgs, max_tokens=300)
+    return _call(system, msgs, max_tokens=300, model=MODEL_CHAT)
 
 
 # ── 2. GENERATE MEMORY ───────────────────────────────────────

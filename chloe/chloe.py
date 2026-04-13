@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .soul   import Soul, drift, consolidate, mbti_type, describe
-from .heart  import Vitals, ACTIVITIES, tick_vitals, auto_decide, should_fire_event
+from .heart  import Vitals, ACTIVITIES, tick_vitals, auto_decide, should_fire_event, circadian_phase
 from .memory import Memory, seed_memories, add, age, get_vivid, derive_interests, to_dicts, from_dicts
 from .graph  import Graph, seed_graph, expand, clear_new_flags, get_labels
 from . import llm
@@ -152,6 +152,7 @@ class Chloe:
             "log":         self.log[:20],
             "tick":        self._tick,
             "busy":        self._busy,
+            "circadian":   circadian_phase(time.localtime().tm_hour),
         }
 
     # ── HEARTBEAT LOOP ───────────────────────────────────────
@@ -165,8 +166,9 @@ class Chloe:
     async def _tick_once(self):
         """One heartbeat. Order matters."""
 
-        # 1. Tick vitals
-        self.vitals = tick_vitals(self.vitals, self.activity)
+        # 1. Tick vitals (circadian hour injected here)
+        hour = time.localtime().tm_hour
+        self.vitals = tick_vitals(self.vitals, self.activity, hour)
 
         # 2. Drift soul
         if self.activity == "sleep":
