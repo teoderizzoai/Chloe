@@ -44,7 +44,8 @@ app.add_middleware(
 # ── Models ────────────────────────────────────────────────────
 
 class ChatRequest(BaseModel):
-    message: str
+    message:   str
+    person_id: str = "teo"
 
 class ActivityRequest(BaseModel):
     activity_id: str
@@ -66,11 +67,18 @@ def snapshot():
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
-    """Send a message, get a reply."""
+    """Send a message, get a reply.
+    reply is null if she's in deep sleep and the message was queued."""
     if not req.message.strip():
         raise HTTPException(400, "Empty message")
-    reply = await chloe.chat(req.message)
-    return {"reply": reply}
+    reply = await chloe.chat(req.message, person_id=req.person_id)
+    return {"reply": reply, "queued": reply is None}
+
+
+@app.get("/persons")
+def get_persons():
+    """Relationship state for all known persons."""
+    return {"persons": chloe.snapshot()["persons"]}
 
 
 @app.post("/activity")

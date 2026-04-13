@@ -1,6 +1,6 @@
 # chloe/inner.py
 # ─────────────────────────────────────────────────────────────
-# Chloe's inner life structures: wants and beliefs.
+# Chloe's inner life structures: wants, beliefs, and goals.
 #
 # Wants  — unresolved curiosities she pursues autonomously.
 #          Generated during "think" events. Resolved when
@@ -9,6 +9,10 @@
 # Beliefs — positions she holds, lightly.
 #           Formed from reading. Confidence decays over time
 #           unless reinforced by new material.
+#
+# Goals  — soft intentions about her own behaviour.
+#          "I want to create something this week."
+#          Resolved when matching activity fires.
 # ─────────────────────────────────────────────────────────────
 
 import time
@@ -17,6 +21,7 @@ from dataclasses import dataclass, field, asdict
 
 MAX_WANTS   = 8    # max active (unresolved) wants at once
 MAX_BELIEFS = 12   # max beliefs in store
+MAX_GOALS   = 6    # max active goals at once
 
 
 # ── WANTS ─────────────────────────────────────────────────────
@@ -131,3 +136,62 @@ def beliefs_to_dicts(beliefs: list[Belief]) -> list[dict]:
 
 def beliefs_from_dicts(data: list[dict]) -> list[Belief]:
     return [Belief.from_dict(d) for d in data]
+
+
+# ── GOALS ─────────────────────────────────────────────────────
+
+@dataclass
+class Goal:
+    """A soft intention about her own behaviour — something she means to do."""
+    text:       str
+    tags:       list[str] = field(default_factory=list)
+    created_at: float     = field(default_factory=time.time)
+    resolved:   bool      = False
+    id:         str       = field(default_factory=lambda: str(uuid.uuid4())[:8])
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Goal":
+        return cls(
+            text=d["text"], tags=d.get("tags", []),
+            created_at=float(d.get("created_at", time.time())),
+            resolved=bool(d.get("resolved", False)),
+            id=d.get("id", str(uuid.uuid4())[:8]),
+        )
+
+
+def add_goal(goals: list[Goal], text: str, tags: list[str]) -> list[Goal]:
+    """Add a goal unless already at the active limit."""
+    active = sum(1 for g in goals if not g.resolved)
+    if active >= MAX_GOALS:
+        return goals
+    return [Goal(text=text, tags=tags), *goals]
+
+
+def resolve_goals(goals: list[Goal], activity_id: str, new_tags: list[str]) -> list[Goal]:
+    """Mark goals as resolved when the activity or tags match."""
+    tag_set = {t.lower() for t in new_tags}
+    result = []
+    for g in goals:
+        if g.resolved:
+            result.append(g)
+            continue
+        goal_tags = {t.lower() for t in g.tags}
+        # Resolve if activity matches any tag, or tag overlap ≥ 1
+        activity_match = activity_id in goal_tags
+        tag_match = bool(goal_tags & tag_set)
+        if activity_match or tag_match:
+            result.append(Goal(**{**g.to_dict(), "resolved": True}))
+        else:
+            result.append(g)
+    return result
+
+
+def goals_to_dicts(goals: list[Goal]) -> list[dict]:
+    return [g.to_dict() for g in goals]
+
+
+def goals_from_dicts(data: list[dict]) -> list[Goal]:
+    return [Goal.from_dict(d) for d in data]

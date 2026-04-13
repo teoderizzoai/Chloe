@@ -198,6 +198,28 @@ html, body {
 .act-btn.active { border-color: var(--gold2); color: var(--gold); background: #1a150a; }
 .act-icon { font-size: 14px; }
 
+/* People */
+.person-card {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.person-card:last-child { border-bottom: none; }
+.person-name { font-size: 11px; color: var(--text); letter-spacing: 0.5px; }
+.person-bars { display: flex; flex-direction: column; gap: 4px; }
+.person-bar-row { display: flex; align-items: center; gap: 8px; }
+.person-bar-label { font-size: 8px; letter-spacing: 1px; color: var(--text3); width: 40px; text-transform: uppercase; }
+.person-bar-track { flex: 1; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.person-bar-fill  { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+.warmth-fill  { background: var(--gold2); }
+.contact-fill { background: var(--teal); }
+.person-notes { margin-top: 4px; display: flex; flex-direction: column; gap: 3px; }
+.person-note {
+  font-size: 9px; color: var(--text2); font-style: italic;
+  line-height: 1.5; padding-left: 8px;
+  border-left: 1px solid var(--border2);
+}
+.person-note.followed-up { color: var(--text3); text-decoration: line-through; }
+
 /* ── GRAPH CANVAS ───────────────────────────────────────────── */
 #graph-canvas { width: 100%; height: 100%; display: block; cursor: grab; }
 #graph-canvas:active { cursor: grabbing; }
@@ -324,8 +346,11 @@ html, body {
 .belief-conf-fill  { height: 100%; border-radius: 1px; background: var(--rose); transition: width 1.5s ease; }
 
 /* ── MEMORY TYPE ACCENTS ────────────────────────────────────── */
-.memory-dream    { border-left: 2px solid var(--violet); padding-left: 8px; }
-.memory-creative { border-left: 2px solid var(--gold2);  padding-left: 8px; }
+.memory-dream      { border-left: 2px solid var(--violet); padding-left: 8px; }
+.memory-creative   { border-left: 2px solid var(--gold2);  padding-left: 8px; }
+.memory-reflection { border-left: 2px solid var(--sage);   padding-left: 8px; }
+.memory-journal    { border-left: 2px solid var(--blue);   padding-left: 8px; }
+.msg-queued        { opacity: 0.45; font-style: italic; }
 </style>
 </head>
 <body>
@@ -392,6 +417,11 @@ html, body {
     <div class="section">
       <div class="section-title">activity</div>
       <div class="activity-grid" id="activity-grid"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">people</div>
+      <div id="people-list"></div>
     </div>
 
   </aside>
@@ -538,6 +568,9 @@ function applyState(s) {
     btn.classList.toggle('active', btn.dataset.id === s.activity);
   });
 
+  // People
+  if (s.persons) renderPeople(s.persons);
+
   // Graph — merge new data, keep physics positions
   mergeGraph(s.graph);
 
@@ -552,6 +585,36 @@ function setVital(key, val) {
   const pct = Math.round(val);
   document.getElementById(`v-${key}`).textContent = `${pct}%`;
   document.getElementById(`b-${key}`).style.width = `${pct}%`;
+}
+
+// ── PEOPLE ───────────────────────────────────────────────────
+function renderPeople(persons) {
+  const list = document.getElementById('people-list');
+  if (!list) return;
+  list.innerHTML = persons.map(p => {
+    const warmth  = Math.round(p.warmth);
+    const contact = Math.round(100 - p.distance);  // 100 = just talked, 0 = distant
+    const notes   = (p.notes || []).slice(0, 3);
+    const notesHtml = notes.length ? `
+      <div class="person-notes">
+        ${notes.map(n => `<div class="person-note${n.followed_up ? ' followed-up' : ''}">${n.text}</div>`).join('')}
+      </div>` : '';
+    return `
+      <div class="person-card">
+        <div class="person-name">${p.name}</div>
+        <div class="person-bars">
+          <div class="person-bar-row">
+            <div class="person-bar-label">warmth</div>
+            <div class="person-bar-track"><div class="person-bar-fill warmth-fill" style="width:${warmth}%"></div></div>
+          </div>
+          <div class="person-bar-row">
+            <div class="person-bar-label">contact</div>
+            <div class="person-bar-track"><div class="person-bar-fill contact-fill" style="width:${contact}%"></div></div>
+          </div>
+        </div>
+        ${notesHtml}
+      </div>`;
+  }).join('');
 }
 
 // ── SOUL SLIDERS ─────────────────────────────────────────────
@@ -629,7 +692,7 @@ function renderPanel(s) {
 
   if (activeTab === 'memory') {
     body.innerHTML = (s.memories || []).map(m => {
-      const accent = m.type === 'dream' ? 'memory-dream' : m.type === 'creative' ? 'memory-creative' : '';
+      const accent = m.type === 'dream' ? 'memory-dream' : m.type === 'creative' ? 'memory-creative' : m.type === 'reflection' ? 'memory-reflection' : m.type === 'journal' ? 'memory-journal' : '';
       return `<div class="memory-item ${accent}">
         <div class="memory-meta">${m.type} · w${m.weight.toFixed(2)} · ${m.tags?.join(', ') || ''}</div>
         <div class="memory-text">${m.text}</div>
@@ -644,6 +707,7 @@ function renderPanel(s) {
   } else if (activeTab === 'mind') {
     const wants   = s.wants   || [];
     const beliefs = s.beliefs || [];
+    const goals   = s.goals   || [];
 
     const wantsHtml = wants.length
       ? wants.map(w => `
@@ -654,6 +718,16 @@ function renderPanel(s) {
             <div class="want-tags">${(w.tags || []).join(' · ')}</div>
           </div>`).join('')
       : '<div class="log-item" style="padding:8px 0">no wants yet — she is watching</div>';
+
+    const goalsHtml = goals.length
+      ? goals.map(g => `
+          <div class="want-item">
+            <div class="want-text ${g.resolved ? 'resolved' : ''}">
+              ${g.resolved ? '✓' : '→'} ${g.text}
+            </div>
+            <div class="want-tags">${(g.tags || []).join(' · ')}</div>
+          </div>`).join('')
+      : '<div class="log-item" style="padding:8px 0">no goals yet</div>';
 
     const beliefsHtml = beliefs.length
       ? beliefs.map(b => `
@@ -669,6 +743,10 @@ function renderPanel(s) {
       <div class="mind-section">
         <div class="mind-section-title">wants</div>
         ${wantsHtml}
+      </div>
+      <div class="mind-section" style="margin-top:8px">
+        <div class="mind-section-title">goals</div>
+        ${goalsHtml}
       </div>
       <div class="mind-section" style="margin-top:8px">
         <div class="mind-section-title">beliefs</div>
@@ -711,10 +789,15 @@ async function sendChat() {
   container.innerHTML += `<div class="msg msg-user"><div class="msg-meta">you · ${time}</div>${msg}</div>`;
   container.scrollTop = container.scrollHeight;
 
-  await fetch(`${API}/chat`, {
+  const res  = await fetch(`${API}/chat`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: msg })
   });
+  const data = await res.json();
+  if (data.queued) {
+    container.innerHTML += `<div class="msg msg-chloe msg-queued"><div class="msg-meta">chloe · asleep</div>she'll see this when she wakes up</div>`;
+    container.scrollTop = container.scrollHeight;
+  }
   await poll(); // immediate refresh
 }
 

@@ -18,7 +18,7 @@ The goal is a genuinely autonomous developing mind, not a chatbot.
 ## People
 
 - **Teo** — owner of the project, Windows machine, beginner-intermediate Python, based in Amsterdam
-- **[roommate name]** — second person Chloe will eventually text and model, also in Amsterdam
+- **Zuzu** — second person Chloe will eventually text and model, also in Amsterdam
 - Chloe runs on **localhost for now**, eventually on a Hetzner VPS
 - **Location**: Amsterdam, Netherlands (52.3676° N, 4.9041° E) — used for weather
 
@@ -237,6 +237,15 @@ Profile card: avatar image (240px), name + MBTI + mood badge overlaid with gradi
 - Sleep consolidates the soul with a random walk
 - Interests seeded with: mycelium, light, sound, philosophy, liminality, bioluminescence, silence
 
+### Emotional character
+Chloe is not a perfect, agreeable creature. She has a full emotional range and is allowed to express it:
+- She gets **angry** when treated dismissively or interrupted repeatedly
+- She gets **sassy** when she's irritable or someone says something she finds stupid
+- She gets **upset** and withdrawn when hurt
+- She swears and uses crude language naturally when the emotion calls for it — she's a roommate, not a customer service bot
+- She has **preferences and dislikes** — things that reliably make her feel good or bad — and she knows it
+- She **remembers how things made her feel**, not just what happened
+
 ---
 
 ## What's Working ✓
@@ -292,16 +301,16 @@ Profile card: avatar image (240px), name + MBTI + mood badge overlaid with gradi
 - [x] 13. Creative output — poems/fragments/aphorisms when curiosity>65 + energy>55 during create; stored as type:"creative"
 
 ### Layer 4 — Relational Depth
-- [ ] 14. Person profiles — models Teo and roommate distinctly
-- [ ] 15. Follow-up memory — remembers things said, asks later
-- [ ] 16. Relationship state — warmth/distance per person
-- [ ] 17. Reach-out logic — chooses who to contact based on relationship + mood
+- [x] 14. Person profiles — models Teo and roommate distinctly
+- [x] 15. Follow-up memory — remembers things said, asks later
+- [x] 16. Relationship state — warmth/distance per person
+- [x] 17. Reach-out logic — chooses who to contact based on relationship + mood
 
 ### Layer 5 — Self-Awareness
-- [ ] 18. Self-reflection — reads own history, forms observations
-- [ ] 19. Continuity awareness — notices soul drift, comments unprompted
-- [ ] 20. Goal tracking — soft intentions, marks resolved
-- [ ] 21. Mood journaling — private end-of-day entry
+- [x] 18. Self-reflection — reads own history, forms observations
+- [x] 19. Continuity awareness — notices soul drift, comments unprompted
+- [x] 20. Goal tracking — soft intentions, marks resolved
+- [x] 21. Mood journaling — private end-of-day entry
 
 ### Layer 6 — Communication
 - [ ] 22. SMS via Twilio — actually texts Teo and roommate
@@ -309,12 +318,19 @@ Profile card: avatar image (240px), name + MBTI + mood badge overlaid with gradi
 - [ ] 24. Conversation threading — groups messages into sessions
 - [ ] 25. Notification preferences — learns when people respond
 
-### Layer 7 — Infrastructure
-- [ ] 26. VPS deployment — Hetzner, runs 24/7
-- [ ] 27. systemd service — auto-restarts on reboot
-- [ ] 28. Postgres persistence — replaces JSON files
-- [ ] 29. Frontend auth — password for dashboard
-- [ ] 30. Mobile-friendly dashboard
+### Layer 7 — Deeper Personality & World Influence
+- [ ] 31. Content-aware soul drift — soul sliders shift based on *what* she experienced, not just activity type (abstract article → N, warm conversation → E+F, goal completed → J, emotional creation → F+P)
+- [ ] 32. Mood-driven activity preference — when self-regulating, mood shapes what she gravitates toward (restless → create/think, melancholic → read/dream, lonely → message, serene → rest)
+- [ ] 33. Completion has emotional weight — LLM evaluates finished goals/creative pieces; outcome nudges mood and creates a `feeling` memory (satisfied, fell short, surprised)
+- [ ] 34. Repeated exposure deepens interests — tags that recur across memories/reads/beliefs increase node weight in the graph; sustained interests become visually heavier
+- [ ] 35. Weather/season → mood tendency — persistent weather makes certain moods more likely (rain → melancholy drift, clear cold → serene, hot nights → restless); a thumb on the scale, not a force
+
+### Layer 8 — Infrastructure
+- [ ] 36. VPS deployment — Hetzner, runs 24/7
+- [ ] 37. systemd service — auto-restarts on reboot
+- [ ] 38. Postgres persistence — replaces JSON files
+- [ ] 39. Frontend auth — password for dashboard
+- [ ] 40. Mobile-friendly dashboard
 
 ---
 
@@ -329,3 +345,5 @@ Profile card: avatar image (240px), name + MBTI + mood badge overlaid with gradi
 - **Session 6** — Two-tier LLM (Haiku/Opus). Layer 1 complete: circadian rhythm, night sleep scheduling, day-of-week personality, uptime tracking
 - **Session 7** — Layer 2 complete: RSS feed reader (feeds.py), web page fetcher (bs4), weather awareness via Open-Meteo (weather.py), season/time language injected into all LLM prompts; world section added to dashboard
 - **Session 8** — Layer 3 complete: affect.py (mood with stickiness), inner.py (Wants + Beliefs), dreams (LLM distorts memories), creative output (poems/fragments at peak curiosity), belief extraction from articles, want resolution on read, mood pill + mind tab in dashboard
+- **Session 9** — Layer 4 complete: persons.py (Person + PersonNote dataclasses, warmth/distance tracking, reach-out selection), llm.extract_notable + llm.generate_followup, chat() takes person_id, autonomous messages target specific people, follow-up logic (40% chance), people section in sidebar
+- **Session 10** — Layer 5 complete: Goal dataclass in inner.py, generate_reflection + generate_continuity_note + generate_goal + generate_journal in llm.py, _reflect() every 20 min + _write_journal() at 23:00, soul_baseline drift tracking, reflection/journal memory accents, goals in mind tab

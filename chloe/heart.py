@@ -19,12 +19,14 @@ from typing import Optional
 
 _CIRCADIAN_DELTAS: list[tuple[float, float]] = [
     # hour  energy  social
-    (-0.22, -0.12),  # 00 — deep night
-    (-0.25, -0.12),  # 01
-    (-0.25, -0.12),  # 02
-    (-0.25, -0.10),  # 03
-    (-0.20, -0.08),  # 04
-    (-0.10, -0.05),  # 05 — pre-dawn
+    # Night values are stronger so that resting at night slowly drains energy
+    # (makes natural sleep possible without hard clock overrides)
+    (-0.45, -0.20),  # 00 — deep night
+    (-0.50, -0.20),  # 01
+    (-0.50, -0.20),  # 02
+    (-0.50, -0.18),  # 03
+    (-0.42, -0.15),  # 04
+    (-0.25, -0.10),  # 05 — pre-dawn
     ( 0.00,  0.00),  # 06 — dawn
     ( 0.10,  0.08),  # 07 — morning rise
     ( 0.18,  0.12),  # 08
@@ -38,11 +40,11 @@ _CIRCADIAN_DELTAS: list[tuple[float, float]] = [
     ( 0.10,  0.05),  # 16
     ( 0.05,  0.03),  # 17
     ( 0.00,  0.00),  # 18 — early evening
-    (-0.05, -0.05),  # 19
-    (-0.10, -0.08),  # 20
-    (-0.15, -0.10),  # 21 — wind-down
-    (-0.20, -0.12),  # 22
-    (-0.22, -0.12),  # 23
+    (-0.08, -0.05),  # 19
+    (-0.18, -0.10),  # 20
+    (-0.30, -0.15),  # 21 — wind-down begins
+    (-0.40, -0.18),  # 22
+    (-0.45, -0.20),  # 23
 ]
 
 _CIRCADIAN_PHASES: list[str] = [
@@ -239,23 +241,34 @@ def tick_vitals(vitals: Vitals, activity_id: str, hour: int = 12, weekday: int =
 
 def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12) -> Optional[str]:
     """Chloe self-regulates. Returns a new activity id if she should switch,
-    or None if she's fine to continue."""
-    # ── Vitals: hard limit ──
-    if vitals.energy < 15:
+    or None if she's fine to continue.
+
+    Sleep is driven by energy, not a clock. The circadian curve drains energy
+    at night, so she naturally drifts toward sleep — but her exact bedtime
+    depends on how active she's been.
+    """
+    # ── Hard floor: exhausted → sleep regardless ──
+    if vitals.energy < 10:
         return "sleep"
 
-    # ── Time scheduling ──
-    in_night = hour >= SLEEP_START or hour < SLEEP_END
-    if in_night and current_activity not in ("sleep", "dream"):
-        return "sleep"                                    # lights out
-    if hour == SLEEP_END and current_activity in ("sleep", "dream"):
-        return "rest"                                     # wake up
+    # ── Waking up: enough energy + late enough in morning ──
+    morning = SLEEP_END <= hour <= SLEEP_END + 2   # 07:00–09:00
+    if morning and current_activity in ("sleep", "dream") and vitals.energy > 65:
+        return "rest"
+
+    # ── Getting sleepy: night hours + low energy ──
+    in_night = hour >= 21 or hour < SLEEP_END      # 21:00 → 06:00
+    if in_night:
+        if vitals.energy < 20 and current_activity != "sleep":
+            return "sleep"                          # genuinely exhausted
+        if vitals.energy < 45 and current_activity in ("create", "read", "think", "message"):
+            return "dream"                          # wind down from active state
 
     # ── Vitals: soft regulation ──
     if vitals.energy < 30 and current_activity == "create":
-        return "rest"                                     # wind down
+        return "rest"
     if vitals.social_battery < 10 and current_activity == "message":
-        return "rest"                                     # withdraw
+        return "rest"
     return None
 
 
