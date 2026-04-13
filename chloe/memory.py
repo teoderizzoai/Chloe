@@ -14,7 +14,7 @@ import uuid
 from dataclasses import dataclass, field, asdict
 from typing import Literal, Optional
 
-MemoryType = Literal["observation", "conversation", "idea", "feeling", "interest"]
+MemoryType = Literal["observation", "conversation", "idea", "feeling", "interest", "dream", "creative"]
 
 
 @dataclass

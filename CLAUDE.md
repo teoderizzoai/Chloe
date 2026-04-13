@@ -49,17 +49,17 @@ Chloe/                          ← root, run everything from here
 │   ├── soul.py                 ← MBTI personality, drift logic
 │   ├── heart.py                ← heartbeat states, activities, vitals
 │   ├── memory.py               ← memory store, aging, retrieval, interests
-│   ├── llm.py                  ← ALL Anthropic API calls (chat, memory, ideas, graph, etc.)
+│   ├── llm.py                  ← ALL Anthropic API calls (10 functions)
 │   ├── graph.py                ← interest node graph, data structures, physics
 │   ├── feeds.py                ← RSS reader + web page fetcher (Layer 2)
 │   ├── weather.py              ← weather awareness via Open-Meteo (Layer 2)
-│   └── history.py              ← append-only timeline log (.jsonl)
+│   ├── affect.py               ← mood system, Affect dataclass (Layer 3)
+│   ├── inner.py                ← Wants + Beliefs dataclasses + helpers (Layer 3)
+│   └── main.py                 ← terminal entry point (chat + commands)
 │
-├── frontend/
-│   └── index.html              ← single-file dashboard (no build step)
-│
+├── index.html                  ← single-file dashboard (no build step)
+├── image.webp                  ← Chloe's avatar (profile card)
 ├── server.py                   ← FastAPI server, all HTTP endpoints
-├── main.py                     ← terminal entry point (chat + commands)
 ├── requirements.txt
 ├── CLAUDE.md                   ← this file
 │
@@ -90,20 +90,24 @@ $env:ANTHROPIC_API_KEY = "sk-ant-..."
 
 ```
 asyncio loop (every 5s = one heartbeat)
-    ├── tick_vitals()           ← heart.py
+    ├── tick_vitals()           ← heart.py  (circadian + day-of-week)
+    ├── weather_vitals_delta()  ← weather.py (per-tick nudge)
+    ├── update_mood()           ← affect.py  (sticky mood drift)
     ├── drift() / consolidate() ← soul.py
     ├── auto_decide()           ← heart.py  (self-regulation)
     ├── should_fire_event()     ← heart.py
-    │       └── _fire_event()
-    │               ├── generate_memory()    ← llm.py → memory.py
-    │               ├── generate_idea()      ← llm.py → chloe.ideas
-    │               └── generate_autonomous_message() ← llm.py → chat
-    ├── age()                   ← memory.py  (every 12 ticks)
-    ├── _record()               ← history.py (every 6 ticks)
+    │       └── _fire_event()   ← varies by activity:
+    │               read   → generate_memory_from_article() + extract_belief() + resolve_wants()
+    │               dream  → generate_dream()      → memory type:"dream"
+    │               think  → generate_want() 40% / generate_idea() 60%
+    │               create → generate_creative() (if curiosity>65) / generate_memory()
+    │               message→ generate_autonomous_message()
+    ├── age() + decay_beliefs() ← memory.py / inner.py  (every 12 ticks)
+    ├── refresh weather         ← weather.py (every 720 ticks)
     └── _save()                 ← disk       (every 60 ticks)
 
 user calls chloe.chat(msg)
-    └── llm.chat()              ← soul + vitals + memories as context
+    └── llm.chat()              ← soul + vitals + memories + mood + beliefs as context
             └── add()           ← memory.py
 
 user calls chloe.expand_node(id)
@@ -137,18 +141,38 @@ user calls chloe.expand_node(id)
 
 ### `memory.py`
 - `Memory` dataclass: text, type, tags, weight, timestamp, id
+- Types: `observation`, `conversation`, `idea`, `feeling`, `interest`, `dream`, `creative`
 - `add()`, `age()`, `get_vivid()`, `get_related()`
 - `derive_interests()` — tallies tags by weight → ranked list
 - `format_for_prompt()` — compact string for LLM injection
 
 ### `llm.py`
 - Two-tier models: `MODEL_CHAT = claude-opus-4-5` (live chat only), `MODEL_FAST = claude-haiku-4-5-20251001` (all background tasks)
-- `chat()` — Chloe replies to a message; receives `uptime` string, injected into system prompt
-- `generate_memory()` — forms a memory fragment about a topic
-- `generate_idea()` — surfaces an original thought
-- `expand_interest_node()` — generates 3 child nodes for the graph
+- `chat()` — reply to message; context includes soul, vitals, memories, mood, beliefs
+- `generate_memory_from_article()` — impressionistic memory from RSS article
+- `generate_memory()` — generic memory fragment on a topic
+- `generate_idea()` — one original thought
+- `expand_interest_node()` — 3 child nodes for the interest graph
 - `generate_autonomous_message()` — unprompted text to roommates
 - `summarise_state()` — one-sentence inner state description
+- `generate_dream()` — distorts recent memories into a dream fragment (Layer 3)
+- `generate_creative()` — poem/fragment/aphorism at peak curiosity (Layer 3)
+- `generate_want()` — an unresolved curiosity to pursue (Layer 3)
+- `extract_belief()` — position extracted from an article, or None (Layer 3)
+
+### `affect.py`
+- `MOODS` — 8 moods with color + desc: content, restless, irritable, melancholic, curious, serene, energized, lonely
+- `Affect` dataclass: mood (str), intensity (0–1)
+- `update_mood(affect, vitals, weather, hour, activity)` — sticky drift; re-evaluates ~10% of ticks, shifts with 55% probability
+- `mood_color()` / `mood_desc()` — lookup helpers
+
+### `inner.py`
+- `Want` dataclass: text, tags, created_at, resolved, id
+- `add_want()` — adds if below MAX_WANTS (8) active limit
+- `resolve_wants(wants, new_tags)` — marks resolved when tag overlap found
+- `Belief` dataclass: text, confidence (0–1), tags, created_at, last_updated, id
+- `add_or_reinforce_belief()` — creates new or nudges confidence of existing (tag overlap >= 2)
+- `decay_beliefs()` — confidence * 0.998 per aging tick
 
 ### `graph.py`
 - `Node`, `Edge`, `Graph` dataclasses
@@ -156,48 +180,40 @@ user calls chloe.expand_node(id)
 - `expand(graph, parent_id, new_defs)` — adds LLM-generated nodes
 - `stepPhysics()` — force-directed layout (runs in frontend JS)
 
-### `history.py`
-- `Record` dataclass: ts, tick, activity, mbti, soul, vitals, new_memory, new_idea
-- `append(record)` — writes one line to `chloe_history.jsonl`
-- `load_recent(n)` — reads last N records
-- `summarise(records)` — aggregate stats (activity breakdown, soul ranges, vitals trends)
-
 ### `chloe.py`
 - `Chloe` class — owns all state, runs the loop
+- State: soul, vitals, activity, memories, graph, chat_history, ideas, weather, affect, wants, beliefs, creative_outputs
 - `start()` / `stop()` — async lifecycle
-- `chat(message)` — send a message, get reply
+- `chat(message)` — send a message, get reply (passes mood + beliefs to LLM)
 - `set_activity(id)` — manual override
 - `expand_node(id)` — expand graph node
-- `snapshot()` — full serialisable state for the API; includes `circadian`, `day`, `uptime`
-- `_tick_once()` — one heartbeat (vitals → soul → auto_decide → events → age → record → save); passes hour + weekday to vitals and scheduling
-- `_fire_event()` — autonomous LLM event based on current activity
-- `_uptime_human()` — formats wall-clock uptime since last boot (not persisted)
-- `_record()` — writes history entry
-- `_save()` / `_load()` — JSON persistence
+- `snapshot()` — full serialisable state including affect, wants, beliefs, creative
+- `_tick_once()` — vitals → weather nudge → mood → soul → auto_decide → events → age/decay → weather refresh → save
+- `_fire_event()` — autonomous LLM event; varies by activity (see architecture diagram)
+- `_save()` / `_load()` — JSON persistence; includes all Layer 3 state
 
 ### `server.py`
 FastAPI endpoints:
-- `GET  /snapshot` — full state
+- `GET  /snapshot` — full state (includes affect, wants, beliefs, creative)
 - `POST /chat` — send message
 - `POST /activity` — change activity
 - `POST /expand` — expand graph node
 - `POST /soul` — nudge a soul trait
-- `GET  /log` — recent log
-- `GET  /history?n=200` — last N history records
-- `GET  /history/summary` — aggregate stats
-- `GET  /health` — alive check
+- `GET  /log` — recent activity log
+- `GET  /weather` — current weather + season
+- `GET  /health` — alive check + tick count
 
-### `frontend/index.html`
-Single HTML file. Polls `/snapshot` every 4s.
-Tabs: vitals | soul | activity | chat | graph | memory | history
+### `index.html`
+Single HTML file at project root. Polls `/snapshot` every 4s.
+Layout: left sidebar (profile card + vitals + world + soul + interests + activity) | centre (force-directed graph) | right panel (tabs) | bottom chat bar
 
-- **Vitals** — energy/social/curiosity bars
-- **Soul** — 4 clickable sliders, interest tags, soul description
-- **Activity** — 7 activity buttons, current description, recent ideas
-- **Chat** — message history, input bar
-- **Graph** — canvas force-directed graph, pan/zoom/click to expand
-- **Memory** — vivid memories with type/weight/tags
-- **History** — soul drift charts, activity breakdown, timeline
+Right panel tabs:
+- **memory** — vivid memories; dream type has violet accent, creative type has gold accent
+- **ideas** — recent ideas list
+- **mind** — wants (active/resolved) + beliefs with confidence bars (Layer 3)
+- **log** — raw activity log
+
+Profile card: avatar image (240px), name + MBTI + mood badge overlaid with gradient
 
 ---
 
@@ -233,9 +249,8 @@ Tabs: vitals | soul | activity | chat | graph | memory | history
 - [x] Interest graph with LLM-powered expansion and force-directed layout
 - [x] Autonomous events (memories, ideas, unprompted messages) based on activity
 - [x] Full chat with soul/vitals/memory context injection
-- [x] FastAPI server with 8 endpoints
-- [x] Dashboard: vitals, soul sliders, activity, chat, graph canvas, memory, history
-- [x] History log (chloe_history.jsonl) with soul drift charts and timeline
+- [x] FastAPI server with 7 endpoints
+- [x] Dashboard: profile card avatar, vitals, soul sliders, activity, chat, graph canvas, memory, mind, log
 - [x] State persistence (chloe_state.json, survives restarts)
 - [x] Windows setup, venv, permanent API key
 - [x] Two-tier LLM: Haiku for background tasks, Opus for live chat
@@ -247,6 +262,11 @@ Tabs: vitals | soul | activity | chat | graph | memory | history
 - [x] Web page fetcher — full article text via httpx + BeautifulSoup when curiosity > 65
 - [x] Weather awareness — Open-Meteo API, Amsterdam location, per-tick vitals nudge, refreshes every hour
 - [x] Season / time-of-day language — injected into chat and autonomous message prompts
+- [x] Affect layer — 8 moods, sticky drift, mood badge on profile card, injected into chat context
+- [x] Wants list — generated during think; resolved when read content overlaps tags; shown in Mind tab
+- [x] Belief system — positions extracted from articles, confidence decays, reinforced on overlap; shown in Mind tab
+- [x] Dreams — real LLM pass distorting recent memories into type:"dream" fragments (violet accent)
+- [x] Creative output — poems/fragments/aphorisms at peak curiosity+energy; type:"creative" (gold accent)
 
 ---
 
@@ -265,11 +285,11 @@ Tabs: vitals | soul | activity | chat | graph | memory | history
 - [x] 8. Time/season language — subtle shifts in how she writes
 
 ### Layer 3 — Richer Inner Life
-- [ ] 9.  Affect layer — mood (irritable, content, restless, melancholic) separate from vitals
-- [ ] 10. Wants list — unresolved curiosities she pursues autonomously
-- [ ] 11. Belief graph — positions she holds, drift as she reads
-- [ ] 12. Dreams — real LLM pass during sleep, reframes memories
-- [ ] 13. Creative output — poems/essays when curiosity + energy peak
+- [x] 9.  Affect layer — mood (irritable, content, restless, melancholic, curious, serene, energized, lonely) separate from vitals; sticky drift; injected into chat
+- [x] 10. Wants list — unresolved curiosities generated during think events; resolved when read content overlaps tags
+- [x] 11. Belief graph — flat list of positions she holds (confidence 0–1); formed/reinforced from articles; decays slowly
+- [x] 12. Dreams — real LLM pass during dream activity; distorts/reframes recent memories into type:"dream" fragments
+- [x] 13. Creative output — poems/fragments/aphorisms when curiosity>65 + energy>55 during create; stored as type:"creative"
 
 ### Layer 4 — Relational Depth
 - [ ] 14. Person profiles — models Teo and roommate distinctly
@@ -308,3 +328,4 @@ Tabs: vitals | soul | activity | chat | graph | memory | history
 - **Session 5** — Debugged Windows setup: venv, file structure (chloe/ subfolder), API key, uvicorn boot
 - **Session 6** — Two-tier LLM (Haiku/Opus). Layer 1 complete: circadian rhythm, night sleep scheduling, day-of-week personality, uptime tracking
 - **Session 7** — Layer 2 complete: RSS feed reader (feeds.py), web page fetcher (bs4), weather awareness via Open-Meteo (weather.py), season/time language injected into all LLM prompts; world section added to dashboard
+- **Session 8** — Layer 3 complete: affect.py (mood with stickiness), inner.py (Wants + Beliefs), dreams (LLM distorts memories), creative output (poems/fragments at peak curiosity), belief extraction from articles, want resolution on read, mood pill + mind tab in dashboard

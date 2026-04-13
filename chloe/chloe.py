@@ -14,6 +14,7 @@
 
 import asyncio
 import json
+import random
 import time
 from pathlib import Path
 from typing import Callable, Optional
@@ -23,6 +24,10 @@ from .heart  import (Vitals, ACTIVITIES, tick_vitals, auto_decide,
                      should_fire_event, circadian_phase, day_name)
 from .memory import Memory, seed_memories, add, age, get_vivid, derive_interests, to_dicts, from_dicts
 from .graph  import Graph, seed_graph, expand, clear_new_flags, get_labels
+from .affect import Affect, update_mood
+from .inner  import (Want, Belief,
+                     add_want, resolve_wants, wants_to_dicts, wants_from_dicts,
+                     add_or_reinforce_belief, decay_beliefs, beliefs_to_dicts, beliefs_from_dicts)
 from . import llm
 from . import feeds
 from . import weather as wthr
@@ -49,6 +54,12 @@ class Chloe:
         self.ideas:    list[str]   = []
         self.log:      list[str]   = []
         self.weather:  Optional[WeatherState] = None
+
+        # ── Layer 3: inner life ──
+        self.affect:           Affect        = Affect()
+        self.wants:            list[Want]    = []
+        self.beliefs:          list[Belief]  = []
+        self.creative_outputs: list[dict]    = []   # last 5 creative pieces
 
         # ── Runtime ──
         self._tick:       int      = 0
@@ -102,6 +113,8 @@ class Chloe:
                 uptime=self._uptime_human(),
                 weather=self.weather,
                 season=season,
+                mood=self.affect.mood,
+                beliefs=beliefs_to_dicts(self.beliefs[:4]),
             )
         except Exception as e:
             reply = f"(something went quiet: {e})"
@@ -170,6 +183,11 @@ class Chloe:
             "uptime":      self._uptime_human(),
             "weather":     self.weather.to_dict() if self.weather else None,
             "season":      wthr.describe_season(t.tm_mon),
+            # Layer 3
+            "affect":      self.affect.to_dict(),
+            "wants":       wants_to_dicts(self.wants),
+            "beliefs":     beliefs_to_dicts(self.beliefs),
+            "creative":    self.creative_outputs[:3],
         }
 
     # ── HEARTBEAT LOOP ───────────────────────────────────────
@@ -198,34 +216,38 @@ class Chloe:
                 curiosity=max(0.0, min(100.0, self.vitals.curiosity   + delta["curiosity"])),
             )
 
-        # 3. Drift soul
+        # 3. Update mood (affect layer — runs before soul drift)
+        self.affect = update_mood(self.affect, self.vitals, self.weather, hour, self.activity)
+
+        # 4. Drift soul
         if self.activity == "sleep":
             self.soul = consolidate(self.soul)
         else:
             self.soul = drift(self.soul, self.activity)
 
-        # 4. Auto-regulate (vitals + time-of-day scheduling)
+        # 5. Auto-regulate (vitals + time-of-day scheduling)
         override = auto_decide(self.vitals, self.activity, hour)
         if override:
             self.set_activity(override)
 
-        # 5. Autonomous events (only if LLM isn't already busy)
+        # 6. Autonomous events (only if LLM isn't already busy)
         if not self._busy and should_fire_event(self.activity):
             asyncio.create_task(self._fire_event())
 
-        # 6. Age memories every AGE_EVERY ticks
+        # 7. Age memories + decay beliefs every AGE_EVERY ticks
         if self._tick % AGE_EVERY == 0:
             self.memories = age(self.memories)
+            self.beliefs  = decay_beliefs(self.beliefs)
 
-        # 7. Refresh weather every WEATHER_EVERY ticks (~1 hour)
+        # 8. Refresh weather every WEATHER_EVERY ticks (~1 hour)
         if self._tick % WEATHER_EVERY == 0:
             asyncio.create_task(self._refresh_weather())
 
-        # 8. Persist every SAVE_EVERY ticks
+        # 9. Persist every SAVE_EVERY ticks
         if self._tick % SAVE_EVERY == 0:
             self._save()
 
-        # 9. Notify listeners
+        # 10. Notify listeners
         if self.on_tick:
             self.on_tick(self.snapshot())
 
@@ -233,15 +255,16 @@ class Chloe:
         """Run an autonomous LLM event in the background."""
         self._busy = True
         interests = derive_interests(self.memories)
-        vivid     = get_vivid(self.memories, 3)
+        vivid     = get_vivid(self.memories, 4)
         soul      = self.soul
+        t         = time.localtime()
+        season    = f"{wthr.describe_season(t.tm_mon)}, {circadian_phase(t.tm_hour)}"
 
         try:
             if self.activity == "read":
-                # Feature 5/6: absorb a real article from the world
+                # Absorb a real article from the world
                 article = await feeds.fetch_random_article(interests)
                 if article:
-                    # Feature 6: fetch full text when curiosity is high
                     text = article.summary
                     if self.vitals.curiosity > 65:
                         full = await feeds.fetch_article_text(article.url)
@@ -253,27 +276,70 @@ class Chloe:
                     )
                     self.memories = add(self.memories, mem["text"], "observation", mem.get("tags", []))
                     self._log(f'read "{article.title[:45]}" → "{mem["text"][:45]}…"')
+
+                    # Resolve wants that overlap with what was just read
+                    self.wants = resolve_wants(self.wants, mem.get("tags", []))
+
+                    # 50% chance to extract a belief from this article
+                    if random.random() < 0.5:
+                        belief_data = await asyncio.to_thread(
+                            llm.extract_belief,
+                            article.title, text[:700],
+                            beliefs_to_dicts(self.beliefs), soul,
+                        )
+                        if belief_data:
+                            self.beliefs = add_or_reinforce_belief(
+                                self.beliefs, belief_data["text"],
+                                float(belief_data.get("confidence", 0.5)),
+                                belief_data.get("tags", []),
+                            )
+                            self._log(f'belief: "{belief_data["text"][:55]}…"')
                 else:
-                    # Feeds unreachable — fall back to generic memory
+                    # Feeds unreachable — generic memory
                     topic = interests[0] if interests else "something"
                     mem   = await asyncio.to_thread(llm.generate_memory, topic, interests, soul)
                     self.memories = add(self.memories, mem["text"], "observation", mem.get("tags", []))
                     self._log(f'memory: "{mem["text"][:60]}…"')
 
-            elif self.activity == "create":
-                topic = interests[0] if interests else "something"
-                mem   = await asyncio.to_thread(llm.generate_memory, topic, interests, soul)
-                self.memories = add(self.memories, mem["text"], "observation", mem.get("tags", []))
-                self._log(f'memory: "{mem["text"][:60]}…"')
+            elif self.activity == "dream":
+                # Real dream pass — distorts recent memories
+                mem = await asyncio.to_thread(
+                    llm.generate_dream, vivid, soul, self.vitals, self.weather, season
+                )
+                self.memories = add(self.memories, mem["text"], "dream", mem.get("tags", []))
+                self._log(f'dream: "{mem["text"][:60]}…"')
 
-            elif self.activity in ("think", "dream"):
-                idea = await asyncio.to_thread(llm.generate_idea, vivid, interests, soul)
-                self.ideas = [idea, *self.ideas][:20]
-                self._log(f'idea: "{idea[:60]}…"')
+            elif self.activity == "think":
+                # 40% chance: surface a want. 60%: generate an idea.
+                if random.random() < 0.40:
+                    want_data = await asyncio.to_thread(llm.generate_want, vivid, interests, soul)
+                    self.wants = add_want(self.wants, want_data["text"], want_data.get("tags", []))
+                    self._log(f'want: "{want_data["text"][:60]}…"')
+                else:
+                    idea = await asyncio.to_thread(llm.generate_idea, vivid, interests, soul)
+                    self.ideas = [idea, *self.ideas][:20]
+                    self._log(f'idea: "{idea[:60]}…"')
+
+            elif self.activity == "create":
+                # High curiosity + energy → creative output; otherwise memory
+                if self.vitals.curiosity > 65 and self.vitals.energy > 55:
+                    piece = await asyncio.to_thread(
+                        llm.generate_creative, vivid, interests, soul, self.affect.mood
+                    )
+                    entry = {**piece, "time": _ts()}
+                    self.creative_outputs = [entry, *self.creative_outputs][:5]
+                    # Store first 150 chars as a creative memory
+                    self.memories = add(
+                        self.memories, piece["text"][:150], "creative", piece.get("tags", [])
+                    )
+                    self._log(f'created {piece.get("form","piece")}: "{piece["text"][:50]}…"')
+                else:
+                    topic = interests[0] if interests else "something"
+                    mem   = await asyncio.to_thread(llm.generate_memory, topic, interests, soul)
+                    self.memories = add(self.memories, mem["text"], "observation", mem.get("tags", []))
+                    self._log(f'memory: "{mem["text"][:60]}…"')
 
             elif self.activity == "message" and self.vitals.social_battery > 40:
-                t      = time.localtime()
-                season = f"{wthr.describe_season(t.tm_mon)}, {circadian_phase(t.tm_hour)}"
                 msg = await asyncio.to_thread(
                     llm.generate_autonomous_message,
                     soul, self.vitals, vivid, interests, self.ideas,
@@ -309,6 +375,11 @@ class Chloe:
             "ideas":    self.ideas[:20],
             "tick":     self._tick,
             "weather":  self.weather.to_dict() if self.weather else None,
+            # Layer 3
+            "affect":   self.affect.to_dict(),
+            "wants":    wants_to_dicts(self.wants),
+            "beliefs":  beliefs_to_dicts(self.beliefs),
+            "creative": self.creative_outputs[:5],
         }
         self.state_file.write_text(json.dumps(data, indent=2))
 
@@ -331,6 +402,12 @@ class Chloe:
                     self.weather = WeatherState.from_dict(w_data)
                 except Exception:
                     pass
+            # Layer 3
+            if data.get("affect"):
+                self.affect = Affect.from_dict(data["affect"])
+            self.wants            = wants_from_dicts(data.get("wants", []))
+            self.beliefs          = beliefs_from_dicts(data.get("beliefs", []))
+            self.creative_outputs = data.get("creative", [])
             self._log("State restored from disk.")
         except Exception as e:
             self._log(f"Could not load state: {e}. Starting fresh.")
@@ -354,7 +431,10 @@ class Chloe:
     def _log(self, msg: str):
         entry = f"[{_ts()}] {msg}"
         self.log = [entry, *self.log][:100]
-        print(entry)
+        try:
+            print(entry)
+        except UnicodeEncodeError:
+            print(entry.encode("ascii", errors="replace").decode("ascii"))
 
     def _add_chat(self, from_: str, text: str, autonomous: bool = False):
         self.chat_history.append({
