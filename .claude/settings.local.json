@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(.venv/Scripts/python -m pip install httpx feedparser beautifulsoup4 -q)",
-      "Bash(.venv/Scripts/python -c ':*)"
+      "Bash(.venv/Scripts/python -c ':*)",
+      "Bash(cmd:*)",
+      "Bash(.venv/Scripts/uvicorn server:app --port 8001)",
+      "Bash(powershell.exe:*)",
+      "Bash(.venv/Scripts/python -m uvicorn server:app --port 8080)",
+      "Bash(curl -s http://localhost:8080/snapshot)",
+      "Bash(python -c ':*)",
+      "Bash(netstat -ano)"
     ]
   }
 }

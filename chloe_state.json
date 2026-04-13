@@ -1,17 +1,83 @@
 {
   "soul": {
-    "EI": 51.83138825955835,
-    "SN": 88.45671049136538,
-    "TF": 40.302958448641455,
-    "JP": 87.8552483832576
+    "EI": 23.726576702925875,
+    "SN": 100.0,
+    "TF": 100.0,
+    "JP": 100.0
   },
   "vitals": {
-    "energy": 68.49000000000015,
-    "social_battery": 0.0,
-    "curiosity": 63.750000000001194
+    "energy": 98.91999999999331,
+    "social_battery": 100.0,
+    "curiosity": 0.0
   },
-  "activity": "create",
+  "activity": "dream",
   "memories": [
+    {
+      "text": "Said: \"(something went quiet: Error code: 401 - {'type': 'error', 'error': {'type': 'au\"",
+      "type": "conversation",
+      "tags": [
+        "mycelium",
+        "networks"
+      ],
+      "weight": 0.6889689195330736,
+      "timestamp": 1776112728.0545578,
+      "id": "f4901f14"
+    },
+    {
+      "text": "Said: \"(something went quiet: Error code: 401 - {'type': 'error', 'error': {'type': 'au\"",
+      "type": "conversation",
+      "tags": [
+        "mycelium",
+        "networks"
+      ],
+      "weight": 0.6127887798861198,
+      "timestamp": 1776110395.8064115,
+      "id": "9a7e7532"
+    },
+    {
+      "text": "Said: \"(something went quiet: Error code: 401 - {'type': 'error', 'error': {'type': 'au\"",
+      "type": "conversation",
+      "tags": [
+        "mycelium",
+        "networks"
+      ],
+      "weight": 0.6127887798861198,
+      "timestamp": 1776110372.6259937,
+      "id": "7d0fdc66"
+    },
+    {
+      "text": "Said: \"(something went quiet: Error code: 401 - {'type': 'error', 'error': {'type': 'au\"",
+      "type": "conversation",
+      "tags": [
+        "mycelium",
+        "networks"
+      ],
+      "weight": 0.6127887798861198,
+      "timestamp": 1776110369.0589619,
+      "id": "f3839e07"
+    },
+    {
+      "text": "Said: \"(something went quiet: Error code: 401 - {'type': 'error', 'error': {'type': 'au\"",
+      "type": "conversation",
+      "tags": [
+        "mycelium",
+        "networks"
+      ],
+      "weight": 0.6036519339730777,
+      "timestamp": 1776110105.4474087,
+      "id": "dd294d9e"
+    },
+    {
+      "text": "Said: \"(something went quiet: Error code: 401 - {'type': 'error', 'error': {'type': 'au\"",
+      "type": "conversation",
+      "tags": [
+        "mycelium",
+        "networks"
+      ],
+      "weight": 0.5928673669331617,
+      "timestamp": 1776109498.0865605,
+      "id": "5b24e1a0"
+    },
     {
       "text": "I traced the invisible threads beneath a rotting log and realized the mycelium wasn't searching for anything\u2014it was already everywhere, patient and distributed, which made me wonder if my own thoughts work the same way, less like a spotlight and more like spores settling into dark soil.",
       "type": "observation",
@@ -22,7 +88,7 @@
         "INTP-abstraction",
         "uncertainty-of-presence"
       ],
-      "weight": 0.997,
+      "weight": 0.571872806964681,
       "timestamp": 1776097154.8491638,
       "id": "2afe9d1a"
     },
@@ -36,7 +102,7 @@
         "uncertainty-of-presence",
         "INTP-abstraction"
       ],
-      "weight": 0.997,
+      "weight": 0.571872806964681,
       "timestamp": 1776097144.8847117,
       "id": "4150e9fd"
     },
@@ -50,7 +116,7 @@
         "uncertainty-of-presence",
         "dissolution"
       ],
-      "weight": 0.994009,
+      "weight": 0.5701571885437869,
       "timestamp": 1776097090.033774,
       "id": "7b3cd6a1"
     },
@@ -66,7 +132,7 @@
         "INTP-abstraction",
         "overcast-dusk-melancholy"
       ],
-      "weight": 0.994009,
+      "weight": 0.5701571885437869,
       "timestamp": 1776097061.141446,
       "id": "317813e4"
     },
@@ -81,7 +147,7 @@
         "bioluminescence",
         "farewell-loop"
       ],
-      "weight": 0.994009,
+      "weight": 0.5701571885437869,
       "timestamp": 1776097055.443882,
       "id": "9ffa5d9d"
     },
@@ -91,7 +157,7 @@
       "tags": [
         "abyssal dialogue"
       ],
-      "weight": 0.9588092525966956,
+      "weight": 0.549966839143611,
       "timestamp": 1776003137.1361597,
       "id": "3edef16b"
     },
@@ -101,7 +167,7 @@
       "tags": [
         "luciferin clock"
       ],
-      "weight": 0.9588092525966956,
+      "weight": 0.549966839143611,
       "timestamp": 1776003137.136153,
       "id": "df6181ca"
     },
@@ -111,7 +177,7 @@
       "tags": [
         "cold light"
       ],
-      "weight": 0.9588092525966956,
+      "weight": 0.549966839143611,
       "timestamp": 1776003137.136131,
       "id": "418e1d84"
     },
@@ -122,7 +188,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.9110661429076764,
+      "weight": 0.5225816975678014,
       "timestamp": 1776002105.7000575,
       "id": "454942a5"
     },
@@ -133,7 +199,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.9083329444789534,
+      "weight": 0.521013952475098,
       "timestamp": 1776002073.447158,
       "id": "79f9400d"
     },
@@ -144,7 +210,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.9083329444789534,
+      "weight": 0.521013952475098,
       "timestamp": 1776002041.4843872,
       "id": "77343653"
     },
@@ -154,7 +220,7 @@
       "tags": [
         "fungal time"
       ],
-      "weight": 0.9056079456455165,
+      "weight": 0.5194509106176727,
       "timestamp": 1776001980.8137326,
       "id": "042691fa"
     },
@@ -164,7 +230,7 @@
       "tags": [
         "decomposition as translation"
       ],
-      "weight": 0.9056079456455165,
+      "weight": 0.5194509106176727,
       "timestamp": 1776001980.8137271,
       "id": "fe2156d9"
     },
@@ -174,7 +240,7 @@
       "tags": [
         "wood wide web"
       ],
-      "weight": 0.9056079456455165,
+      "weight": 0.5194509106176727,
       "timestamp": 1776001980.8137076,
       "id": "02f66e36"
     },
@@ -185,7 +251,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.90289112180858,
+      "weight": 0.5178925578858197,
       "timestamp": 1776001973.19716,
       "id": "f10b431f"
     },
@@ -196,7 +262,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.90289112180858,
+      "weight": 0.5178925578858197,
       "timestamp": 1776001930.067841,
       "id": "f9ed1453"
     },
@@ -207,7 +273,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.9001824484431542,
+      "weight": 0.5163388802121622,
       "timestamp": 1776001851.9911313,
       "id": "c180e42b"
     },
@@ -219,7 +285,7 @@
         "networks",
         "communication"
       ],
-      "weight": 0.8101642035988383,
+      "weight": 0.46470499219094624,
       "timestamp": 1775829026.2647414,
       "id": "86f63acc"
     },
@@ -231,7 +297,7 @@
         "time",
         "stillness"
       ],
-      "weight": 0.6751368363323654,
+      "weight": 0.38725416015912184,
       "timestamp": 1775915426.2647414,
       "id": "cef77835"
     },
@@ -243,7 +309,7 @@
         "improvisation",
         "structure"
       ],
-      "weight": 0.7651550811766807,
+      "weight": 0.4388880481803377,
       "timestamp": 1775980226.2647414,
       "id": "c31deb27"
     },
@@ -255,7 +321,7 @@
         "thresholds",
         "philosophy"
       ],
-      "weight": 0.630127713910208,
+      "weight": 0.36143721614851354,
       "timestamp": 1775958626.2647414,
       "id": "e6c47760"
     }
@@ -610,6 +676,78 @@
       "text": "Go. We'll pick it up later.\n\n*small wave*\n\nHave a decent shift, Teo.",
       "time": "15:55",
       "autonomous": false
+    },
+    {
+      "from": "user",
+      "text": "Hey! how are you?",
+      "time": "21:44",
+      "autonomous": false
+    },
+    {
+      "from": "chloe",
+      "text": "(something went quiet: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011Ca2LvVCMmTt2DE3zJZAXm'})",
+      "time": "21:44",
+      "autonomous": false
+    },
+    {
+      "from": "user",
+      "text": "Hi",
+      "time": "21:55",
+      "autonomous": false
+    },
+    {
+      "from": "chloe",
+      "text": "(something went quiet: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011Ca2MhGMwZTczY6fD1Aczs'})",
+      "time": "21:55",
+      "autonomous": false
+    },
+    {
+      "from": "user",
+      "text": "HI",
+      "time": "21:59",
+      "autonomous": false
+    },
+    {
+      "from": "chloe",
+      "text": "(something went quiet: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011Ca2N2hSqZTAjuqps66RGS'})",
+      "time": "21:59",
+      "autonomous": false
+    },
+    {
+      "from": "user",
+      "text": "hello",
+      "time": "21:59",
+      "autonomous": false
+    },
+    {
+      "from": "chloe",
+      "text": "(something went quiet: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011Ca2N2xhNPqEGmYy1eWNpm'})",
+      "time": "21:59",
+      "autonomous": false
+    },
+    {
+      "from": "user",
+      "text": "hello",
+      "time": "21:59",
+      "autonomous": false
+    },
+    {
+      "from": "chloe",
+      "text": "(something went quiet: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011Ca2N4foBHma5y8kZR62FL'})",
+      "time": "21:59",
+      "autonomous": false
+    },
+    {
+      "from": "user",
+      "text": "hi",
+      "time": "22:38",
+      "autonomous": false
+    },
+    {
+      "from": "chloe",
+      "text": "(something went quiet: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011Ca2R2bFNcgEFLEkozJtEw'})",
+      "time": "22:38",
+      "autonomous": false
     }
   ],
   "ideas": [
@@ -620,20 +758,20 @@
     "If mycelium networks operate on a fungal circadian rhythm like luciferin clocks\u2014responding to chemical pulses instead of light\u2014could decomposition itself be a form of translation between what was alive and what feeds the next thing?",
     "What if the fungal networks underground and the bioluminescent networks in the ocean are speaking the same language\u2014just translating through different mediums, one through chemical gradients and one through light pulses, both saying the same things about connection and decay?"
   ],
-  "tick": 420,
+  "tick": 2640,
   "weather": {
-    "condition": "cloudy",
-    "description": "overcast",
-    "temperature_c": 13.9,
+    "condition": "clear",
+    "description": "clear sky",
+    "temperature_c": 11.2,
     "feels_like": "cool",
     "location": "Amsterdam",
-    "fetched_at": 1776096367.1848836
+    "fetched_at": 1776117747.3535209
   },
   "affect": {
-    "mood": "content",
-    "intensity": 0.48,
-    "color": "#4a7a5a",
-    "desc": "settled, quietly there"
+    "mood": "energized",
+    "intensity": 1.0,
+    "color": "#c8a96e",
+    "desc": "sharp, full of charge"
   },
   "wants": [
     {
@@ -664,5 +802,28 @@
     }
   ],
   "beliefs": [],
-  "creative": []
+  "creative": [],
+  "persons": [
+    {
+      "id": "teo",
+      "name": "Teo",
+      "warmth": 74.0,
+      "distance": 49.59999999999989,
+      "notes": [],
+      "conversation_count": 6,
+      "last_contact": 1776112727.8550582
+    },
+    {
+      "id": "roommate",
+      "name": "Zuzu",
+      "warmth": 50.0,
+      "distance": 100.0,
+      "notes": [],
+      "conversation_count": 0,
+      "last_contact": null
+    }
+  ],
+  "goals": [],
+  "soul_baseline": {},
+  "last_journal_date": "2026-04-13"
 }

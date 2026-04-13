@@ -11,9 +11,14 @@
 
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from dotenv import load_dotenv
+from pathlib import Path
+load_dotenv(Path(__file__).parent / ".env", override=True)
+from fastapi import FastAPI, HTTPException, Response
+from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import json
 
@@ -57,11 +62,21 @@ class SoulRequest(BaseModel):
     trait: str   # EI | SN | TF | JP
     value: float # 0.0–100.0
 
+class VitalsRequest(BaseModel):
+    energy:    Optional[float] = None
+    social:    Optional[float] = None
+    curiosity: Optional[float] = None
+
+class AffectRequest(BaseModel):
+    mood: str
+
 # ── Routes ───────────────────────────────────────────────────
 
 @app.get("/snapshot")
-def snapshot():
+def snapshot(response: Response):
     """Full state dump — called by the frontend on every poll."""
+    # Browsers may cache GET responses; stale JSON meant the UI never saw `avatar`.
+    response.headers["Cache-Control"] = "no-store, max-age=0"
     return chloe.snapshot()
 
 
@@ -105,6 +120,38 @@ def set_soul_trait(req: SoulRequest):
     return {"ok": True}
 
 
+@app.post("/vitals")
+def set_vitals(req: VitalsRequest):
+    """Manually set vitals values."""
+    v = chloe.vitals
+    from chloe.heart import Vitals
+    chloe.vitals = Vitals(
+        energy        = max(0.0, min(100.0, req.energy    if req.energy    is not None else v.energy)),
+        social_battery= max(0.0, min(100.0, req.social    if req.social    is not None else v.social_battery)),
+        curiosity     = max(0.0, min(100.0, req.curiosity if req.curiosity is not None else v.curiosity)),
+    )
+    return {"ok": True, "vitals": chloe.vitals.to_dict()}
+
+
+@app.post("/affect")
+def set_affect(req: AffectRequest):
+    """Manually set Chloe's mood."""
+    valid = {"content","restless","irritable","melancholic","curious","serene","energized","lonely"}
+    if req.mood not in valid:
+        raise HTTPException(400, "Unknown mood")
+    from chloe.affect import Affect
+    chloe.affect = Affect(mood=req.mood, intensity=chloe.affect.intensity)
+    return {"ok": True}
+
+
+@app.delete("/graph/{node_id}")
+def delete_graph_node(node_id: str):
+    """Permanently remove a node and its edges from the interest graph."""
+    from chloe.graph import remove_node
+    chloe.graph = remove_node(chloe.graph, node_id)
+    return {"ok": True}
+
+
 @app.get("/log")
 def get_log():
     """Recent activity log."""
@@ -126,3 +173,13 @@ def get_weather():
 @app.get("/health")
 def health():
     return {"alive": True, "tick": chloe._tick}
+
+
+# Mounted **after** API routes so `/snapshot` etc. are not shadowed.
+_chloe_images_dir = Path(__file__).resolve().parent / "chloe" / "images"
+if _chloe_images_dir.is_dir():
+    app.mount(
+        "/media/chloe",
+        StaticFiles(directory=str(_chloe_images_dir)),
+        name="chloe_avatar_media",
+    )

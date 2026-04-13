@@ -38,14 +38,18 @@ TRAIT_LABELS = {
 
 # How each activity nudges the soul per tick.
 # Positive = toward the right pole, negative = toward the left.
+#
+# Scale: ~0.0002–0.0004 per tick.
+# At 5s/tick, 1 hour = 720 ticks → a value of 0.0004 moves a trait ~0.29 pts/hour.
+# Visible drift requires days of consistent activity. MBTI flip takes weeks.
 ACTIVITY_DRIFT: dict[str, dict[str, float]] = {
-    "sleep":   {"EI": +0.10, "SN":  0.00, "TF":  0.00, "JP": +0.10},
-    "dream":   {"EI":  0.00, "SN": +0.20, "TF": +0.10, "JP": +0.10},
-    "rest":    {"EI":  0.00, "SN":  0.00, "TF":  0.00, "JP":  0.00},
-    "read":    {"EI": +0.10, "SN": +0.20, "TF": -0.10, "JP": +0.10},
-    "think":   {"EI": +0.10, "SN": +0.20, "TF": -0.20, "JP": +0.20},
-    "message": {"EI": -0.20, "SN":  0.00, "TF": +0.20, "JP": -0.10},
-    "create":  {"EI": -0.10, "SN": +0.10, "TF": +0.10, "JP": +0.20},
+    "sleep":   {"EI": +0.0002, "SN":  0.0000, "TF":  0.0000, "JP": +0.0002},
+    "dream":   {"EI":  0.0000, "SN": +0.0004, "TF": +0.0002, "JP": +0.0002},
+    "rest":    {"EI":  0.0000, "SN":  0.0000, "TF":  0.0000, "JP":  0.0000},
+    "read":    {"EI": +0.0002, "SN": +0.0004, "TF": -0.0002, "JP": +0.0002},
+    "think":   {"EI": +0.0002, "SN": +0.0004, "TF": -0.0004, "JP": +0.0004},
+    "message": {"EI": -0.0004, "SN":  0.0000, "TF": +0.0004, "JP": -0.0002},
+    "create":  {"EI": -0.0002, "SN": +0.0002, "TF": +0.0002, "JP": +0.0004},
 }
 
 
@@ -63,12 +67,13 @@ def drift(soul: Soul, activity_id: str) -> Soul:
 
 def consolidate(soul: Soul) -> Soul:
     """During sleep the soul does a slow random walk.
-    Dreams reshape personality in ways waking life doesn't."""
+    Dreams reshape personality in ways waking life doesn't.
+    ±0.15/tick → ~6 pts of drift per 8-hour night (random direction)."""
     return Soul(
-        EI=_clamp(soul.EI + random.uniform(-1.0, 1.0)),
-        SN=_clamp(soul.SN + random.uniform(-1.0, 1.0)),
-        TF=_clamp(soul.TF + random.uniform(-1.0, 1.0)),
-        JP=_clamp(soul.JP + random.uniform(-1.0, 1.0)),
+        EI=_clamp(soul.EI + random.uniform(-0.03, 0.03)),
+        SN=_clamp(soul.SN + random.uniform(-0.03, 0.03)),
+        TF=_clamp(soul.TF + random.uniform(-0.03, 0.03)),
+        JP=_clamp(soul.JP + random.uniform(-0.03, 0.03)),
     )
 
 
@@ -113,4 +118,4 @@ def _clamp(val: float, lo: float = 0.0, hi: float = 100.0) -> float:
     return max(lo, min(hi, val))
 
 def _flutter() -> float:
-    return random.uniform(-0.15, 0.15)
+    return random.uniform(-0.002, 0.002)

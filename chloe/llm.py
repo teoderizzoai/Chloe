@@ -12,8 +12,12 @@
 
 import json
 import re
+from pathlib import Path
 import anthropic
 from typing import Any
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent.parent / ".env", override=True)
 
 from .soul    import Soul, mbti_type, describe
 from .heart   import Vitals

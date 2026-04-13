@@ -25,6 +25,7 @@ from .heart  import (Vitals, ACTIVITIES, tick_vitals, auto_decide,
 from .memory import Memory, seed_memories, add, age, get_vivid, derive_interests, to_dicts, from_dicts
 from .graph  import Graph, seed_graph, expand, clear_new_flags, get_labels
 from .affect import Affect, update_mood
+from .avatar import portrait_meta
 from .inner  import (Want, Belief, Goal,
                      add_want, resolve_wants, wants_to_dicts, wants_from_dicts,
                      add_or_reinforce_belief, decay_beliefs, beliefs_to_dicts, beliefs_from_dicts,
@@ -38,12 +39,18 @@ from . import feeds
 from . import weather as wthr
 from .weather import WeatherState
 
-TICK_SECONDS   = 5      # one heartbeat
+TICK_SECONDS   = 30      # one heartbeat
 AGE_EVERY      = 12     # age memories every N ticks (~1 min)
 SAVE_EVERY     = 60     # persist state every N ticks (~5 min)
 WEATHER_EVERY  = 720    # refresh weather every N ticks (~1 hour)
 REFLECT_EVERY  = 240    # self-reflection + continuity check every N ticks (~20 min)
 STATE_FILE     = Path("chloe_state.json")
+
+# Autonomous `_fire_event` pacing — separate from TICK_SECONDS. Even with a slow
+# tick, `should_fire_event` rolls could feel spammy if Haiku returns fast and the
+# user keeps her in high-chance activities (create/read). This floor guarantees a
+# minimum quiet gap between *starting* two background events (user chat is unchanged).
+MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS = 90.0
 
 
 class Chloe:
@@ -85,6 +92,8 @@ class Chloe:
         self._task:       Optional[asyncio.Task] = None
         self._busy:       bool     = False  # LLM call in progress
         self._start_time: float    = time.time()  # wall-clock boot time (not persisted)
+        # Monotonic clock at last autonomous `_fire_event` spawn — rate-limits background noise
+        self._last_autonomous_fire_mono: float = time.monotonic() - MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS
 
         # ── Optional callbacks (set by API layer) ──
         self.on_message: Optional[Callable[[str], None]] = None
@@ -234,6 +243,10 @@ class Chloe:
             "soul":        self.soul.to_dict(),
             "vitals":      self.vitals.to_dict(),
             "activity":    self.activity,
+            # Dashboard portrait — see avatar.portrait_meta for selection rules
+            "avatar":      portrait_meta(
+                self.activity, self.affect.mood, self.affect.intensity
+            ),
             "mbti_type":   mbti_type(self.soul),
             "soul_desc":   describe(self.soul),
             "interests":   derive_interests(self.memories),
@@ -310,8 +323,10 @@ class Chloe:
         if just_woke:
             asyncio.create_task(self._process_pending_messages())
 
-        # 6. Autonomous events (only if LLM isn't already busy)
-        if not self._busy and should_fire_event(self.activity):
+        # 6. Autonomous events — gated by global cooldown + per-activity dice roll
+        gap_ok = (time.monotonic() - self._last_autonomous_fire_mono) >= MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS
+        if not self._busy and gap_ok and should_fire_event(self.activity):
+            self._last_autonomous_fire_mono = time.monotonic()
             asyncio.create_task(self._fire_event())
 
         # 7. Age memories + decay beliefs + drift distance every AGE_EVERY ticks
@@ -377,8 +392,8 @@ class Chloe:
                     self.wants = resolve_wants(self.wants, mem.get("tags", []))
                     self.goals = resolve_goals(self.goals, "read", mem.get("tags", []))
 
-                    # 50% chance to extract a belief from this article
-                    if random.random() < 0.5:
+                    # Second LLM pass — keep rarer so one "read" tick doesn't feel like a burst
+                    if random.random() < 0.28:
                         belief_data = await asyncio.to_thread(
                             llm.extract_belief,
                             article.title, text[:700],

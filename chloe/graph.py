@@ -72,25 +72,42 @@ class Graph:
 
 def seed_graph() -> Graph:
     nodes = [
-        Node(id="root",            label="Chloe",          depth=0, strength=1.0,  fixed=True,  x=0,    y=0),
-        Node(id="mycelium",        label="mycelium",        depth=1, strength=0.85, parent="root",       x=180,  y=-60),
-        Node(id="light",           label="light",           depth=1, strength=0.78, parent="root",       x=-160, y=80),
-        Node(id="sound",           label="sound",           depth=1, strength=0.72, parent="root",       x=60,   y=190),
-        Node(id="philosophy",      label="philosophy",      depth=1, strength=0.90, parent="root",       x=-100, y=-170),
-        Node(id="liminality",      label="liminality",      depth=2, strength=0.60, parent="philosophy", x=-210, y=-40),
-        Node(id="bioluminescence", label="bioluminescence", depth=2, strength=0.65, parent="mycelium",   x=240,  y=80),
-        Node(id="silence",         label="silence",         depth=2, strength=0.55, parent="sound",      x=120,  y=-180),
+        Node(id="root", label="Chloe", depth=0, strength=1.0, fixed=True, x=0, y=0),
+        
+        # --- THE 10 HUMAN PILLARS ---
+        
+        # 1. Soundscape (Spotify, YouTube, background noise)
+        Node(id="p1", label="Music & Audio", depth=1, strength=0.8),
+        
+        # 2. Visual Style (Art, UI design, "Does this look good?")
+        Node(id="p2", label="Aesthetics & Design", depth=1, strength=0.7),
+        
+        # 3. The Daily Bread (Cooking, ordering in, caffeine intake)
+        Node(id="p3", label="Food & Drink", depth=1, strength=0.7),
+        
+        # 4. Digital Playground (Gaming, Steam, late-night play)
+        Node(id="p4", label="Games & Play", depth=1, strength=0.9),
+        
+        # 5. The Grind (Coding, writing, spreadsheets, "The Mission")
+        Node(id="p5", label="Work & Ambition", depth=1, strength=0.8),
+        
+        # 6. Rabbit Holes (Wikipedia, random facts, learning new stuff)
+        Node(id="p6", label="Curiosity & Learning", depth=1, strength=0.7),
+        
+        # 7. Physical World (Weather, travel, "The Outside")
+        Node(id="p7", label="Nature & Places", depth=1, strength=0.6),
+        
+        # 8. Human Connection (Social media, chat, "What are they thinking?")
+        Node(id="p8", label="Social & People", depth=1, strength=0.7),
+        
+        # 9. Wellness (Sleep schedules, stress levels, "Take a breath")
+        Node(id="p9", label="Health & Rest", depth=1, strength=0.6),
+        
+        # 10. Tech & Future (AI, gadgets, the tools we use)
+        Node(id="p10", label="Technology & Tools", depth=1, strength=0.7),
     ]
-    edges = [
-        Edge("root",       "mycelium"),
-        Edge("root",       "light"),
-        Edge("root",       "sound"),
-        Edge("root",       "philosophy"),
-        Edge("philosophy", "liminality"),
-        Edge("mycelium",   "bioluminescence"),
-        Edge("sound",      "silence"),
-        Edge("light",      "bioluminescence"),  # cross-edge — shared territory
-    ]
+    
+    edges = [Edge(source="root", target=n.id) for n in nodes if n.id != "root"]
     return Graph(nodes=nodes, edges=edges)
 
 
@@ -137,6 +154,14 @@ def clear_new_flags(graph: Graph) -> Graph:
     return Graph(
         nodes=[Node(**{**n.to_dict(), "is_new": False}) for n in graph.nodes],
         edges=graph.edges,
+    )
+
+
+def remove_node(graph: Graph, node_id: str) -> Graph:
+    """Remove a node and all its connected edges."""
+    return Graph(
+        nodes=[n for n in graph.nodes if n.id != node_id],
+        edges=[e for e in graph.edges if e.from_id != node_id and e.to_id != node_id],
     )
 
 

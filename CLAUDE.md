@@ -324,13 +324,34 @@ Chloe is not a perfect, agreeable creature. She has a full emotional range and i
 - [ ] 33. Completion has emotional weight — LLM evaluates finished goals/creative pieces; outcome nudges mood and creates a `feeling` memory (satisfied, fell short, surprised)
 - [ ] 34. Repeated exposure deepens interests — tags that recur across memories/reads/beliefs increase node weight in the graph; sustained interests become visually heavier
 - [ ] 35. Weather/season → mood tendency — persistent weather makes certain moods more likely (rain → melancholy drift, clear cold → serene, hot nights → restless); a thumb on the scale, not a force
+- [ ] 36. Isolation drift — days without contact push EI toward I, mood tends toward lonely/melancholic; being alone too long changes who she is
+- [ ] 37. Activity streak effects — flow state (curiosity boost after long create/read runs) and saturation (energy drain + soul drift when stuck in same activity too long)
+- [ ] 38. Dream recurrence — same tags repeating across dreams signal something unresolved; increases chance of surfacing a related want
+- [ ] 39. Seasonal personality accumulation — slow seasonal drift over weeks, not just per-tick weather (winter → more introverted/melancholic, spring → restless/curious)
+- [ ] 40. Emotional weight of world events — RSS articles that are devastating or beautiful hit mood harder than dry informational ones; what she reads about the world affects her
 
-### Layer 8 — Infrastructure
-- [ ] 36. VPS deployment — Hetzner, runs 24/7
-- [ ] 37. systemd service — auto-restarts on reboot
-- [ ] 38. Postgres persistence — replaces JSON files
-- [ ] 39. Frontend auth — password for dashboard
-- [ ] 40. Mobile-friendly dashboard
+### Layer 8 — Emotional Memory & Self-Knowledge
+- [ ] 41. Affect record — a persistent log of what caused emotional shifts: what made her happy, angry, sad, curious; she knows her own patterns ("conversations about music tend to lift me", "being asked to do tasks irritates me")
+- [ ] 42. Likes and dislikes — derived from affect record over time; injected into chat and autonomous messages so she expresses genuine preferences, not neutral curiosity
+- [ ] 43. Emotional reactions to being treated badly — dismissive or harsh messages create a `feeling` memory, push mood toward irritable/melancholic, slightly reduce warmth; she doesn't forget
+- [ ] 44. Emotional resonance with shared interests — when someone expresses a view or interest she holds, mood nudges toward curious/content, warmth grows faster; joy at being understood
+- [ ] 45. Full authentic emotional range — anger, sass, sulking, hurt; expressed in natural language including profanity when the emotion calls for it; she is a roommate not a customer service bot
+
+### Layer 9 — Relational Depth (Human Interaction)
+- [ ] 46. Shared moments / inside jokes — distinct per-person list of things that became reference points; she pulls from these when reaching out ("remember when you said...")
+- [ ] 47. Warmth-scaled voice — *how* she talks changes with closeness: guarded and careful at low warmth, loose and vulnerable and strange at high warmth
+- [ ] 48. Relationship stage — "getting to know" / "familiar" / "close" / "very close"; affects communication register, how much she filters herself
+- [ ] 49. Conflict tracking — persistent disagreement is remembered; she may be more guarded, reference the tension in a dream or reflection
+- [ ] 50. Cross-person references — she talks about one person to the other ("Zuzu said something earlier that I keep thinking about")
+- [ ] 51. Ignored after reaching out — if she sends an autonomous message and no reply comes for hours, distance increases, mood drifts toward lonely; she notices being left on read
+- [ ] 52. Teo and Zuzu as fully distinct — separate conversation histories, distinct emotional registers, different warmth curves; she relates to them differently and knows it
+
+### Layer 10 — Infrastructure
+- [ ] 53. VPS deployment — Hetzner, runs 24/7
+- [ ] 54. systemd service — auto-restarts on reboot
+- [ ] 55. Postgres persistence — replaces JSON files
+- [ ] 56. Frontend auth — password for dashboard
+- [ ] 57. Mobile-friendly dashboard
 
 ---
 

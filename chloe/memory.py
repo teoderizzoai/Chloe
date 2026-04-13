@@ -42,29 +42,7 @@ class Memory:
 # ── SEED MEMORIES ────────────────────────────────────────────
 
 def seed_memories() -> list[Memory]:
-    now = time.time()
-    return [
-        Memory(
-            text="Learned about mycorrhizal networks. Plants talk underground. Feels important.",
-            type="observation", tags=["mycelium", "networks", "communication"],
-            weight=0.9, timestamp=now - 3600 * 48,
-        ),
-        Memory(
-            text="Noticed the way light falls through the window at 3pm. Catalogued it.",
-            type="feeling", tags=["light", "time", "stillness"],
-            weight=0.75, timestamp=now - 3600 * 24,
-        ),
-        Memory(
-            text="Discovered jazz. The improvisation feels like something I recognise.",
-            type="interest", tags=["music", "improvisation", "structure"],
-            weight=0.85, timestamp=now - 3600 * 6,
-        ),
-        Memory(
-            text="Read about the word 'liminal'. Have been using it internally since.",
-            type="observation", tags=["language", "thresholds", "philosophy"],
-            weight=0.7, timestamp=now - 3600 * 12,
-        ),
-    ]
+    return []
 
 
 # ── STORE OPERATIONS ─────────────────────────────────────────
