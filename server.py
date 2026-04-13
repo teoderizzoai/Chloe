@@ -103,6 +103,18 @@ def get_log():
     return {"log": chloe.log[:40]}
 
 
+@app.get("/weather")
+def get_weather():
+    """Current weather state and season."""
+    import time
+    from chloe.weather import describe_season
+    t = time.localtime()
+    return {
+        "weather": chloe.weather.to_dict() if chloe.weather else None,
+        "season":  describe_season(t.tm_mon),
+    }
+
+
 @app.get("/health")
 def health():
     return {"alive": True, "tick": chloe._tick}

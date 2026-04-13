@@ -17,9 +17,10 @@ The goal is a genuinely autonomous developing mind, not a chatbot.
 
 ## People
 
-- **Teo** — owner of the project, Windows machine, beginner-intermediate Python
-- **[roommate name]** — second person Chloe will eventually text and model
+- **Teo** — owner of the project, Windows machine, beginner-intermediate Python, based in Amsterdam
+- **[roommate name]** — second person Chloe will eventually text and model, also in Amsterdam
 - Chloe runs on **localhost for now**, eventually on a Hetzner VPS
+- **Location**: Amsterdam, Netherlands (52.3676° N, 4.9041° E) — used for weather
 
 ---
 
@@ -50,6 +51,8 @@ Chloe/                          ← root, run everything from here
 │   ├── memory.py               ← memory store, aging, retrieval, interests
 │   ├── llm.py                  ← ALL Anthropic API calls (chat, memory, ideas, graph, etc.)
 │   ├── graph.py                ← interest node graph, data structures, physics
+│   ├── feeds.py                ← RSS reader + web page fetcher (Layer 2)
+│   ├── weather.py              ← weather awareness via Open-Meteo (Layer 2)
 │   └── history.py              ← append-only timeline log (.jsonl)
 │
 ├── frontend/
@@ -240,6 +243,10 @@ Tabs: vitals | soul | activity | chat | graph | memory | history
 - [x] Day/night scheduling — auto-sleep at 23:00, auto-wake at 07:00
 - [x] Day-of-week personality — Monday drag through Friday lift
 - [x] Uptime tracking — boot time tracked, injected into chat context
+- [x] RSS feed reader — 5 curated feeds (Aeon, Nautilus, Guardian, Marginalian); absorbed during `read` events
+- [x] Web page fetcher — full article text via httpx + BeautifulSoup when curiosity > 65
+- [x] Weather awareness — Open-Meteo API, Amsterdam location, per-tick vitals nudge, refreshes every hour
+- [x] Season / time-of-day language — injected into chat and autonomous message prompts
 
 ---
 
@@ -252,10 +259,10 @@ Tabs: vitals | soul | activity | chat | graph | memory | history
 - [x] 4. Uptime tracking — notices how long she's been running
 
 ### Layer 2 — World Perception
-- [ ] 5. RSS feed reader — absorbs articles during `read` states
-- [ ] 6. Web page fetcher — pulls full pages when RSS sparks interest
-- [ ] 7. Weather awareness — knows what it's like outside
-- [ ] 8. Time/season language — subtle shifts in how she writes
+- [x] 5. RSS feed reader — absorbs articles during `read` states
+- [x] 6. Web page fetcher — pulls full pages when RSS sparks interest
+- [x] 7. Weather awareness — knows what it's like outside
+- [x] 8. Time/season language — subtle shifts in how she writes
 
 ### Layer 3 — Richer Inner Life
 - [ ] 9.  Affect layer — mood (irritable, content, restless, melancholic) separate from vitals
@@ -300,3 +307,4 @@ Tabs: vitals | soul | activity | chat | graph | memory | history
 - **Session 4** — Added history.py, history tab in dashboard with soul drift charts and timeline
 - **Session 5** — Debugged Windows setup: venv, file structure (chloe/ subfolder), API key, uvicorn boot
 - **Session 6** — Two-tier LLM (Haiku/Opus). Layer 1 complete: circadian rhythm, night sleep scheduling, day-of-week personality, uptime tracking
+- **Session 7** — Layer 2 complete: RSS feed reader (feeds.py), web page fetcher (bs4), weather awareness via Open-Meteo (weather.py), season/time language injected into all LLM prompts; world section added to dashboard

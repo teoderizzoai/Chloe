@@ -19,14 +19,19 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .soul   import Soul, drift, consolidate, mbti_type, describe
-from .heart  import Vitals, ACTIVITIES, tick_vitals, auto_decide, should_fire_event, circadian_phase, day_name
+from .heart  import (Vitals, ACTIVITIES, tick_vitals, auto_decide,
+                     should_fire_event, circadian_phase, day_name)
 from .memory import Memory, seed_memories, add, age, get_vivid, derive_interests, to_dicts, from_dicts
 from .graph  import Graph, seed_graph, expand, clear_new_flags, get_labels
 from . import llm
+from . import feeds
+from . import weather as wthr
+from .weather import WeatherState
 
 TICK_SECONDS   = 5      # one heartbeat
 AGE_EVERY      = 12     # age memories every N ticks (~1 min)
 SAVE_EVERY     = 60     # persist state every N ticks (~5 min)
+WEATHER_EVERY  = 720    # refresh weather every N ticks (~1 hour)
 STATE_FILE     = Path("chloe_state.json")
 
 
@@ -43,6 +48,7 @@ class Chloe:
         self.chat_history: list[dict] = []
         self.ideas:    list[str]   = []
         self.log:      list[str]   = []
+        self.weather:  Optional[WeatherState] = None
 
         # ── Runtime ──
         self._tick:       int      = 0
@@ -52,10 +58,8 @@ class Chloe:
         self._start_time: float    = time.time()  # wall-clock boot time (not persisted)
 
         # ── Optional callbacks (set by API layer) ──
-        # Called with (message_text) when Chloe sends an autonomous message
         self.on_message: Optional[Callable[[str], None]] = None
-        # Called on every tick with the current state snapshot
-        self.on_tick: Optional[Callable[[dict], None]] = None
+        self.on_tick:    Optional[Callable[[dict], None]] = None
 
         self._load()
 
@@ -66,6 +70,8 @@ class Chloe:
         self._running = True
         self._task = asyncio.create_task(self._loop())
         self._log("Chloe online.")
+        # Fetch weather immediately on boot (non-blocking)
+        asyncio.create_task(self._refresh_weather())
 
     async def stop(self):
         """Gracefully shut down."""
@@ -80,6 +86,9 @@ class Chloe:
         self._add_chat("user", message)
         self.set_activity("message")
 
+        t      = time.localtime()
+        season = f"{wthr.describe_season(t.tm_mon)}, {circadian_phase(t.tm_hour)}"
+
         try:
             reply = await asyncio.to_thread(
                 llm.chat,
@@ -91,6 +100,8 @@ class Chloe:
                 interests=derive_interests(self.memories),
                 ideas=self.ideas[:3],
                 uptime=self._uptime_human(),
+                weather=self.weather,
+                season=season,
             )
         except Exception as e:
             reply = f"(something went quiet: {e})"
@@ -126,7 +137,6 @@ class Chloe:
             labels = [d["label"] for d in defs]
             self._log(f'"{node.label}" → {", ".join(labels)}')
 
-            # New nodes seed memories
             for d in defs:
                 self.memories = add(self.memories, d.get("note", d["label"]),
                                     "interest", [d["label"]])
@@ -140,6 +150,7 @@ class Chloe:
 
     def snapshot(self) -> dict:
         """Full serialisable state — for the API / frontend."""
+        t = time.localtime()
         return {
             "soul":        self.soul.to_dict(),
             "vitals":      self.vitals.to_dict(),
@@ -154,9 +165,11 @@ class Chloe:
             "log":         self.log[:20],
             "tick":        self._tick,
             "busy":        self._busy,
-            "circadian":   circadian_phase(time.localtime().tm_hour),
-            "day":         day_name(time.localtime().tm_wday),
+            "circadian":   circadian_phase(t.tm_hour),
+            "day":         day_name(t.tm_wday),
             "uptime":      self._uptime_human(),
+            "weather":     self.weather.to_dict() if self.weather else None,
+            "season":      wthr.describe_season(t.tm_mon),
         }
 
     # ── HEARTBEAT LOOP ───────────────────────────────────────
@@ -176,30 +189,43 @@ class Chloe:
         weekday = t.tm_wday
         self.vitals = tick_vitals(self.vitals, self.activity, hour, weekday)
 
-        # 2. Drift soul
+        # 2. Apply weather vitals nudge (subtle per-tick effect)
+        if self.weather:
+            delta = wthr.weather_vitals_delta(self.weather.condition)
+            self.vitals = Vitals(
+                energy=max(0.0, min(100.0, self.vitals.energy         + delta["energy"])),
+                social_battery=max(0.0, min(100.0, self.vitals.social_battery + delta["social"])),
+                curiosity=max(0.0, min(100.0, self.vitals.curiosity   + delta["curiosity"])),
+            )
+
+        # 3. Drift soul
         if self.activity == "sleep":
             self.soul = consolidate(self.soul)
         else:
             self.soul = drift(self.soul, self.activity)
 
-        # 3. Auto-regulate (vitals + time-of-day scheduling)
+        # 4. Auto-regulate (vitals + time-of-day scheduling)
         override = auto_decide(self.vitals, self.activity, hour)
         if override:
             self.set_activity(override)
 
-        # 4. Autonomous events (only if LLM isn't already busy)
+        # 5. Autonomous events (only if LLM isn't already busy)
         if not self._busy and should_fire_event(self.activity):
             asyncio.create_task(self._fire_event())
 
-        # 5. Age memories every AGE_EVERY ticks
+        # 6. Age memories every AGE_EVERY ticks
         if self._tick % AGE_EVERY == 0:
             self.memories = age(self.memories)
 
-        # 6. Persist every SAVE_EVERY ticks
+        # 7. Refresh weather every WEATHER_EVERY ticks (~1 hour)
+        if self._tick % WEATHER_EVERY == 0:
+            asyncio.create_task(self._refresh_weather())
+
+        # 8. Persist every SAVE_EVERY ticks
         if self._tick % SAVE_EVERY == 0:
             self._save()
 
-        # 7. Notify listeners
+        # 9. Notify listeners
         if self.on_tick:
             self.on_tick(self.snapshot())
 
@@ -211,7 +237,30 @@ class Chloe:
         soul      = self.soul
 
         try:
-            if self.activity in ("read", "create"):
+            if self.activity == "read":
+                # Feature 5/6: absorb a real article from the world
+                article = await feeds.fetch_random_article(interests)
+                if article:
+                    # Feature 6: fetch full text when curiosity is high
+                    text = article.summary
+                    if self.vitals.curiosity > 65:
+                        full = await feeds.fetch_article_text(article.url)
+                        if full:
+                            text = full
+                    mem = await asyncio.to_thread(
+                        llm.generate_memory_from_article,
+                        article.title, text, interests, soul
+                    )
+                    self.memories = add(self.memories, mem["text"], "observation", mem.get("tags", []))
+                    self._log(f'read "{article.title[:45]}" → "{mem["text"][:45]}…"')
+                else:
+                    # Feeds unreachable — fall back to generic memory
+                    topic = interests[0] if interests else "something"
+                    mem   = await asyncio.to_thread(llm.generate_memory, topic, interests, soul)
+                    self.memories = add(self.memories, mem["text"], "observation", mem.get("tags", []))
+                    self._log(f'memory: "{mem["text"][:60]}…"')
+
+            elif self.activity == "create":
                 topic = interests[0] if interests else "something"
                 mem   = await asyncio.to_thread(llm.generate_memory, topic, interests, soul)
                 self.memories = add(self.memories, mem["text"], "observation", mem.get("tags", []))
@@ -223,9 +272,12 @@ class Chloe:
                 self._log(f'idea: "{idea[:60]}…"')
 
             elif self.activity == "message" and self.vitals.social_battery > 40:
+                t      = time.localtime()
+                season = f"{wthr.describe_season(t.tm_mon)}, {circadian_phase(t.tm_hour)}"
                 msg = await asyncio.to_thread(
                     llm.generate_autonomous_message,
-                    soul, self.vitals, vivid, interests, self.ideas
+                    soul, self.vitals, vivid, interests, self.ideas,
+                    self.weather, season,
                 )
                 self._add_chat("chloe", msg, autonomous=True)
                 self._log("chloe reached out unprompted")
@@ -236,6 +288,13 @@ class Chloe:
             self._log(f"event error: {e}")
 
         self._busy = False
+
+    async def _refresh_weather(self):
+        """Fetch current weather and update state. Silent on failure."""
+        w = await wthr.fetch_weather()
+        if w:
+            self.weather = w
+            self._log(f"weather: {w.description}, {w.temperature_c}°C, {w.feels_like} in {w.location}")
 
     # ── PERSISTENCE ──────────────────────────────────────────
 
@@ -249,6 +308,7 @@ class Chloe:
             "chat":     self.chat_history[-100:],
             "ideas":    self.ideas[:20],
             "tick":     self._tick,
+            "weather":  self.weather.to_dict() if self.weather else None,
         }
         self.state_file.write_text(json.dumps(data, indent=2))
 
@@ -265,6 +325,12 @@ class Chloe:
             self.chat_history  = data.get("chat", [])
             self.ideas         = data.get("ideas", [])
             self._tick         = data.get("tick", 0)
+            w_data = data.get("weather")
+            if w_data:
+                try:
+                    self.weather = WeatherState.from_dict(w_data)
+                except Exception:
+                    pass
             self._log("State restored from disk.")
         except Exception as e:
             self._log(f"Could not load state: {e}. Starting fresh.")

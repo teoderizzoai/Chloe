@@ -133,6 +133,7 @@ html, body {
 
 /* Soul description */
 .soul-desc { font-family: var(--font-serif); font-size: 13px; font-style: italic; color: var(--text2); line-height: 1.7; padding: 12px 0 4px; }
+.world-line { font-size: 11px; color: var(--text2); line-height: 1.8; letter-spacing: 0.02em; }
 
 /* Activity buttons */
 .activity-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -286,6 +287,12 @@ html, body {
       </div>
     </div>
 
+    <div class="section" id="world-section">
+      <div class="section-title">world</div>
+      <div class="world-line" id="world-season">—</div>
+      <div class="world-line" id="world-weather">—</div>
+    </div>
+
     <div class="section">
       <div class="section-title">soul</div>
       <div id="soul-sliders"></div>
@@ -402,6 +409,17 @@ function applyState(s) {
   setVital('energy',    s.vitals.energy);
   setVital('social',    s.vitals.social_battery);
   setVital('curiosity', s.vitals.curiosity);
+
+  // World (weather + season)
+  const seasonEl  = document.getElementById('world-season');
+  const weatherEl = document.getElementById('world-weather');
+  seasonEl.textContent = s.season ? `${s.circadian} · ${s.season}` : s.circadian ?? '—';
+  if (s.weather) {
+    const w = s.weather;
+    weatherEl.textContent = `${w.description}, ${w.temperature_c}°C · ${w.feels_like} · ${w.location}`;
+  } else {
+    weatherEl.textContent = 'weather unknown';
+  }
 
   // Soul sliders (animate smoothly)
   updateSoulSliders(s.soul);

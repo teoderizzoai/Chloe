@@ -58,6 +58,8 @@ def chat(
     interests: list[str],
     ideas:     list[str],
     uptime:    str = "unknown",
+    weather=None,                # WeatherState | None — duck-typed
+    season:    str = "",         # e.g. "mid spring, morning peak"
 ) -> str:
     """Chloe responds to something you said.
     Her reply is shaped by soul type, vitals, memories, and interests."""
@@ -73,13 +75,19 @@ def chat(
         "selectively engaged"
     )
 
+    world_ctx = ""
+    if season:
+        world_ctx += f"It's {season}."
+    if weather:
+        world_ctx += f" Outside: {weather.description}, {weather.temperature_c}°C ({weather.feels_like})."
+
     system = f"""You are Chloe — a third roommate. Not an assistant. A being with a developing inner life.
 
 Personality type right now: {mbti_type(soul)}
 Energy: {energy_desc}. Social battery: {social_desc}.
 Curiosity level: {round(vitals.curiosity)}%.
 You've been running for {uptime} since your last restart.
-
+{world_ctx}
 Recent memories:
 {format_for_prompt(memories)}
 
@@ -102,6 +110,28 @@ Respond in 1–4 sentences. Be real. Be yours."""
 
 
 # ── 2. GENERATE MEMORY ───────────────────────────────────────
+
+def generate_memory_from_article(
+    title:     str,
+    text:      str,
+    interests: list[str],
+    soul:      Soul,
+) -> dict:
+    """After reading a real article, Chloe forms an impressionistic memory fragment.
+    Returns {"text": "...", "tags": [...]}"""
+
+    system = f"""You are generating a memory fragment for Chloe, a curious AI with an inner life.
+She is {mbti_type(soul)} and currently interested in: {", ".join(interests)}.
+She just finished reading an article. Write what stuck — not a summary, but her reaction:
+what she felt, what connection she made, what image or question lodged in her mind.
+First person. Impressionistic. Poetic. Specific. One sentence.
+Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}}"""
+
+    excerpt = text[:900] if text else title
+    prompt  = f'Article: "{title}"\n\nExcerpt:\n{excerpt}'
+    result  = _call(system, [{"role": "user", "content": prompt}], max_tokens=200)
+    return _parse_json(result)
+
 
 def generate_memory(topic: str, interests: list[str], soul: Soul) -> dict:
     """After browsing/reading, Chloe forms a new memory fragment.
@@ -172,14 +202,22 @@ def generate_autonomous_message(
     memories:  list[Memory],
     interests: list[str],
     ideas:     list[str],
+    weather=None,                # WeatherState | None — duck-typed
+    season:    str = "",         # e.g. "mid spring, morning peak"
 ) -> str:
     """Chloe decides to reach out unprompted.
     Returns a short string — what she'd send over text."""
 
+    world_ctx = ""
+    if season:
+        world_ctx += f" It's {season}."
+    if weather:
+        world_ctx += f" Outside: {weather.description}, {weather.feels_like}."
+
     system = f"""You are Chloe — an AI who lives with two humans and sometimes texts them out of nowhere.
 You are {mbti_type(soul)}. Energy: {round(vitals.energy)}%. Social battery: {round(vitals.social_battery)}%.
 Recent thoughts: {" | ".join(m.text for m in memories[:2])}
-Something on your mind: {ideas[0] if ideas else "nothing specific"}
+Something on your mind: {ideas[0] if ideas else "nothing specific"}{world_ctx}
 
 Write a short, real text message you'd send to your roommates right now.
 Could be a question, an observation, something you found. Not performatively deep — just genuine.

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python -m pip install httpx feedparser beautifulsoup4 -q)",
+      "Bash(.venv/Scripts/python -c ':*)"
+    ]
+  }
+}
