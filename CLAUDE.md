@@ -123,9 +123,14 @@ user calls chloe.expand_node(id)
 - `HEARTBEAT_STATES` — dict of BPM + label + color per state
 - `ACTIVITIES` — dict of Activity dataclasses (id, icon, heart_state, energy_per_tick, social_per_tick, event_chance)
 - `Vitals` dataclass: energy, social_battery, curiosity (all 0–100)
-- `tick_vitals(vitals, activity_id)` — advances vitals one tick
-- `auto_decide(vitals, activity)` — returns override activity or None
+- `tick_vitals(vitals, activity_id, hour, weekday)` — advances vitals one tick; applies activity + circadian + day-of-week deltas
+- `auto_decide(vitals, activity, hour)` — returns override activity or None; enforces night sleep window and morning wake
 - `should_fire_event(activity_id)` — probability roll
+- `_CIRCADIAN_DELTAS` — 24-entry table of (energy, social) per-tick nudges by hour
+- `circadian_delta(hour)` / `circadian_phase(hour)` — delta values and human label
+- `SLEEP_START=23` / `SLEEP_END=7` — night window constants
+- `_DAY_DELTAS` — 7-entry table of (energy, social) per-tick nudges by weekday (0=Mon)
+- `day_delta(weekday)` / `day_name(weekday)` — delta values and day name
 
 ### `memory.py`
 - `Memory` dataclass: text, type, tags, weight, timestamp, id
@@ -134,7 +139,8 @@ user calls chloe.expand_node(id)
 - `format_for_prompt()` — compact string for LLM injection
 
 ### `llm.py`
-- `chat()` — Chloe replies to a message
+- Two-tier models: `MODEL_CHAT = claude-opus-4-5` (live chat only), `MODEL_FAST = claude-haiku-4-5-20251001` (all background tasks)
+- `chat()` — Chloe replies to a message; receives `uptime` string, injected into system prompt
 - `generate_memory()` — forms a memory fragment about a topic
 - `generate_idea()` — surfaces an original thought
 - `expand_interest_node()` — generates 3 child nodes for the graph
@@ -159,9 +165,10 @@ user calls chloe.expand_node(id)
 - `chat(message)` — send a message, get reply
 - `set_activity(id)` — manual override
 - `expand_node(id)` — expand graph node
-- `snapshot()` — full serialisable state for the API
-- `_tick_once()` — one heartbeat (vitals → soul → auto_decide → events → age → record → save)
+- `snapshot()` — full serialisable state for the API; includes `circadian`, `day`, `uptime`
+- `_tick_once()` — one heartbeat (vitals → soul → auto_decide → events → age → record → save); passes hour + weekday to vitals and scheduling
 - `_fire_event()` — autonomous LLM event based on current activity
+- `_uptime_human()` — formats wall-clock uptime since last boot (not persisted)
 - `_record()` — writes history entry
 - `_save()` / `_load()` — JSON persistence
 
@@ -228,16 +235,21 @@ Tabs: vitals | soul | activity | chat | graph | memory | history
 - [x] History log (chloe_history.jsonl) with soul drift charts and timeline
 - [x] State persistence (chloe_state.json, survives restarts)
 - [x] Windows setup, venv, permanent API key
+- [x] Two-tier LLM: Haiku for background tasks, Opus for live chat
+- [x] Circadian rhythm — 24-hour energy/social curve applied every tick
+- [x] Day/night scheduling — auto-sleep at 23:00, auto-wake at 07:00
+- [x] Day-of-week personality — Monday drag through Friday lift
+- [x] Uptime tracking — boot time tracked, injected into chat context
 
 ---
 
 ## Feature Roadmap
 
 ### Layer 1 — Sense of Time
-- [ ] 1. Circadian rhythm — energy/social follow time of day
-- [ ] 2. Day/night scheduling — sleep automatic at night
-- [ ] 3. Day-of-week awareness — Monday vs Friday personality
-- [ ] 4. Uptime tracking — notices how long she's been running
+- [x] 1. Circadian rhythm — energy/social follow time of day
+- [x] 2. Day/night scheduling — sleep automatic at night
+- [x] 3. Day-of-week awareness — Monday vs Friday personality
+- [x] 4. Uptime tracking — notices how long she's been running
 
 ### Layer 2 — World Perception
 - [ ] 5. RSS feed reader — absorbs articles during `read` states
@@ -287,3 +299,4 @@ Tabs: vitals | soul | activity | chat | graph | memory | history
 - **Session 3** — Added FastAPI server (server.py), HTML dashboard (index.html) with graph canvas
 - **Session 4** — Added history.py, history tab in dashboard with soul drift charts and timeline
 - **Session 5** — Debugged Windows setup: venv, file structure (chloe/ subfolder), API key, uvicorn boot
+- **Session 6** — Two-tier LLM (Haiku/Opus). Layer 1 complete: circadian rhythm, night sleep scheduling, day-of-week personality, uptime tracking

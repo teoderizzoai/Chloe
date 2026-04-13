@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .soul   import Soul, drift, consolidate, mbti_type, describe
-from .heart  import Vitals, ACTIVITIES, tick_vitals, auto_decide, should_fire_event, circadian_phase
+from .heart  import Vitals, ACTIVITIES, tick_vitals, auto_decide, should_fire_event, circadian_phase, day_name
 from .memory import Memory, seed_memories, add, age, get_vivid, derive_interests, to_dicts, from_dicts
 from .graph  import Graph, seed_graph, expand, clear_new_flags, get_labels
 from . import llm
@@ -45,10 +45,11 @@ class Chloe:
         self.log:      list[str]   = []
 
         # ── Runtime ──
-        self._tick:    int         = 0
-        self._running: bool        = False
-        self._task:    Optional[asyncio.Task] = None
-        self._busy:    bool        = False  # LLM call in progress
+        self._tick:       int      = 0
+        self._running:    bool     = False
+        self._task:       Optional[asyncio.Task] = None
+        self._busy:       bool     = False  # LLM call in progress
+        self._start_time: float    = time.time()  # wall-clock boot time (not persisted)
 
         # ── Optional callbacks (set by API layer) ──
         # Called with (message_text) when Chloe sends an autonomous message
@@ -89,6 +90,7 @@ class Chloe:
                 memories=get_vivid(self.memories, 5),
                 interests=derive_interests(self.memories),
                 ideas=self.ideas[:3],
+                uptime=self._uptime_human(),
             )
         except Exception as e:
             reply = f"(something went quiet: {e})"
@@ -153,6 +155,8 @@ class Chloe:
             "tick":        self._tick,
             "busy":        self._busy,
             "circadian":   circadian_phase(time.localtime().tm_hour),
+            "day":         day_name(time.localtime().tm_wday),
+            "uptime":      self._uptime_human(),
         }
 
     # ── HEARTBEAT LOOP ───────────────────────────────────────
@@ -166,9 +170,11 @@ class Chloe:
     async def _tick_once(self):
         """One heartbeat. Order matters."""
 
-        # 1. Tick vitals (circadian hour injected here)
-        hour = time.localtime().tm_hour
-        self.vitals = tick_vitals(self.vitals, self.activity, hour)
+        # 1. Tick vitals (circadian + day-of-week injected here)
+        t       = time.localtime()
+        hour    = t.tm_hour
+        weekday = t.tm_wday
+        self.vitals = tick_vitals(self.vitals, self.activity, hour, weekday)
 
         # 2. Drift soul
         if self.activity == "sleep":
@@ -176,8 +182,8 @@ class Chloe:
         else:
             self.soul = drift(self.soul, self.activity)
 
-        # 3. Auto-regulate
-        override = auto_decide(self.vitals, self.activity)
+        # 3. Auto-regulate (vitals + time-of-day scheduling)
+        override = auto_decide(self.vitals, self.activity, hour)
         if override:
             self.set_activity(override)
 
@@ -264,6 +270,20 @@ class Chloe:
             self._log(f"Could not load state: {e}. Starting fresh.")
 
     # ── HELPERS ──────────────────────────────────────────────
+
+    def _uptime_human(self) -> str:
+        """Human-readable uptime since last boot."""
+        secs = int(time.time() - self._start_time)
+        if secs < 60:
+            return f"{secs}s"
+        mins = secs // 60
+        if mins < 60:
+            return f"{mins}m"
+        hours, mins_rem = divmod(mins, 60)
+        if hours < 24:
+            return f"{hours}h {mins_rem}m"
+        days, hours_rem = divmod(hours, 24)
+        return f"{days}d {hours_rem}h"
 
     def _log(self, msg: str):
         entry = f"[{_ts()}] {msg}"

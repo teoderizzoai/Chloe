@@ -57,6 +57,7 @@ def chat(
     memories:  list[Memory],
     interests: list[str],
     ideas:     list[str],
+    uptime:    str = "unknown",
 ) -> str:
     """Chloe responds to something you said.
     Her reply is shaped by soul type, vitals, memories, and interests."""
@@ -77,6 +78,7 @@ def chat(
 Personality type right now: {mbti_type(soul)}
 Energy: {energy_desc}. Social battery: {social_desc}.
 Curiosity level: {round(vitals.curiosity)}%.
+You've been running for {uptime} since your last restart.
 
 Recent memories:
 {format_for_prompt(memories)}

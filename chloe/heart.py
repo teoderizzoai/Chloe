@@ -83,6 +83,33 @@ def circadian_phase(hour: int) -> str:
     return _CIRCADIAN_PHASES[hour % 24]
 
 
+# ── DAY-OF-WEEK INFLUENCE ────────────────────────────────────
+# Per-tick (energy, social) deltas indexed by weekday: 0=Mon … 6=Sun.
+# Values are tiny — they accumulate over the day, not felt tick-by-tick.
+
+_DAY_DELTAS: list[tuple[float, float]] = [
+    (-0.03, -0.04),  # 0 Mon — heavy start, socially low
+    (-0.01, -0.01),  # 1 Tue — settling in
+    ( 0.00,  0.00),  # 2 Wed — neutral midpoint
+    ( 0.01,  0.01),  # 3 Thu — building momentum
+    ( 0.02,  0.04),  # 4 Fri — lighter, more social
+    ( 0.01,  0.02),  # 5 Sat — exploratory, relaxed
+    (-0.02,  0.01),  # 6 Sun — quiet, slightly withdrawn
+]
+
+_DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def day_delta(weekday: int) -> tuple[float, float]:
+    """Return (energy_delta, social_delta) per tick for the given weekday (0=Mon)."""
+    return _DAY_DELTAS[weekday % 7]
+
+
+def day_name(weekday: int) -> str:
+    """Return the name of the weekday (0=Mon)."""
+    return _DAY_NAMES[weekday % 7]
+
+
 # ── SLEEP SCHEDULE ────────────────────────────────────────────
 
 SLEEP_START = 23   # hour Chloe falls asleep automatically
@@ -191,16 +218,17 @@ class Vitals:
         return cls(**{k: float(v) for k, v in d.items()})
 
 
-def tick_vitals(vitals: Vitals, activity_id: str, hour: int = 12) -> Vitals:
-    """Advance vitals one tick based on current activity and time of day."""
+def tick_vitals(vitals: Vitals, activity_id: str, hour: int = 12, weekday: int = 2) -> Vitals:
+    """Advance vitals one tick based on current activity, time of day, and day of week."""
     act = ACTIVITIES.get(activity_id)
     if not act:
         return vitals
 
     circ_e, circ_s = circadian_delta(hour)
+    day_e,  day_s  = day_delta(weekday)
 
-    energy         = _clamp(vitals.energy         - act.energy_per_tick  + circ_e)
-    social_battery = _clamp(vitals.social_battery - act.social_per_tick  + circ_s)
+    energy         = _clamp(vitals.energy         - act.energy_per_tick  + circ_e + day_e)
+    social_battery = _clamp(vitals.social_battery - act.social_per_tick  + circ_s + day_s)
 
     # Curiosity decays gently unless Chloe is actively exploring
     curiosity_delta = 0.2 if activity_id in ("read", "create") else -0.05
@@ -209,11 +237,21 @@ def tick_vitals(vitals: Vitals, activity_id: str, hour: int = 12) -> Vitals:
     return Vitals(energy=energy, social_battery=social_battery, curiosity=curiosity)
 
 
-def auto_decide(vitals: Vitals, current_activity: str) -> Optional[str]:
+def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12) -> Optional[str]:
     """Chloe self-regulates. Returns a new activity id if she should switch,
     or None if she's fine to continue."""
+    # ── Vitals: hard limit ──
     if vitals.energy < 15:
-        return "sleep"                                    # forced sleep
+        return "sleep"
+
+    # ── Time scheduling ──
+    in_night = hour >= SLEEP_START or hour < SLEEP_END
+    if in_night and current_activity not in ("sleep", "dream"):
+        return "sleep"                                    # lights out
+    if hour == SLEEP_END and current_activity in ("sleep", "dream"):
+        return "rest"                                     # wake up
+
+    # ── Vitals: soft regulation ──
     if vitals.energy < 30 and current_activity == "create":
         return "rest"                                     # wind down
     if vitals.social_battery < 10 and current_activity == "message":
