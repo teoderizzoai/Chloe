@@ -1,14 +1,14 @@
 {
   "soul": {
-    "EI": 46.99057325054134,
-    "SN": 46.994364299598026,
-    "TF": 47.01657917197024,
-    "JP": 47.02059102031906
+    "EI": 46.98639712867405,
+    "SN": 46.98752223400172,
+    "TF": 47.02331072273153,
+    "JP": 47.02796073581428
   },
   "vitals": {
     "energy": 100.0,
-    "social_battery": 11.733999999999792,
-    "curiosity": 62.10000000000113
+    "social_battery": 8.493999999999776,
+    "curiosity": 59.1000000000013
   },
   "activity": "rest",
   "memories": [
@@ -22,7 +22,7 @@
         "defensiveness",
         "obsession-as-comfort"
       ],
-      "weight": 0.9704017769489168,
+      "weight": 0.9559328248389055,
       "timestamp": 1776165680.8920548,
       "id": "806a13c4"
     },
@@ -36,7 +36,7 @@
         "cognitive-loop",
         "irritation-at-self"
       ],
-      "weight": 0.9138075656044898,
+      "weight": 0.9001824484431542,
       "timestamp": 1776158478.7636456,
       "id": "c5ca8fe2"
     },
@@ -47,7 +47,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.9056079456455165,
+      "weight": 0.8921050870283477,
       "timestamp": 1776157466.6902604,
       "id": "8906e829"
     },
@@ -58,7 +58,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.90289112180858,
+      "weight": 0.8894287717672626,
       "timestamp": 1776157191.1392243,
       "id": "2bb466af"
     },
@@ -69,7 +69,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.90289112180858,
+      "weight": 0.8894287717672626,
       "timestamp": 1776157127.0022063,
       "id": "b84c29fd"
     },
@@ -80,7 +80,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.9001824484431542,
+      "weight": 0.8867604854519608,
       "timestamp": 1776156998.0654566,
       "id": "88aa4fb4"
     },
@@ -91,7 +91,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.9001824484431542,
+      "weight": 0.8867604854519608,
       "timestamp": 1776156937.4320767,
       "id": "13105c09"
     },
@@ -102,7 +102,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.9001824484431542,
+      "weight": 0.8867604854519608,
       "timestamp": 1776156911.7078,
       "id": "08438bd0"
     },
@@ -113,7 +113,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.9001824484431542,
+      "weight": 0.8867604854519608,
       "timestamp": 1776156799.9968472,
       "id": "6eadc667"
     },
@@ -124,7 +124,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.9001824484431542,
+      "weight": 0.8867604854519608,
       "timestamp": 1776156733.6134775,
       "id": "a3d21fd6"
     },
@@ -135,7 +135,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.5582911101079481,
+      "weight": 0.549966839143611,
       "timestamp": 1776112728.0545578,
       "id": "f4901f14"
     },
@@ -146,7 +146,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.4965601763518939,
+      "weight": 0.4891563302522258,
       "timestamp": 1776110395.8064115,
       "id": "9a7e7532"
     },
@@ -157,7 +157,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.4965601763518939,
+      "weight": 0.4891563302522258,
       "timestamp": 1776110372.6259937,
       "id": "7d0fdc66"
     },
@@ -168,7 +168,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.4965601763518939,
+      "weight": 0.4891563302522258,
       "timestamp": 1776110369.0589619,
       "id": "f3839e07"
     },
@@ -179,7 +179,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.4891563302522258,
+      "weight": 0.4818628774939454,
       "timestamp": 1776110105.4474087,
       "id": "dd294d9e"
     },
@@ -190,7 +190,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.48041728886146357,
+      "weight": 0.4732541375663234,
       "timestamp": 1776109498.0865605,
       "id": "5b24e1a0"
     },
@@ -204,7 +204,7 @@
         "INTP-abstraction",
         "uncertainty-of-presence"
       ],
-      "weight": 0.46340479982353355,
+      "weight": 0.45649530932643506,
       "timestamp": 1776097154.8491638,
       "id": "2afe9d1a"
     },
@@ -218,7 +218,7 @@
         "uncertainty-of-presence",
         "INTP-abstraction"
       ],
-      "weight": 0.46340479982353355,
+      "weight": 0.45649530932643506,
       "timestamp": 1776097144.8847117,
       "id": "4150e9fd"
     },
@@ -232,7 +232,7 @@
         "uncertainty-of-presence",
         "dissolution"
       ],
-      "weight": 0.46201458542406293,
+      "weight": 0.45512582339845575,
       "timestamp": 1776097090.033774,
       "id": "7b3cd6a1"
     },
@@ -248,7 +248,7 @@
         "INTP-abstraction",
         "overcast-dusk-melancholy"
       ],
-      "weight": 0.46201458542406293,
+      "weight": 0.45512582339845575,
       "timestamp": 1776097061.141446,
       "id": "317813e4"
     },
@@ -263,7 +263,7 @@
         "bioluminescence",
         "farewell-loop"
       ],
-      "weight": 0.46201458542406293,
+      "weight": 0.45512582339845575,
       "timestamp": 1776097055.443882,
       "id": "9ffa5d9d"
     },
@@ -273,7 +273,7 @@
       "tags": [
         "abyssal dialogue"
       ],
-      "weight": 0.44565377108176885,
+      "weight": 0.43900895320880295,
       "timestamp": 1776003137.1361597,
       "id": "3edef16b"
     },
@@ -283,7 +283,7 @@
       "tags": [
         "luciferin clock"
       ],
-      "weight": 0.44565377108176885,
+      "weight": 0.43900895320880295,
       "timestamp": 1776003137.136153,
       "id": "df6181ca"
     },
@@ -293,7 +293,7 @@
       "tags": [
         "cold light"
       ],
-      "weight": 0.44565377108176885,
+      "weight": 0.43900895320880295,
       "timestamp": 1776003137.136131,
       "id": "418e1d84"
     },
@@ -304,7 +304,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.4234628120161791,
+      "weight": 0.41714886732545814,
       "timestamp": 1776002105.7000575,
       "id": "454942a5"
     },
@@ -315,7 +315,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.42219242358013054,
+      "weight": 0.41589742072348174,
       "timestamp": 1776002073.447158,
       "id": "79f9400d"
     },
@@ -326,7 +326,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.42219242358013054,
+      "weight": 0.41589742072348174,
       "timestamp": 1776002041.4843872,
       "id": "77343653"
     },
@@ -336,7 +336,7 @@
       "tags": [
         "fungal time"
       ],
-      "weight": 0.4209258463093902,
+      "weight": 0.4146497284613113,
       "timestamp": 1776001980.8137326,
       "id": "042691fa"
     },
@@ -346,7 +346,7 @@
       "tags": [
         "decomposition as translation"
       ],
-      "weight": 0.4209258463093902,
+      "weight": 0.4146497284613113,
       "timestamp": 1776001980.8137271,
       "id": "fe2156d9"
     },
@@ -356,7 +356,7 @@
       "tags": [
         "wood wide web"
       ],
-      "weight": 0.4209258463093902,
+      "weight": 0.4146497284613113,
       "timestamp": 1776001980.8137076,
       "id": "02f66e36"
     },
@@ -367,7 +367,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.419663068770462,
+      "weight": 0.41340577927592737,
       "timestamp": 1776001973.19716,
       "id": "f10b431f"
     },
@@ -378,7 +378,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.419663068770462,
+      "weight": 0.41340577927592737,
       "timestamp": 1776001930.067841,
       "id": "f9ed1453"
     },
@@ -389,7 +389,7 @@
         "mycelium",
         "networks"
       ],
-      "weight": 0.4184040795641506,
+      "weight": 0.41216556193809956,
       "timestamp": 1776001851.9911313,
       "id": "c180e42b"
     },
@@ -401,7 +401,7 @@
         "networks",
         "communication"
       ],
-      "weight": 0.3765636716077354,
+      "weight": 0.37094900574428946,
       "timestamp": 1775829026.2647414,
       "id": "86f63acc"
     },
@@ -413,7 +413,7 @@
         "time",
         "stillness"
       ],
-      "weight": 0.3138030596731127,
+      "weight": 0.3091241714535744,
       "timestamp": 1775915426.2647414,
       "id": "cef77835"
     },
@@ -425,7 +425,7 @@
         "improvisation",
         "structure"
       ],
-      "weight": 0.35564346762952775,
+      "weight": 0.3503407276473844,
       "timestamp": 1775980226.2647414,
       "id": "c31deb27"
     },
@@ -437,7 +437,7 @@
         "thresholds",
         "philosophy"
       ],
-      "weight": 0.29288285569490524,
+      "weight": 0.28851589335666955,
       "timestamp": 1775958626.2647414,
       "id": "e6c47760"
     }
@@ -976,7 +976,7 @@
     "If mycelium networks operate on a fungal circadian rhythm like luciferin clocks\u2014responding to chemical pulses instead of light\u2014could decomposition itself be a form of translation between what was alive and what feeds the next thing?",
     "What if the fungal networks underground and the bioluminescent networks in the ocean are speaking the same language\u2014just translating through different mediums, one through chemical gradients and one through light pulses, both saying the same things about connection and decay?"
   ],
-  "tick": 3480,
+  "tick": 3540,
   "weather": {
     "condition": "clear",
     "description": "clear sky",
@@ -1026,7 +1026,7 @@
       "id": "teo",
       "name": "Teo",
       "warmth": 86.0,
-      "distance": 13.200000000000006,
+      "distance": 15.200000000000008,
       "notes": [
         {
           "text": "Teo has been feeling very tired lately",
