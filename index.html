@@ -980,6 +980,25 @@ function renderPanel(s) {
     const wants   = s.wants   || [];
     const beliefs = s.beliefs || [];
     const goals   = s.goals   || [];
+    const prefs   = s.preferences || {};
+    const records = s.affect_records || [];
+    const lifts   = prefs.lifts || [];
+    const drags   = prefs.drags || [];
+
+    const prefsHtml = (lifts.length || drags.length) ? `
+      ${lifts.length ? `<div class="want-item"><div class="want-tags" style="color:var(--teal)">lifts &nbsp;${lifts.map(t=>`<span style="background:rgba(100,200,180,0.08);padding:1px 6px;border-radius:3px">${t}</span>`).join(' ')}</div></div>` : ''}
+      ${drags.length ? `<div class="want-item"><div class="want-tags" style="color:var(--violet)">drags &nbsp;${drags.map(t=>`<span style="background:rgba(160,100,200,0.08);padding:1px 6px;border-radius:3px">${t}</span>`).join(' ')}</div></div>` : ''}
+    ` : '<div class="log-item" style="padding:8px 0">no pattern yet</div>';
+
+    const recentRecords = records.slice(0, 8);
+    const recordsHtml = recentRecords.length ? recentRecords.map(r => `
+      <div class="want-item" style="padding:5px 0">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:9px;letter-spacing:1px;color:${MOOD_COLORS[r.mood]||'var(--text3)'};width:70px;flex-shrink:0">${r.mood}</span>
+          <span style="font-size:10px;color:var(--text2);line-height:1.4">${r.cause}</span>
+        </div>
+      </div>`).join('') : '<div class="log-item" style="padding:8px 0">no history yet</div>';
+
     body.innerHTML = `
       <div class="mind-section-title">wants</div>
       ${wants.length ? wants.map(w => `
@@ -1001,7 +1020,11 @@ function renderPanel(s) {
             <div class="belief-conf-track" style="flex:1"><div class="belief-conf-fill" style="width:${Math.round(b.confidence*100)}%"></div></div>
             <div style="font-size:8px;color:var(--text3);width:28px">${Math.round(b.confidence*100)}%</div>
           </div>
-        </div>`).join('') : '<div class="log-item" style="padding:8px 0">none yet</div>'}`;
+        </div>`).join('') : '<div class="log-item" style="padding:8px 0">none yet</div>'}
+      <div class="mind-section-title">lifts &amp; drags</div>
+      ${prefsHtml}
+      <div class="mind-section-title">emotional history</div>
+      ${recordsHtml}`;
 
   } else if (activeTab === 'admin') {
     renderAdmin(s, body);

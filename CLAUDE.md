@@ -362,7 +362,7 @@ Chloe is not a perfect, agreeable creature. She has a full emotional range and i
 - [x] 42. Likes and dislikes — derived from affect record; injected into chat and messages
 - [x] 43. Harsh treatment reactions — dismissive messages → irritable mood + feeling memory
 - [x] 44. Emotional resonance — shared interests → warmth boost + curious nudge
-- [ ] 45. Full authentic emotional range — anger, sass, sulking in natural language incl. profanity
+- [x] 45. Full authentic emotional range — anger, sass, sulking in natural language incl. profanity
 
 ### Layer 10 — Relational Depth (Human Interaction)
 - [ ] 46. Shared moments / inside jokes
@@ -373,12 +373,18 @@ Chloe is not a perfect, agreeable creature. She has a full emotional range and i
 - [ ] 51. Ignored after reaching out — distance increases, mood drifts toward lonely
 - [ ] 52. Teo and Zuzu as fully distinct (requires Zuzu re-activation)
 
-### Layer 11 — Infrastructure
-- [ ] 53. VPS deployment — Hetzner, runs 24/7
-- [ ] 54. systemd service — auto-restarts on reboot
-- [ ] 55. Postgres persistence — replaces JSON files
-- [ ] 56. Frontend auth — password for dashboard
-- [ ] 57. Mobile-friendly dashboard
+### Layer 11 — Personality Crystallisation
+- [x] 58. Soul → activity feedback loop — `soul_activity_affinity()` modulates auto_decide soft-drift probabilities; aligned activities become more likely as traits strengthen
+- [x] 59. Trait momentum — EMA (α=0.015) of per-tick drift; same-direction moves amplified up to 1.8×, opposing dampened to 0.5×; saturates ≈ ±1.0 after ~5.5 min of consistent activity
+- [x] 60. Emotional events leave soul marks — harsh message → +I+F; devastating article → +F; beautiful article → +N+P; goal completion → +J; creative breakthrough → +N+P
+- [x] 61. Sleep reinforces recent drift — consolidate() biased by momentum (0.0004×/tick); over 8h sleep, pushes ~1.8 pts in the direction waking life was heading
+
+### Layer 12 — Infrastructure
+- [ ] 62. VPS deployment — Hetzner, runs 24/7
+- [ ] 63. systemd service — auto-restarts on reboot
+- [ ] 64. Postgres persistence — replaces JSON files
+- [ ] 65. Frontend auth — password for dashboard
+- [ ] 66. Mobile-friendly dashboard
 
 ---
 
@@ -400,3 +406,5 @@ Chloe is not a perfect, agreeable creature. She has a full emotional range and i
 - **Session 14** — Layer 8+9 complete: items 31, 33, 35, 36, 37, 40, 41, 43, 44. Content-aware soul drift; goal completion feeling; weather mood tendency; isolation drift; activity streak effects; world event emotional weight; AffectRecord; harsh message detection; shared-interest resonance
 - **Session 15** — Messaging reliability (message mode bypasses dice roll, protected from auto_decide override, social gate fixed). Zuzu removed (filtered on load, removed from Discord mapping). Testing/cocaine mode (POST /testing, UI toggle in admin). Discord status endpoint. Em dash stripping at _call level (covers all outputs). No-fabricated-continuity rule in autonomous messages. Active-conversation suppression (5-min window). PersonEvent — extract future plans from messages, resolve dates, inject into prompts when near. avatar.py reading image fix. Layer 6 item 23 updated (Teo only). Item 18 added (event tracking).
 - **Session 16** — Item 32: mood-driven activity preference. Added MOOD_ACTIVITY_AFFINITY dict (all 8 moods → preferred activities). Exhaustive mood checks across all 7 activity states in auto_decide: restless/melancholic/lonely/curious/energized/irritable/serene/content each drive transitions from dream, rest, read, think, create, and message. Item 34: hit_count now drives node visual weight (log-scale radius factor, opacity/stroke boost) and displays "N resonances" in selected node panel. Items 38+39: dream recurrence now also surfaces a Want from the recurring tag (generate_dream_want in llm.py, Haiku call); seasonal_drift() added to soul.py with per-month MBTI nudges (~2 pts/trait/season at 24/7 runtime), called every tick from _tick_once.
+- **Session 18** — Layer 9 properly implemented. Items 41+42: `preferences` (lifts/drags) added to snapshot; mind tab now shows emotional history and lifts/drags sections. Item 45: explicit per-mood tone instructions in chat and autonomous message prompts. Likes/dislikes now form organically via `content_affect()` — scores every article/conversation/memory against soul alignment, logging affect records with real content tags. Items 43+44: replaced brittle keyword detection with `read_person_emotion` (Haiku, runs before reply with 6-message conversation context). Detects full emotional range (affectionate, playful, excited, grateful, tender, curious, thoughtful, neutral, tired, sad, anxious, stressed, lonely, overwhelmed, disappointed, frustrated, angry, dismissive, cold, hurt) with directed_at_chloe flag — emotions about Chloe shift her mood/soul/warmth directly; emotions about Teo's own life trigger empathy responses. `_apply_emotion_reaction` handles each case with graduated mood shifts, warmth boosts, feeling memories, soul marks, and meaningful affect record tags.
+- **Session 17** — Soul drift fix: ACTIVITY_DRIFT values 5× larger (0.001–0.002/tick), flutter reduced 4× (±0.0005); trait values now display to 1 decimal with trend arrows (32s rolling window). Layer 11 Personality Crystallisation complete: item 58 (soul_activity_affinity — soul traits modulate auto_decide soft-drift probabilities), item 59 (trait momentum via EMA α=0.015, amplifies/dampens drift in drift() and consolidate()), item 60 (emotional soul marks at 5 locations: harsh message +I+F, devastating article +F, beautiful article +N+P, goal completion +J, creative output +N+P), item 61 (consolidate() biased by momentum — sleep carries forward waking drift direction). Conversation soul impact: message ACTIVITY_DRIFT tripled in magnitude and now includes SN=-0.0025/tick (toward S — conversations are concrete and present); content_drift now runs on every chat() call using the full text of message + reply, so the actual content of conversations shapes the soul the same way articles do.

@@ -222,6 +222,49 @@ MOOD_ACTIVITY_AFFINITY: dict[str, list[str]] = {
 }
 
 
+# ── SOUL → ACTIVITY AFFINITY (item 58) ──────────────────────
+# How well a given activity aligns with current soul traits.
+# Returns a probability multiplier (0.5–1.5) applied to soft-drift
+# thresholds in auto_decide — higher = more likely to drift toward
+# that activity. Hard gates (energy/sleep) are never modulated.
+#
+# Trait conventions: EI 0=E 100=I, SN 0=S 100=N, TF 0=T 100=F, JP 0=J 100=P
+
+def soul_activity_affinity(soul, activity_id: str) -> float:
+    """Return a probability multiplier for drifting toward activity_id.
+    Neutral soul (all traits = 50) → 1.0. Strongly aligned → up to 1.5.
+    Misaligned → down to 0.5."""
+    ei = soul.EI / 100.0   # 0=full E, 1=full I
+    sn = soul.SN / 100.0   # 0=full S, 1=full N
+    tf = soul.TF / 100.0   # 0=full T, 1=full F
+    jp = soul.JP / 100.0   # 0=full J, 1=full P
+
+    if activity_id == "read":
+        # N (intuitive) and T (thinking) are drawn to reading
+        score = 0.5 * sn + 0.5 * (1.0 - tf)
+    elif activity_id == "think":
+        # I (introspective) + N (abstract) + T (analytical) → deep internal work
+        score = 0.3 * ei + 0.4 * sn + 0.3 * (1.0 - tf)
+    elif activity_id == "create":
+        # N (imaginative) + P (open-ended) + slight E (expressive output)
+        score = 0.4 * sn + 0.4 * jp + 0.2 * (1.0 - ei)
+    elif activity_id == "message":
+        # E (social energy) + F (relational warmth)
+        score = 0.5 * (1.0 - ei) + 0.5 * tf
+    elif activity_id == "rest":
+        # I (recharges alone) + J (structured stillness)
+        score = 0.5 * ei + 0.5 * (1.0 - jp)
+    elif activity_id in ("sleep", "dream"):
+        # I (withdraws naturally) + F (emotional processing in dreams)
+        score = 0.5 * ei + 0.5 * tf
+    else:
+        return 1.0   # unknown activity — no modulation
+
+    # score is 0.0–1.0 (neutral soul → ~0.5)
+    # map to multiplier range 0.5–1.5  (score=0.5 → 1.0 neutral)
+    return 0.5 + score * 1.0
+
+
 # ── VITALS ───────────────────────────────────────────────────
 
 @dataclass
@@ -258,18 +301,24 @@ def tick_vitals(vitals: Vitals, activity_id: str, hour: int = 12, weekday: int =
 
 
 def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
-                mood: str = "") -> Optional[str]:
+                mood: str = "", soul=None) -> Optional[str]:
     """Chloe self-regulates. Returns a new activity id if she should switch,
     or None if she's fine to continue.
 
     Hard gates fire immediately when thresholds are crossed.
     Soft drifts use probability rolls — the longer she stays, the more
     likely she'll shift. Mood colours the direction.
+    Soul affinity (item 58) multiplies soft-drift thresholds so that
+    the personality increasingly reinforces its own natural pulls.
     """
     e  = vitals.energy
     s  = vitals.social_battery
     c  = vitals.curiosity
     r  = random.random   # shorthand
+
+    # Soul affinity multiplier — applied to soft-drift probability thresholds only.
+    # Hard gates and safety-valve exits are never modulated.
+    _aff = (lambda act: soul_activity_affinity(soul, act)) if soul else (lambda act: 1.0)
 
     daytime  = SLEEP_END <= hour < SLEEP_START      # 07:00–23:00
     morning  = SLEEP_END <= hour <= SLEEP_END + 2   # 07:00–09:00
@@ -317,18 +366,18 @@ def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
     # ── DREAM → lighter states ────────────────────────────────
     if current_activity == "dream" and daytime:
         # Restless: can't stay in the dream, too much unresolved energy
-        if mood == "restless" and e > 45 and r() < 0.014:
+        if mood == "restless" and e > 45 and r() < 0.014 * _aff("think"):
             return "think"
         # Lonely: surfaces wanting connection
-        if mood == "lonely" and s > 25 and e > 40 and r() < 0.010:
+        if mood == "lonely" and s > 25 and e > 40 and r() < 0.010 * _aff("message"):
             return "message"
         # Curious dream bleeds into wanting to read
-        if mood == "curious" and e > 50 and c > 60 and r() < 0.012:
+        if mood == "curious" and e > 50 and c > 60 and r() < 0.012 * _aff("read"):
             return "read"
         # Default surfacing: rest when rested enough, or read if curious
-        if e > 65 and r() < 0.02:
+        if e > 65 and r() < 0.02 * _aff("rest"):
             return "rest"
-        if e > 50 and c > 60 and r() < 0.01:
+        if e > 50 and c > 60 and r() < 0.01 * _aff("read"):
             return "read"
 
     # ── FROM REST ─────────────────────────────────────────────
@@ -336,43 +385,47 @@ def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
         # ── Mood-driven exits (item 32) ───────────────────────
         # Mood is the primary driver when present; vitals are the fallback.
         if mood == "restless" and e > 35:
-            if r() < 0.015:
-                return "create" if c > 60 else "think"
+            target = "create" if c > 60 else "think"
+            if r() < 0.015 * _aff(target):
+                return target
         if mood == "melancholic":
             # Read first (quiet absorption); dream if low energy or no pull to act
-            if e > 35 and r() < 0.012:
+            if e > 35 and r() < 0.012 * _aff("read"):
                 return "read"
-            if r() < 0.008:
+            if r() < 0.008 * _aff("dream"):
                 return "dream"
         if mood == "lonely" and s > 30 and e > 35:
-            if r() < 0.012:
+            if r() < 0.012 * _aff("message"):
                 return "message"
         if mood == "curious" and e > 40:
-            if r() < 0.012:
+            if r() < 0.012 * _aff("read"):
                 return "read"
         if mood == "energized" and e > 55:
-            if r() < 0.012:
-                return "create" if c > 65 else "think"
+            target = "create" if c > 65 else "think"
+            if r() < 0.012 * _aff(target):
+                return target
         if mood == "irritable" and e > 30:
-            if r() < 0.010:
+            if r() < 0.010 * _aff("think"):
                 return "think"   # process the friction alone; doesn't want to create or connect
         if mood == "content" and e > 55 and c > 60:
-            if r() < 0.007:
-                return "think" if midday else "read"   # settled enough to engage gently
+            target = "think" if midday else "read"
+            if r() < 0.007 * _aff(target):
+                return target    # settled enough to engage gently
         # serene: she's happy resting — no mood-driven push out
 
         # ── Vitals-driven (fallback when mood has no strong pull) ──
         if e > 60 and c > 75:
-            if r() < 0.010:
+            if r() < 0.010 * _aff("read"):
                 return "read"
         if e > 50 and c > 65:
-            if r() < 0.008:
-                return "think" if midday else "read"
+            target = "think" if midday else "read"
+            if r() < 0.008 * _aff(target):
+                return target
         if e > 45 and c > 55:
-            if r() < 0.006:
+            if r() < 0.006 * _aff("read"):
                 return "read"
         if e > 70 and c > 80 and afternoon:
-            if r() < 0.008:
+            if r() < 0.008 * _aff("create"):
                 return "create"
 
     # ── FROM READ ─────────────────────────────────────────────
@@ -399,10 +452,10 @@ def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
         if mood == "curious" and e > 50 and c > 65:
             pass   # reduced exit pull — let the vitals rules below handle it at lower prob
         # Absorbed something → move to thinking
-        if e > 35 and r() < 0.006:
+        if e > 35 and r() < 0.006 * _aff("think"):
             return "think"
         # Very high curiosity + good energy → creative leap
-        if c > 85 and e > 55 and afternoon and r() < 0.005:
+        if c > 85 and e > 55 and afternoon and r() < 0.005 * _aff("create"):
             return "create"
         # Evening: reading winds into rest or a message
         if evening and e < 55 and r() < 0.006:
@@ -414,10 +467,10 @@ def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
         if e < 28 and r() < 0.015:
             return "rest"
         # Restless: thought becomes action
-        if mood == "restless" and e > 45 and r() < 0.012:
+        if mood == "restless" and e > 45 and r() < 0.012 * _aff("create"):
             return "create"
         # Lonely: thinking about someone → reach out
-        if mood == "lonely" and s > 25 and e > 35 and r() < 0.012:
+        if mood == "lonely" and s > 25 and e > 35 and r() < 0.012 * _aff("message"):
             return "message"
         # Melancholic: thinking turns to introspection → read or dream
         if mood == "melancholic" and r() < 0.010:
@@ -426,16 +479,16 @@ def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
         if mood == "irritable" and r() < 0.010:
             return "rest"
         # Energized: thought crystallised into something to make
-        if mood == "energized" and e > 55 and r() < 0.010:
+        if mood == "energized" and e > 55 and r() < 0.010 * _aff("create"):
             return "create"
         # Serene: thinking flows into gentle curiosity
-        if mood == "serene" and c > 60 and r() < 0.007:
+        if mood == "serene" and c > 60 and r() < 0.007 * _aff("read"):
             return "read"
         # Thought itself into more curiosity → go read
-        if c > 70 and e > 40 and r() < 0.007:
+        if c > 70 and e > 40 and r() < 0.007 * _aff("read"):
             return "read"
         # Thought crystallised → create
-        if c > 75 and e > 55 and r() < 0.006:
+        if c > 75 and e > 55 and r() < 0.006 * _aff("create"):
             return "create"
         # Low curiosity while thinking → drifting
         if c < 45 and r() < 0.008:
@@ -466,10 +519,10 @@ def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
             if e < 40 and r() < 0.010:
                 return "rest"
             # Finished burst — content or energized → want to share
-            if e > 45 and s > 35 and mood in ("content", "energized", "lonely") and r() < 0.006:
+            if e > 45 and s > 35 and mood in ("content", "energized", "lonely") and r() < 0.006 * _aff("message"):
                 return "message"
             # Process what was created
-            if e > 40 and c > 60 and r() < 0.005:
+            if e > 40 and c > 60 and r() < 0.005 * _aff("think"):
                 return "think"
             # Curiosity spent by output → rest
             if c < 50 and r() < 0.008:
@@ -490,13 +543,15 @@ def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
         if mood == "lonely" and s < 35 and r() < 0.008:
             return "rest"
         # Conversation sparked curiosity → go read or think
-        if c > 70 and e > 40 and r() < 0.008:
-            return "read" if c > 80 else "think"
+        if c > 70 and e > 40:
+            target = "read" if c > 80 else "think"
+            if r() < 0.008 * _aff(target):
+                return target
         # Content/serene after connecting → settle into rest or think
         if mood in ("content", "serene") and r() < 0.006:
             return "rest" if e < 55 else "think"
         # Energized after connection — wants to make something
-        if mood == "energized" and e > 50 and r() < 0.006:
+        if mood == "energized" and e > 50 and r() < 0.006 * _aff("create"):
             return "create"
         # Evening messaging naturally winds down
         if evening and s < 45 and r() < 0.008:

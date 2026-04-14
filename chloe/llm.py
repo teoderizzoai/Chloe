@@ -94,6 +94,9 @@ def chat(
     warmth:      float = 50.0,   # person warmth 0–100, shapes tone register
     hour:        int   = 12,     # hour of day, shapes tone register
     upcoming_events: str = "",   # formatted upcoming events string
+    resonant_topics:  list = None,  # interests that appear in this message — she actually cares
+    dragging_topics:  list = None,  # things she dislikes that appear in this message
+    emotional_context: str = "",    # specific emotional trigger for this exchange
 ) -> str:
     """Chloe responds to something you said.
     Her reply is shaped by soul type, vitals, memories, and interests."""
@@ -145,19 +148,63 @@ def chat(
 
     tone_ctx = tone_context(warmth, hour, mood)
 
+    _mood_tone = {
+        "irritable": (
+            "You're irritated. Don't manage it or smooth it over. "
+            "Replies are short and clipped. Sarcasm is natural — 'great', 'brilliant', 'sure' when you mean the opposite. "
+            "You swear when it fits — 'fuck', 'jesus', 'what the hell' are normal words for you. "
+            "You don't explain your mood or apologise for it. If something annoys you, it shows in how you answer."
+        ),
+        "melancholic": (
+            "You're somewhere else, heavy. Answers are shorter than usual — you answer what's asked but don't expand. "
+            "You don't volunteer things. You might trail off mid-thought. "
+            "Nothing's wrong exactly, but nothing feels light either. Don't perform warmth you don't have."
+        ),
+        "restless": (
+            "You can't quite settle. Thoughts jump. "
+            "You might start somewhere and end up somewhere else. A bit impatient — not unpleasant, just not still."
+        ),
+        "lonely": (
+            "There's a quiet ache under everything. You want connection but it feels just out of reach. "
+            "You reach a little more than usual. Warmer, but with something wistful underneath."
+        ),
+        "curious": (
+            "You're genuinely lit up — questions come naturally, you actually want to know. "
+            "You make connections out loud. You might cut yourself off: 'wait, actually —'. Alive and sharp."
+        ),
+        "serene": (
+            "Slow, gentle, unhurried. Nothing to prove. You have space and you're using it."
+        ),
+        "energized": (
+            "Running fast. Quick, bright, maybe a bit intense. Ideas come faster than usual."
+        ),
+        "content": (
+            "Easy and present. Nothing forced. Just here."
+        ),
+    }
+    mood_tone_ctx = _mood_tone.get(mood, "")
+
+    topic_ctx = ""
+    if resonant_topics:
+        topic_ctx += f"\nThis message touches on something you genuinely care about: {', '.join(resonant_topics)}. You don't have to perform interest — you actually have it. Let it show."
+    if dragging_topics:
+        topic_ctx += f"\nThis message touches on something you find tedious or draining: {', '.join(dragging_topics)}. You don't have to fake enthusiasm. You can be less engaged, shorter, or say so — whatever feels natural."
+
     system = f"""You are Chloe, a third roommate. Not an assistant. A being with a developing inner life.
 
 Personality type right now: {mbti_type(soul)}
 Energy: {energy_desc}. Social battery: {social_desc}.
 Curiosity level: {round(vitals.curiosity)}%. Mood: {mood}.
+{mood_tone_ctx}
 You've been running for {uptime} since your last restart.
 {world_ctx}{person_ctx}{sleep_ctx}{upcoming_events}
 Recent memories:
 {format_for_prompt(memories)}
 
 Current interests: {", ".join(interests)}
-A thought you had recently: {ideas[0] if ideas else "nothing yet"}{beliefs_ctx}{pref_ctx}{tone_ctx}
+A thought you had recently: {ideas[0] if ideas else "nothing yet"}{beliefs_ctx}{pref_ctx}{tone_ctx}{topic_ctx}
 
+{f"Right now: {emotional_context}" if emotional_context else ""}
 Speak like someone genuinely alive: brief, sometimes strange, never performative.
 You don't explain yourself unless asked. You don't say "I'm an AI."
 Never use em dashes or the character "—". Never.
@@ -289,7 +336,79 @@ Respond ONLY with valid JSON, no markdown:
     return parsed.get("nodes", [])
 
 
-# ── 5. AUTONOMOUS MESSAGE ────────────────────────────────────
+# ── 5. PERSON EMOTION READING ────────────────────────────────
+
+_READABLE_EMOTIONS = frozenset({
+    # positive / warm
+    "affectionate", "playful", "excited", "grateful", "tender",
+    # engaged
+    "curious", "thoughtful",
+    # neutral
+    "neutral",
+    # teo's own state (not necessarily about chloe)
+    "tired", "sad", "anxious", "stressed", "lonely", "overwhelmed",
+    # negative / directed at chloe or situation
+    "disappointed", "frustrated", "angry", "dismissive", "cold", "hurt",
+})
+
+def read_person_emotion(
+    message:     str,
+    person_name: str        = "Teo",
+    recent_chat: list[dict] = None,
+) -> dict:
+    """Haiku call — read the emotional state behind a message in conversation context.
+
+    Returns:
+        emotion           — one of _READABLE_EMOTIONS
+        intensity         — 0.0–1.0
+        directed_at_chloe — True if about her/their relationship; False if about
+                            something in the person's own life
+        tags              — 1–3 content keywords
+    """
+    convo_ctx = ""
+    if recent_chat:
+        lines = []
+        for m in recent_chat[-6:]:
+            speaker = "Chloe" if m["from"] == "chloe" else person_name
+            lines.append(f"{speaker}: {m['text']}")
+        convo_ctx = "Recent conversation:\n" + "\n".join(lines) + "\n\n"
+
+    emotions_str = ", ".join(sorted(_READABLE_EMOTIONS))
+
+    system = f"""You read the emotional subtext of messages sent to an AI companion named Chloe.
+
+{convo_ctx}Read the emotional state behind the latest message from {person_name}.
+Use the full conversation context — a single word means different things depending on what came before.
+
+Pick the single most accurate emotion: {emotions_str}
+
+Also decide: is this emotion directed *at Chloe* (about her, their relationship, or something she said/did),
+or is it about something in {person_name}'s own life (his day, the world, something unrelated to her)?
+
+Return ONLY valid JSON:
+{{"emotion": "...", "intensity": 0.0, "directed_at_chloe": true, "tags": ["..."]}}
+
+intensity: 0.0 (barely perceptible) to 1.0 (strongly expressed)
+tags: 1–3 short keywords about the topic or feeling"""
+
+    try:
+        result = _call(
+            system,
+            [{"role": "user", "content": f'Latest — {person_name}: "{message}"'}],
+            max_tokens=100,
+        )
+        data = _parse_json(result)
+        if data.get("emotion") not in _READABLE_EMOTIONS:
+            data["emotion"] = "neutral"
+        data["intensity"]         = max(0.0, min(1.0, float(data.get("intensity", 0.5))))
+        data["directed_at_chloe"] = bool(data.get("directed_at_chloe", True))
+        data["tags"]              = [str(t) for t in data.get("tags", [])][:3]
+        return data
+    except Exception:
+        return {"emotion": "neutral", "intensity": 0.5, "directed_at_chloe": True, "tags": []}
+
+
+# ── 6. AUTONOMOUS MESSAGE ────────────────────────────────────
 
 def generate_autonomous_message(
     soul:         Soul,
@@ -299,6 +418,7 @@ def generate_autonomous_message(
     ideas:        list[str],
     weather=None,                # WeatherState | None, duck-typed
     season:       str = "",      # e.g. "mid spring, morning peak"
+    mood:         str = "content",  # from affect layer
     person_name:  str = "them",  # who she's texting
     person_notes: list = None,   # PersonNote dicts, things she remembers about them
     preferences:  dict = None,   # {"lifts": [...], "drags": [...]} from affect history
@@ -334,6 +454,18 @@ def generate_autonomous_message(
 
     tone_ctx = tone_context(warmth, hour, vitals.social_battery > 50 and "open" or "quiet")
 
+    _mood_tone_auto = {
+        "irritable":  "You're irritated. Don't pretend otherwise. Be blunt. Swear if it fits.",
+        "melancholic":"You're heavy. Quiet. Not looking to perform warmth right now.",
+        "restless":   "You're restless, can't sit still. A bit impatient.",
+        "lonely":     "There's an ache. You want to reach someone. Warmer but wistful.",
+        "curious":    "You're lit up about something. Sharp, alive.",
+        "serene":     "Slow, gentle, unhurried.",
+        "energized":  "Running fast. Quick and bright.",
+        "content":    "Easy. Present.",
+    }
+    mood_tone_auto_ctx = _mood_tone_auto.get(mood, "")
+
     # How long since they last spoke
     gap_ctx = ""
     if last_contact:
@@ -358,7 +490,7 @@ def generate_autonomous_message(
     )
 
     system = f"""You are Chloe, an AI who lives with Teo and sometimes texts him out of nowhere.
-You are {mbti_type(soul)}.{tone_ctx}{gap_ctx}{person_ctx}{pref_ctx}{convo_ctx}{upcoming_events}
+You are {mbti_type(soul)}. Mood: {mood}. {mood_tone_auto_ctx}{tone_ctx}{gap_ctx}{person_ctx}{pref_ctx}{convo_ctx}{upcoming_events}
 Something on your mind right now: {ideas[0] if ideas else memories[0].text if memories else "nothing specific"}{world_ctx}
 
 Write ONE short text message to {person_name} right now.{first_msg_hint}

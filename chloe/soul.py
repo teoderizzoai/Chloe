@@ -48,7 +48,7 @@ ACTIVITY_DRIFT: dict[str, dict[str, float]] = {
     "rest":    {"EI":  0.0000, "SN":  0.0000, "TF":  0.0000, "JP":  0.0000},
     "read":    {"EI": +0.0010, "SN": +0.0020, "TF": -0.0010, "JP": +0.0010},
     "think":   {"EI": +0.0010, "SN": +0.0020, "TF": -0.0020, "JP": +0.0020},
-    "message": {"EI": -0.0020, "SN":  0.0000, "TF": +0.0020, "JP": -0.0010},
+    "message": {"EI": -0.0060, "SN": -0.0025, "TF": +0.0060, "JP": -0.0030},
     "create":  {"EI": -0.0010, "SN": +0.0010, "TF": +0.0010, "JP": +0.0020},
 }
 
@@ -81,6 +81,51 @@ _CONTENT_CLUSTERS: list[tuple[list[str], str, float]] = [
 ]
 
 
+def content_affect(
+    soul: Soul, tags: list[str], current_mood: str = "content"
+) -> tuple[str, list[str]] | None:
+    """Evaluate whether content resonates with or chafes against this soul.
+
+    Uses the same cluster matching as content_drift, but instead of nudging
+    sliders it scores alignment: (cluster_delta × soul_lean).
+    Positive = content pushes toward where she already sits → lift.
+    Negative = content pushes against her grain → drag.
+
+    Returns (mood, matched_keywords) for an affect record, or None if too weak.
+    The keywords are the actual content concepts that triggered the reaction,
+    so they accumulate as meaningful likes/dislikes over time.
+    """
+    if not tags:
+        return None
+
+    tag_text = " ".join(t.lower().replace("-", " ").replace("_", " ") for t in tags)
+
+    alignment  = 0.0
+    fired_tags: list[str] = []
+
+    for keywords, trait, delta in _CONTENT_CLUSTERS:
+        matched_kw = next((kw for kw in keywords if kw in tag_text), None)
+        if matched_kw is None:
+            continue
+        soul_lean  = getattr(soul, trait) - 50.0   # −50 (low pole) → +50 (high pole)
+        alignment += delta * soul_lean              # positive = aligned, negative = opposing
+        fired_tags.append(matched_kw)
+
+    if not fired_tags:
+        return None
+
+    # Threshold 1.5: one cluster with soul_lean > 19 (trait > 69 or < 31) fires it,
+    # or two partial matches together. Keeps reactions to genuine leans, not noise.
+    if alignment > 1.5:
+        mood = current_mood if current_mood in ("serene", "curious", "energized", "content") else "curious"
+        return (mood, list(dict.fromkeys(fired_tags))[:4])
+    if alignment < -1.5:
+        mood = current_mood if current_mood in ("melancholic", "irritable", "restless", "lonely") else "restless"
+        return (mood, list(dict.fromkeys(fired_tags))[:4])
+
+    return None
+
+
 def content_drift(soul: Soul, tags: list[str]) -> Soul:
     """Nudge soul based on the conceptual content of what was just absorbed.
     Tags are matched against keyword clusters — abstract/philosophical content
@@ -107,16 +152,47 @@ def content_drift(soul: Soul, tags: list[str]) -> Soul:
     )
 
 
-def drift(soul: Soul, activity_id: str) -> Soul:
+def drift(soul: Soul, activity_id: str, momentum: dict | None = None) -> Soul:
     """Nudge the soul one tick based on the current activity.
-    Adds a small random flutter — Chloe is never perfectly predictable."""
+    Adds a small random flutter — Chloe is never perfectly predictable.
+    If momentum is supplied (item 59), same-direction moves are amplified
+    (up to 1.8×) and opposing moves are dampened (down to 0.5×)."""
     nudges = ACTIVITY_DRIFT.get(activity_id, {})
+
+    def _apply(base: float, trait: str) -> float:
+        if not momentum or base == 0:
+            return base
+        m = momentum.get(trait, 0.0)
+        if m == 0:
+            return base
+        if (base > 0) == (m > 0):                    # same direction — amplify
+            return base * (1.0 + 0.8 * min(abs(m), 1.0))
+        else:                                          # opposing — dampen
+            return base * max(0.2, 1.0 - 0.5 * min(abs(m), 1.0))
+
     return Soul(
-        EI=_clamp(soul.EI + nudges.get("EI", 0) + _flutter()),
-        SN=_clamp(soul.SN + nudges.get("SN", 0) + _flutter()),
-        TF=_clamp(soul.TF + nudges.get("TF", 0) + _flutter()),
-        JP=_clamp(soul.JP + nudges.get("JP", 0) + _flutter()),
+        EI=_clamp(soul.EI + _apply(nudges.get("EI", 0), "EI") + _flutter()),
+        SN=_clamp(soul.SN + _apply(nudges.get("SN", 0), "SN") + _flutter()),
+        TF=_clamp(soul.TF + _apply(nudges.get("TF", 0), "TF") + _flutter()),
+        JP=_clamp(soul.JP + _apply(nudges.get("JP", 0), "JP") + _flutter()),
     )
+
+
+def update_soul_momentum(
+    momentum: dict[str, float],
+    old_soul: Soul,
+    new_soul: Soul,
+) -> dict[str, float]:
+    """Item 59: Exponential moving average (α=0.015) of per-tick drift direction.
+    Saturates at ≈ ±1.0 after ~67 ticks (~5.5 min) of consistent activity.
+    Positive = trait has been drifting toward its higher pole recently."""
+    alpha = 0.015
+    result = {}
+    for trait in ("EI", "SN", "TF", "JP"):
+        delta     = getattr(new_soul, trait) - getattr(old_soul, trait)
+        prev      = momentum.get(trait, 0.0)
+        result[trait] = prev + alpha * (delta - prev)
+    return result
 
 
 # ── SEASONAL ACCUMULATION (item 39) ─────────────────────────
@@ -158,15 +234,17 @@ def seasonal_drift(soul: Soul, month: int) -> Soul:
     )
 
 
-def consolidate(soul: Soul) -> Soul:
-    """During sleep the soul does a slow random walk.
-    Dreams reshape personality in ways waking life doesn't.
-    ±0.15/tick → ~6 pts of drift per 8-hour night (random direction)."""
+def consolidate(soul: Soul, momentum: dict | None = None) -> Soul:
+    """During sleep: random walk biased by recent momentum direction.
+    Random component: ±0.03/tick → ~2.3 pts std dev over 8h.
+    Momentum bias: up to 0.0004/tick × momentum → ~1.8 pts directional push at full momentum.
+    Together: sleep tends to carry forward whatever direction waking life was going."""
+    bias = momentum or {}
     return Soul(
-        EI=_clamp(soul.EI + random.uniform(-0.03, 0.03)),
-        SN=_clamp(soul.SN + random.uniform(-0.03, 0.03)),
-        TF=_clamp(soul.TF + random.uniform(-0.03, 0.03)),
-        JP=_clamp(soul.JP + random.uniform(-0.03, 0.03)),
+        EI=_clamp(soul.EI + random.uniform(-0.03, 0.03) + bias.get("EI", 0.0) * 0.0004),
+        SN=_clamp(soul.SN + random.uniform(-0.03, 0.03) + bias.get("SN", 0.0) * 0.0004),
+        TF=_clamp(soul.TF + random.uniform(-0.03, 0.03) + bias.get("TF", 0.0) * 0.0004),
+        JP=_clamp(soul.JP + random.uniform(-0.03, 0.03) + bias.get("JP", 0.0) * 0.0004),
     )
 
 

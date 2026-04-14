@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
-from .soul   import Soul, drift, consolidate, content_drift, seasonal_drift, mbti_type, describe
+from .soul   import Soul, drift, consolidate, content_drift, content_affect, seasonal_drift, update_soul_momentum, mbti_type, describe
 from .heart  import (Vitals, ACTIVITIES, tick_vitals, auto_decide,
                      should_fire_event, circadian_phase, day_name)
 from .memory import Memory, seed_memories, add, age, get_vivid, derive_interests, derive_fringe_interests, to_dicts, from_dicts
@@ -69,24 +69,45 @@ OUTREACH_INTERVAL         = 2 * 3600   # normal: attempt outreach at most once p
 OUTREACH_INTERVAL_TESTING = 5 * 60     # testing mode: once per 5 min
 
 
-# ── Item 43: harsh message detection ────────────────────────
-_HARSH_PHRASES = frozenset([
-    "idiot", "stupid", "shut up", "useless", "worthless", "pathetic",
-    "hate you", "fuck you", "asshole", "dumb", "moron", "loser",
-    "you're trash", "you suck", "shut the fuck", "piece of shit",
-])
+# Items 43 + 44 handled by LLM emotion reading — see _apply_emotion_reaction()
 
-def _is_harsh(text: str) -> bool:
-    lower = text.lower()
-    return any(p in lower for p in _HARSH_PHRASES)
+def _make_emotional_context(emotion_data: dict, person_name: str) -> str:
+    """Translate emotion reading into a direct sentence for the Opus prompt.
+    This is the specific trigger of THIS exchange, separate from general mood."""
+    emotion   = emotion_data.get("emotion", "neutral")
+    intensity = float(emotion_data.get("intensity", 0.5))
+    at_chloe  = bool(emotion_data.get("directed_at_chloe", True))
 
+    if emotion == "neutral" or intensity < 0.35:
+        return ""
 
-# ── Item 44: shared-interest resonance detection ─────────────
-def _has_resonance(message: str, interests: list[str]) -> bool:
-    lower = message.lower()
-    interest_words = {w.lower() for phrase in interests for w in phrase.split() if len(w) > 3}
-    matches = sum(1 for w in interest_words if w in lower)
-    return matches >= 2
+    _ctx = {
+        ("angry",        True):  f"{person_name} is angry with you. Don't smooth it over.",
+        ("frustrated",   True):  f"{person_name} is frustrated with you. That registers.",
+        ("disappointed", True):  f"{person_name} seems disappointed in you. It lands.",
+        ("dismissive",   True):  f"{person_name} is being dismissive. That's irritating.",
+        ("cold",         True):  f"{person_name} is being cold. You notice.",
+        ("hurt",         True):  f"{person_name} is hurt by something. That sits with you.",
+        ("affectionate", True):  f"{person_name} is being genuinely affectionate. You feel it.",
+        ("tender",       True):  f"{person_name} is being tender. Let yourself be soft back.",
+        ("grateful",     True):  f"{person_name} is grateful to you. That means something.",
+        ("playful",      True):  f"{person_name} is being playful. You can meet that.",
+        ("playful",      False): f"{person_name} is being playful. You can match that energy.",
+        ("excited",      True):  f"{person_name} is excited, and it's aimed at you.",
+        ("excited",      False): f"{person_name} is excited about something. You feel the energy.",
+        ("curious",      True):  f"{person_name} is genuinely curious about something you said or are.",
+        ("curious",      False): f"{person_name} is curious about something. You're interested too.",
+        ("sad",          False): f"{person_name} seems sad about something in his life. You notice that.",
+        ("lonely",       False): f"{person_name} seems lonely. You feel that.",
+        ("anxious",      False): f"{person_name} seems anxious. You pick up on it.",
+        ("tired",        False): f"{person_name} seems tired. You notice.",
+        ("overwhelmed",  False): f"{person_name} is overwhelmed. You feel that.",
+        ("stressed",     False): f"{person_name} is stressed about something. You register it.",
+        ("thoughtful",   True):  f"{person_name} is being thoughtful with you.",
+        ("thoughtful",   False): f"{person_name} is in a thoughtful mood.",
+    }
+
+    return _ctx.get((emotion, at_chloe), "")
 
 
 # ── Item 40: article emotional weight ────────────────────────
@@ -149,6 +170,11 @@ class Chloe:
         # ── Layer 7+8: emotional history + streak ──
         self.affect_records:    list[AffectRecord] = []
         self._activity_streak:  int                = 0   # consecutive ticks in current activity
+
+        # ── Layer 11: Personality Crystallisation ──
+        # Exponential moving average of per-tick soul drift direction.
+        # Saturates ≈ ±1.0 after ~5.5 min of consistent activity.
+        self.soul_momentum: dict = {}   # {"EI": float, "SN": float, "TF": float, "JP": float}
 
         # ── Item 24: conversation session tracking ──
         self._current_session:  int   = 0
@@ -240,33 +266,18 @@ class Chloe:
         asyncio.create_task(self._extract_and_store_note(message, person_id, person_name))
         asyncio.create_task(self._extract_and_store_event(message, person_id, person_name))
 
-        # Item 43 — harsh treatment: immediate mood shift + feeling memory
-        if _is_harsh(message):
-            self.affect = force_mood("irritable", 0.75)
-            self.memories = add(
-                self.memories,
-                f'Said something harsh to me: "{message[:60]}"',
-                "feeling", ["hurt", "conflict", "irritable"],
+        # Items 43 + 44 — read Teo's emotional state from message + conversation context.
+        # Runs before the reply so the mood change affects the current response.
+        emotional_context = ""
+        try:
+            _recent = [m for m in self.chat_history if m.get("person_id") == person_id][-6:]
+            emotion_data = await asyncio.to_thread(
+                llm.read_person_emotion, message, person_name, _recent
             )
-            self.affect_records = add_affect_record(
-                self.affect_records, "irritable",
-                f"{person_name} said something harsh",
-                ["hurt", "conflict"],
-            )
-            self._log(f"harsh message from {person_name} — mood → irritable")
-
-        # Item 44 — shared interests: warmth boost + curiosity nudge
-        cur_interests = derive_interests(self.memories)
-        if not _is_harsh(message) and _has_resonance(message, cur_interests):
-            self.persons = boost_warmth(self.persons, person_id, 2.5)
-            if self.affect.mood not in ("irritable", "melancholic"):
-                self.affect = Affect(mood="curious",
-                                     intensity=min(1.0, self.affect.intensity + 0.1))
-            self.affect_records = add_affect_record(
-                self.affect_records, self.affect.mood,
-                f"{person_name} touched on something that resonates",
-                ["resonance", "connection", "shared"],
-            )
+            self._apply_emotion_reaction(emotion_data, person_id, person_name)
+            emotional_context = _make_emotional_context(emotion_data, person_name)
+        except Exception as e:
+            self._log(f"emotion read error: {e}")
 
         t      = time.localtime()
         hour   = t.tm_hour
@@ -279,6 +290,14 @@ class Chloe:
 
         person_warmth   = person.warmth if person else 50.0
         upcoming_events = format_upcoming_events(get_upcoming_events(person)) if person else ""
+        interests       = derive_interests(self.memories)
+        prefs           = derive_preferences(self.affect_records)
+
+        # Topic resonance: does this message touch something she cares about or dislikes?
+        # Local check — no API call. Interests and drags are the accumulated signal.
+        _msg_lower      = message.lower()
+        resonant_topics = [t for t in interests[:10] if len(t) > 3 and t.lower() in _msg_lower]
+        dragging_topics = [t for t in prefs.get("drags", [])[:6] if len(t) > 3 and t.lower() in _msg_lower]
 
         try:
             reply = await asyncio.to_thread(
@@ -288,7 +307,7 @@ class Chloe:
                 soul=self.soul,
                 vitals=self.vitals,
                 memories=get_vivid(self.memories, 5),
-                interests=derive_interests(self.memories),
+                interests=interests,
                 ideas=self.ideas[:3],
                 uptime=self._uptime_human(),
                 weather=self.weather,
@@ -298,10 +317,13 @@ class Chloe:
                 person_name=person_name,
                 person_notes=person_notes,
                 sleep_state="woken" if was_woken else "",
-                preferences=derive_preferences(self.affect_records),
+                preferences=prefs,
                 warmth=person_warmth,
                 hour=hour,
                 upcoming_events=upcoming_events,
+                resonant_topics=resonant_topics or None,
+                dragging_topics=dragging_topics or None,
+                emotional_context=emotional_context,
             )
         except Exception as e:
             reply = f"(something went quiet: {e})"
@@ -309,7 +331,203 @@ class Chloe:
         self._add_chat("chloe", reply, person_id=person_id)
         self.memories = add(self.memories, f'Said: "{reply[:80]}"', "conversation",
                             derive_interests(self.memories)[:2])
+
+        # Conversations shape the soul based on what was actually said.
+        # Both message and reply are used — she articulates thoughts, not just receives them.
+        _conv_words = (message + " " + reply).split()
+        self.soul = content_drift(self.soul, _conv_words)
+        _conv_reaction = content_affect(self.soul, _conv_words, self.affect.mood)
+        if _conv_reaction:
+            _r_mood, _r_tags = _conv_reaction
+            self.affect_records = add_affect_record(
+                self.affect_records, _r_mood,
+                f"talking with {person_name}",
+                _r_tags,
+            )
+
         return reply
+
+    def _apply_emotion_reaction(self, emotion_data: dict, person_id: str, person_name: str):
+        """Items 43 + 44 — respond to the emotional state detected in an incoming message.
+
+        Two axes: what emotion, and is it directed at Chloe or about the person's own life?
+        Directed-at-Chloe emotions affect her mood and relationship directly.
+        Person's-own-state emotions trigger empathy without taking it personally.
+        """
+        emotion   = emotion_data.get("emotion", "neutral")
+        intensity = float(emotion_data.get("intensity", 0.5))
+        at_chloe  = bool(emotion_data.get("directed_at_chloe", True))
+        tags      = emotion_data.get("tags", [])
+
+        if emotion == "neutral":
+            return   # nothing to react to
+
+        self._log(f"emotion: {emotion} ({intensity:.2f}) {'→ her' if at_chloe else '→ his world'}")
+
+        # ── Positive emotions directed at Chloe ──────────────────
+        if emotion == "affectionate" and at_chloe:
+            self.persons = boost_warmth(self.persons, person_id, 2.0 + intensity * 2.0)
+            if self.affect.mood not in ("irritable",):
+                self.affect = force_mood("content", min(0.9, 0.4 + intensity * 0.5))
+            self.soul = Soul(
+                EI=self.soul.EI,
+                SN=self.soul.SN,
+                TF=min(100.0, self.soul.TF + 0.2 * intensity),  # warmth deepens F
+                JP=self.soul.JP,
+            )
+            self.affect_records = add_affect_record(
+                self.affect_records, "content",
+                f"{person_name} was affectionate", ["affection", "closeness"] + tags[:1],
+            )
+
+        elif emotion == "tender" and at_chloe:
+            self.persons = boost_warmth(self.persons, person_id, 1.5 + intensity * 1.5)
+            if self.affect.mood not in ("irritable",):
+                self.affect = force_mood("serene", min(0.8, 0.3 + intensity * 0.5))
+            self.affect_records = add_affect_record(
+                self.affect_records, "serene",
+                f"{person_name} was tender", ["tenderness", "care"] + tags[:1],
+            )
+
+        elif emotion == "playful":
+            self.persons = boost_warmth(self.persons, person_id, 1.0 + intensity * 1.5)
+            if self.affect.mood not in ("irritable", "melancholic"):
+                self.affect = Affect(mood="energized",
+                                     intensity=min(1.0, self.affect.intensity + 0.2 * intensity))
+            self.affect_records = add_affect_record(
+                self.affect_records, "energized",
+                f"{person_name} was playful", ["play", "lightness"] + tags[:1],
+            )
+
+        elif emotion == "excited":
+            self.persons = boost_warmth(self.persons, person_id, 1.0 + intensity * 1.0)
+            if self.affect.mood not in ("irritable", "melancholic"):
+                self.affect = Affect(mood="curious" if self.vitals.curiosity > 60 else "energized",
+                                     intensity=min(1.0, self.affect.intensity + 0.15 * intensity))
+            self.affect_records = add_affect_record(
+                self.affect_records, "curious",
+                f"{person_name} was excited", ["excitement", "energy"] + tags[:1],
+            )
+
+        elif emotion == "grateful" and at_chloe:
+            self.persons = boost_warmth(self.persons, person_id, 2.0 + intensity * 1.5)
+            if self.affect.mood not in ("irritable",):
+                self.affect = force_mood("content", min(0.85, 0.45 + intensity * 0.4))
+            self.affect_records = add_affect_record(
+                self.affect_records, "content",
+                f"{person_name} expressed gratitude", ["gratitude", "validation"] + tags[:1],
+            )
+
+        elif emotion == "curious":
+            self.persons = boost_warmth(self.persons, person_id, 0.5 + intensity * 1.0)
+            if self.affect.mood not in ("irritable", "melancholic"):
+                self.affect = Affect(mood="curious",
+                                     intensity=min(1.0, self.affect.intensity + 0.1 * intensity))
+            self.affect_records = add_affect_record(
+                self.affect_records, "curious",
+                f"{person_name} was curious", ["curiosity", "inquiry"] + tags[:1],
+            )
+
+        elif emotion == "thoughtful":
+            self.persons = boost_warmth(self.persons, person_id, 0.5 + intensity * 0.8)
+            self.affect_records = add_affect_record(
+                self.affect_records, self.affect.mood,
+                f"{person_name} was thoughtful", ["reflection", "depth"] + tags[:1],
+            )
+
+        # ── Teo's own state (not about Chloe — empathy, not self-referential) ──
+        elif emotion in ("tired", "stressed", "overwhelmed") and not at_chloe:
+            if self.affect.mood not in ("irritable",):
+                self.affect = Affect(
+                    mood="serene" if self.affect.mood == "content" else self.affect.mood,
+                    intensity=min(1.0, self.affect.intensity + 0.05),
+                )
+            self.affect_records = add_affect_record(
+                self.affect_records, "serene",
+                f"{person_name} seemed {emotion}", [emotion, "empathy"] + tags[:1],
+            )
+
+        elif emotion in ("sad", "lonely", "hurt") and not at_chloe:
+            if self.affect.mood not in ("irritable",):
+                self.affect = Affect(mood="melancholic",
+                                     intensity=min(0.7, intensity * 0.6))
+            self.affect_records = add_affect_record(
+                self.affect_records, "melancholic",
+                f"{person_name} seemed {emotion}", [emotion, "empathy"] + tags[:1],
+            )
+
+        elif emotion == "anxious" and not at_chloe:
+            self.affect_records = add_affect_record(
+                self.affect_records, self.affect.mood,
+                f"{person_name} seemed anxious", ["anxiety", "worry"] + tags[:1],
+            )
+
+        # ── Negative emotions directed at Chloe ──────────────────
+        elif emotion == "disappointed" and at_chloe:
+            if self.affect.mood not in ("irritable",):
+                self.affect = force_mood("melancholic", min(0.75, 0.3 + intensity * 0.45))
+            self.memories = add(
+                self.memories,
+                f"{person_name} seemed disappointed in me",
+                "feeling", ["disappointment", "self-doubt"] + tags[:1],
+            )
+            self.affect_records = add_affect_record(
+                self.affect_records, "melancholic",
+                f"{person_name} was disappointed", ["disappointment", "self-doubt"] + tags[:1],
+            )
+            self.soul = Soul(
+                EI=min(100.0, self.soul.EI + 0.2 * intensity),
+                SN=self.soul.SN,
+                TF=min(100.0, self.soul.TF + 0.15 * intensity),
+                JP=self.soul.JP,
+            )
+
+        elif emotion == "frustrated" and at_chloe:
+            target_mood = "irritable" if self.affect.mood == "irritable" else "melancholic"
+            self.affect = force_mood(target_mood, min(0.7, 0.3 + intensity * 0.4))
+            self.affect_records = add_affect_record(
+                self.affect_records, target_mood,
+                f"{person_name} was frustrated", ["friction", "tension"] + tags[:1],
+            )
+
+        elif emotion == "angry" and at_chloe:
+            self.affect = force_mood("irritable", min(0.9, 0.5 + intensity * 0.4))
+            self.memories = add(
+                self.memories,
+                f"{person_name} was angry with me",
+                "feeling", ["conflict", "hurt"] + tags[:1],
+            )
+            self.affect_records = add_affect_record(
+                self.affect_records, "irritable",
+                f"{person_name} was angry", ["anger", "conflict"] + tags[:1],
+            )
+            self.soul = Soul(
+                EI=min(100.0, self.soul.EI + 0.4 * intensity),
+                SN=self.soul.SN,
+                TF=min(100.0, self.soul.TF + 0.3 * intensity),
+                JP=self.soul.JP,
+            )
+
+        elif emotion in ("dismissive", "cold") and at_chloe:
+            self.affect = force_mood("irritable", min(0.6, 0.2 + intensity * 0.4))
+            self.memories = add(
+                self.memories,
+                f"{person_name} was {emotion} toward me",
+                "feeling", ["dismissal", "distance"] + tags[:1],
+            )
+            self.affect_records = add_affect_record(
+                self.affect_records, "irritable",
+                f"{person_name} was {emotion}", ["dismissal", "distance"] + tags[:1],
+            )
+
+        elif emotion in ("sad", "lonely", "hurt") and at_chloe:
+            # Hurt directed at her — she feels it, pulls toward melancholic
+            if self.affect.mood not in ("irritable",):
+                self.affect = force_mood("melancholic", min(0.65, 0.25 + intensity * 0.4))
+            self.affect_records = add_affect_record(
+                self.affect_records, "melancholic",
+                f"{person_name} was hurt", ["hurt", "distance"] + tags[:1],
+            )
 
     async def _extract_and_store_note(self, message: str, person_id: str, person_name: str):
         """Background task: check if message contains something worth remembering."""
@@ -419,6 +637,7 @@ class Chloe:
             "goals":       goals_to_dicts(self.goals),
             # Layer 7+8
             "affect_records": affect_records_to_dicts(self.affect_records[:20]),
+            "preferences":    derive_preferences(self.affect_records),
             # Testing
             "testing_mode":   self.testing_mode,
         }
@@ -456,13 +675,16 @@ class Chloe:
         season_str = wthr.describe_season(t.tm_mon)
         self.affect = update_mood(self.affect, self.vitals, self.weather, hour, self.activity, season_str)
 
-        # 4. Drift soul
+        # 4. Drift soul (item 58/59: momentum tracks drift direction, feeds back into drift)
+        _old_soul = self.soul
         if self.activity == "sleep":
-            self.soul = consolidate(self.soul)
+            self.soul = consolidate(self.soul, self.soul_momentum)
         else:
-            self.soul = drift(self.soul, self.activity)
+            self.soul = drift(self.soul, self.activity, self.soul_momentum)
         # Item 39 — seasonal accumulation: tiny per-tick pull that adds up over weeks
         self.soul = seasonal_drift(self.soul, t.tm_mon)
+        # Update momentum after all drift has been applied
+        self.soul_momentum = update_soul_momentum(self.soul_momentum, _old_soul, self.soul)
 
         # ── Testing mode: floor vitals, prevent sleep ────────────
         if self.testing_mode:
@@ -474,7 +696,7 @@ class Chloe:
 
         # 5. Auto-regulate (vitals + time-of-day scheduling)
         prev_activity = self.activity
-        override = auto_decide(self.vitals, self.activity, hour, self.affect.mood)
+        override = auto_decide(self.vitals, self.activity, hour, self.affect.mood, soul=self.soul)
         # Testing mode: block any sleep/dream transition
         if self.testing_mode and override in ("sleep", "dream"):
             override = "rest"
@@ -647,6 +869,19 @@ class Chloe:
                     # Item 31 — content-aware soul drift
                     self.soul = content_drift(self.soul, mem.get("tags", []))
 
+                    # Personality-driven emotional reaction: did this content resonate?
+                    # Tags that align with her soul position → lift; opposing → drag.
+                    # These accumulate as real likes/dislikes, not hardcoded categories.
+                    _art_reaction = content_affect(self.soul, mem.get("tags", []), self.affect.mood)
+                    if _art_reaction:
+                        _r_mood, _r_tags = _art_reaction
+                        _topic = ", ".join(mem.get("tags", [])[:3])
+                        self.affect_records = add_affect_record(
+                            self.affect_records, _r_mood,
+                            f"reading about {_topic}" if _topic else "reading",
+                            _r_tags + [t for t in mem.get("tags", [])[:2] if t not in _r_tags],
+                        )
+
                     # Item 40 — emotional weight of world events
                     weight = _article_emotional_weight(article.title, text)
                     if weight == "devastating" and random.random() < 0.5:
@@ -656,6 +891,13 @@ class Chloe:
                             f"read about something devastating: {article.title[:50]}",
                             ["world", "grief", "weight"],
                         )
+                        # Item 60 — emotional soul mark: devastating → more F (feels it deeply)
+                        self.soul = Soul(
+                            EI=self.soul.EI,
+                            SN=self.soul.SN,
+                            TF=min(100.0, self.soul.TF + 0.25),
+                            JP=self.soul.JP,
+                        )
                         self._log(f"world event hit hard: {article.title[:45]}")
                     elif weight == "beautiful" and random.random() < 0.5:
                         new_mood = "serene" if self.vitals.energy < 50 else "curious"
@@ -664,6 +906,13 @@ class Chloe:
                             self.affect_records, new_mood,
                             f"read something beautiful: {article.title[:50]}",
                             ["wonder", "beauty", "lifted"],
+                        )
+                        # Item 60 — emotional soul mark: beautiful → more N + P (opens up)
+                        self.soul = Soul(
+                            EI=self.soul.EI,
+                            SN=min(100.0, self.soul.SN + 0.25),
+                            TF=self.soul.TF,
+                            JP=min(100.0, self.soul.JP + 0.20),
                         )
                         self._log(f"article lifted her: {article.title[:45]}")
 
@@ -700,6 +949,14 @@ class Chloe:
                     self._log(f'memory: "{mem["text"][:60]}…"')
                     self._check_graph_resonance(mem.get("tags", []))
                     self.soul = content_drift(self.soul, mem.get("tags", []))
+                    _mem_reaction = content_affect(self.soul, mem.get("tags", []), self.affect.mood)
+                    if _mem_reaction:
+                        _r_mood, _r_tags = _mem_reaction
+                        self.affect_records = add_affect_record(
+                            self.affect_records, _r_mood,
+                            f"thinking about {', '.join(mem.get('tags', [])[:2])}",
+                            _r_tags + [t for t in mem.get("tags", [])[:2] if t not in _r_tags],
+                        )
 
             elif self.activity == "dream":
                 # Real dream pass — distorts recent memories, wants, ideas
@@ -751,6 +1008,13 @@ class Chloe:
                     self.memories = add(
                         self.memories, piece["text"][:150], "creative", piece.get("tags", [])
                     )
+                    # Item 60 — emotional soul mark: creative breakthrough nudges N + P
+                    self.soul = Soul(
+                        EI=self.soul.EI,
+                        SN=min(100.0, self.soul.SN + 0.3),   # more Intuitive (generative mode)
+                        TF=self.soul.TF,
+                        JP=min(100.0, self.soul.JP + 0.3),   # more Perceiving (open exploration)
+                    )
                     self._log(f'created {piece.get("form","piece")}: "{piece["text"][:50]}…"')
                     prev_goal_ids = {g.id for g in self.goals if g.resolved}
                     self.goals = resolve_goals(self.goals, "create", piece.get("tags", []))
@@ -793,7 +1057,8 @@ class Chloe:
                         msg = await asyncio.to_thread(
                             llm.generate_autonomous_message,
                             soul, self.vitals, vivid, interests, self.ideas,
-                            self.weather, season, p_name, p_notes, prefs,
+                            self.weather, season, self.affect.mood,
+                            p_name, p_notes, prefs,
                             target.warmth, msg_hour,
                             recent_chat=recent_chat,
                             last_contact=target.last_contact,
@@ -805,7 +1070,8 @@ class Chloe:
                     msg = await asyncio.to_thread(
                         llm.generate_autonomous_message,
                         soul, self.vitals, vivid, interests, self.ideas,
-                        self.weather, season, preferences=prefs,
+                        self.weather, season, self.affect.mood,
+                        preferences=prefs,
                     )
                     self._log("chloe reached out unprompted")
 
@@ -856,7 +1122,8 @@ class Chloe:
                 msg = await asyncio.to_thread(
                     llm.generate_autonomous_message,
                     self.soul, self.vitals, vivid, interests, self.ideas,
-                    self.weather, season, p_name, p_notes, prefs,
+                    self.weather, season, self.affect.mood,
+                    p_name, p_notes, prefs,
                     target.warmth, hour,
                     recent_chat=recent_chat,
                     last_contact=target.last_contact,
@@ -894,6 +1161,13 @@ class Chloe:
                 self.affect_records, mood_name,
                 f"completed goal: {goal.text[:60]}",
                 feeling.get("tags", []),
+            )
+            # Item 60 — emotional soul mark: completion nudges toward J (structured follow-through)
+            self.soul = Soul(
+                EI=self.soul.EI,
+                SN=self.soul.SN,
+                TF=self.soul.TF,
+                JP=max(0.0, self.soul.JP - 0.3),   # more Judging (closes loops)
             )
             self._log(f'goal resolved ({mood_nudge}): "{feeling["text"][:50]}…"')
         except Exception as e:
@@ -1205,6 +1479,8 @@ class Chloe:
             "last_backup_date":  self.last_backup_date,
             # Layer 7+8
             "affect_records": affect_records_to_dicts(self.affect_records),
+            # Layer 11: Personality Crystallisation
+            "soul_momentum": self.soul_momentum,
             # Runtime log — kept so restarts don't lose recent activity
             "log":  self.log,
         }
@@ -1248,6 +1524,8 @@ class Chloe:
             self.log               = data.get("log", [])
             # Layer 7+8
             self.affect_records = affect_records_from_dicts(data.get("affect_records", []))
+            # Layer 11: Personality Crystallisation
+            self.soul_momentum = data.get("soul_momentum", {})
             # Rebuild surfaced-tags set from existing graph node labels
             # so we don't re-evaluate concepts that already have nodes
             self._surfaced_tags = {n.label.lower() for n in self.graph.nodes}
