@@ -272,10 +272,19 @@ def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12) -> Option
     return None
 
 
-def should_fire_event(activity_id: str) -> bool:
-    """Roll the dice — should an autonomous event fire this tick?"""
+def should_fire_event(activity_id: str, tick_seconds: float = 5.0) -> bool:
+    """Roll the dice — should an autonomous event fire this tick?
+
+    event_chance values are calibrated for 5-second ticks.
+    Pass the actual tick_seconds so the wall-clock frequency stays
+    consistent regardless of how fast the heartbeat runs.
+    """
     act = ACTIVITIES.get(activity_id)
-    return act is not None and random.random() < act.event_chance
+    if act is None:
+        return False
+    # scale: with longer ticks, raise the per-tick probability proportionally
+    adjusted = act.event_chance * (tick_seconds / 5.0)
+    return random.random() < min(adjusted, 0.95)
 
 
 def heartbeat_state(activity_id: str) -> HeartbeatState:

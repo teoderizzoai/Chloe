@@ -41,7 +41,7 @@ from . import feeds
 from . import weather as wthr
 from .weather import WeatherState
 
-TICK_SECONDS   = 30      # one heartbeat
+TICK_SECONDS   = 5       # one heartbeat
 AGE_EVERY      = 12     # age memories every N ticks (~1 min)
 SAVE_EVERY     = 60     # persist state every N ticks (~5 min)
 WEATHER_EVERY  = 720    # refresh weather every N ticks (~1 hour)
@@ -89,6 +89,7 @@ class Chloe:
         self.goals:            list[Goal] = []
         self.soul_baseline:    dict       = {}   # soul at last continuity check
         self.last_journal_date: str       = ""   # "YYYY-MM-DD"
+        self.last_backup_date:  str       = ""   # "YYYY-MM-DD"
 
         # ── Graph Intelligence ──
         # Tags we've already evaluated for orphan surfacing — not persisted,
@@ -143,7 +144,7 @@ class Chloe:
 
         # Deep sleep — queue message, reply when she wakes
         if sleeping and self.vitals.energy < 25:
-            self._add_chat("user", message)
+            self._add_chat("user", message, person_id=person_id)
             self.pending_messages.append({
                 "person_id": person_id,
                 "text":      message,
@@ -154,13 +155,18 @@ class Chloe:
 
         # Light sleep — wake her, reply groggily
         was_woken = sleeping
-        self._add_chat("user", message)
+
+        # Snapshot history BEFORE adding the current message — llm.chat appends it itself
+        person_history = [m for m in self.chat_history if m.get("person_id") == person_id]
+
+        self._add_chat("user", message, person_id=person_id)
         if was_woken:
             self.set_activity("message")
             self._log(f"woken by message from {person_id}")
 
         self.set_activity("message")
         self.persons = on_contact(self.persons, person_id)
+        self._log(f"message from {person_id}: \"{message[:60]}{'…' if len(message)>60 else ''}\"")
 
         person = get_person(self.persons, person_id)
         person_name  = person.name if person else "Teo"
@@ -170,12 +176,11 @@ class Chloe:
 
         t      = time.localtime()
         season = f"{wthr.describe_season(t.tm_mon)}, {circadian_phase(t.tm_hour)}"
-
         try:
             reply = await asyncio.to_thread(
                 llm.chat,
                 message=message,
-                history=self.chat_history[-10:],
+                history=person_history[-10:],
                 soul=self.soul,
                 vitals=self.vitals,
                 memories=get_vivid(self.memories, 5),
@@ -193,7 +198,7 @@ class Chloe:
         except Exception as e:
             reply = f"(something went quiet: {e})"
 
-        self._add_chat("chloe", reply)
+        self._add_chat("chloe", reply, person_id=person_id)
         self.memories = add(self.memories, f'Said: "{reply[:80]}"', "conversation",
                             derive_interests(self.memories)[:2])
         return reply
@@ -266,7 +271,7 @@ class Chloe:
             "interests":   derive_interests(self.memories),
             "memories":    to_dicts(get_vivid(self.memories, 10)),
             "ideas":       self.ideas[:5],
-            "chat":        self.chat_history[-20:],
+            "chat":        self.chat_history[-100:],
             "graph":       self.graph.to_dict(),
             "log":         self.log[:20],
             "tick":        self._tick,
@@ -293,7 +298,10 @@ class Chloe:
         while self._running:
             await asyncio.sleep(TICK_SECONDS)
             self._tick += 1
-            await self._tick_once()
+            try:
+                await self._tick_once()
+            except Exception as exc:
+                self._log(f"[tick error] {exc}")
 
     async def _tick_once(self):
         """One heartbeat. Order matters."""
@@ -339,7 +347,7 @@ class Chloe:
 
         # 6. Autonomous events — gated by global cooldown + per-activity dice roll
         gap_ok = (time.monotonic() - self._last_autonomous_fire_mono) >= MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS
-        if not self._busy and gap_ok and should_fire_event(self.activity):
+        if not self._busy and gap_ok and should_fire_event(self.activity, TICK_SECONDS):
             self._last_autonomous_fire_mono = time.monotonic()
             asyncio.create_task(self._fire_event())
 
@@ -527,9 +535,10 @@ class Chloe:
                     )
                     self._log("chloe reached out unprompted")
 
-                self._add_chat("chloe", msg, autonomous=True)
+                target_id = target.id if target else "teo"
+                self._add_chat("chloe", msg, autonomous=True, person_id=target_id)
                 if self.on_message:
-                    self.on_message(msg, target.id if target else None)
+                    self.on_message(msg, target_id)
 
         except Exception as e:
             self._log(f"event error: {e}")
@@ -691,10 +700,13 @@ class Chloe:
             self.persons = on_contact(self.persons, pm["person_id"])
 
             try:
+                # Exclude the queued message itself from history — llm.chat appends it as `message`
+                person_history = [m for m in self.chat_history
+                                  if m.get("person_id") == pm["person_id"] and m["text"] != pm["text"]]
                 reply = await asyncio.to_thread(
                     llm.chat,
                     message=pm["text"],
-                    history=self.chat_history[-6:],
+                    history=person_history[-6:],
                     soul=self.soul,
                     vitals=self.vitals,
                     memories=get_vivid(self.memories, 5),
@@ -710,7 +722,7 @@ class Chloe:
                     sleep_state="missed",
                     missed_at=pm["time"],
                 )
-                self._add_chat("chloe", reply)
+                self._add_chat("chloe", reply, person_id=pm["person_id"])
                 self._log(f"replied to queued message from {person_name}")
                 if self.on_message:
                     self.on_message(reply, pm["person_id"])
@@ -811,7 +823,10 @@ class Chloe:
             "soul_baseline":    self.soul_baseline,
             "last_journal_date": self.last_journal_date,
         }
-        self.state_file.write_text(json.dumps(data, indent=2))
+        try:
+            self.state_file.write_text(json.dumps(data, indent=2))
+        except Exception as exc:
+            print(f"[save error] {exc}")
 
     def _load(self):
         if not self.state_file.exists():
@@ -875,13 +890,14 @@ class Chloe:
         except UnicodeEncodeError:
             print(entry.encode("ascii", errors="replace").decode("ascii"))
 
-    def _add_chat(self, from_: str, text: str, autonomous: bool = False):
+    def _add_chat(self, from_: str, text: str, autonomous: bool = False, person_id: str = ""):
         self.chat_history.append({
             "from": from_, "text": text,
             "time": _ts(), "autonomous": autonomous,
+            "person_id": person_id,
         })
-        if len(self.chat_history) > 200:
-            self.chat_history = self.chat_history[-200:]
+        if len(self.chat_history) > 500:
+            self.chat_history = self.chat_history[-500:]
 
 
 def _ts() -> str:

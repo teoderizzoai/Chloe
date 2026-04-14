@@ -177,7 +177,8 @@ def get_weather():
 
 @app.get("/health")
 def health():
-    return {"alive": True, "tick": chloe._tick}
+    loop_alive = chloe._task is not None and not chloe._task.done()
+    return {"alive": True, "tick": chloe._tick, "loop_alive": loop_alive}
 
 
 # Mounted **after** API routes so `/snapshot` etc. are not shadowed.

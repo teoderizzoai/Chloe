@@ -11,7 +11,15 @@
       "Bash(python -c ':*)",
       "Bash(netstat -ano)",
       "Bash(winget upgrade:*)",
-      "Bash(.venv/Scripts/python -c \"from chloe.graph import reinforce_node, match_nodes_by_tags, get_leaf_nodes, mark_auto_expanded, find_node_by_label; from chloe import llm; from chloe.chloe import Chloe; print\\('imports OK'\\)\")"
+      "Bash(.venv/Scripts/python -c \"from chloe.graph import reinforce_node, match_nodes_by_tags, get_leaf_nodes, mark_auto_expanded, find_node_by_label; from chloe import llm; from chloe.chloe import Chloe; print\\('imports OK'\\)\")",
+      "Bash(python -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(curl:*)",
+      "Bash(taskkill /F /PID 12228)",
+      "Bash(taskkill //F //PID 12228)",
+      "Bash(.venv/Scripts/python:*)",
+      "Bash(tasklist)",
+      "Bash(taskkill //F //PID 11324 //PID 17576)",
+      "Bash(uvicorn server:app:*)"
     ]
   }
 }

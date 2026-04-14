@@ -39,6 +39,9 @@ html, body {
   font-size: 12px;
   line-height: 1.6;
   overflow: hidden;
+}
+
+button, .mtab, .person-pill, .activity-btn, .sidebar-label, .topbar-name, .topbar-stat {
   user-select: none;
 }
 
@@ -309,6 +312,7 @@ html, body {
     <span class="busy-indicator" id="busy" style="display:none">thinking···</span>
     <span class="spacer"></span>
     <span class="topbar-stat" id="topbar-weather"></span>
+    <span id="poll-dot" title="last refresh" style="width:10px;height:10px;border-radius:50%;background:#444;display:inline-block"></span>
   </header>
 
   <!-- LEFT SIDEBAR -->
@@ -434,7 +438,7 @@ html, body {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────
-const API     = 'http://localhost:8080';
+const API     = 'http://localhost:8000';
 const POLL_MS = 4000;
 
 const MOOD_COLORS = {
@@ -504,7 +508,20 @@ async function poll() {
     if (!res.ok) return;
     state = await res.json();
     applyState(state);
-  } catch (_) {}
+    // Blink blue on successful refresh
+    const dot = document.getElementById('poll-dot');
+    dot.style.transition = 'none';
+    dot.style.background = '#3a9bdc';
+    dot.style.boxShadow  = '0 0 6px #3a9bdc';
+    setTimeout(() => {
+      dot.style.transition = 'background 0.8s, box-shadow 0.8s';
+      dot.style.background = '#444';
+      dot.style.boxShadow  = 'none';
+    }, 120);
+  } catch (_) {
+    const dot = document.getElementById('poll-dot');
+    if (dot) { dot.style.background = '#e74c3c'; dot.style.boxShadow = 'none'; }
+  }
 }
 
 function applyState(s) {
@@ -683,6 +700,8 @@ function selectPerson(id) {
   activePerson = id;
   document.querySelectorAll('.person-pill').forEach(p =>
     p.classList.toggle('active', p.dataset.id === id));
+  // Re-render chat for the newly selected person
+  if (state) renderChat(state.chat);
 }
 
 // ── TAB SWITCHING ─────────────────────────────────────────────
@@ -768,9 +787,12 @@ function renderPanel(s) {
     renderAdmin(s, body);
 
   } else {
-    // log
-    body.innerHTML = (s.log || []).map(l =>
-      `<div class="log-item">${l}</div>`).join('');
+    // log — only re-render when content changes so text stays selectable/copyable
+    const logHtml = (s.log || []).map(l => `<div class="log-item">${l}</div>`).join('');
+    if (body.dataset.logFingerprint !== logHtml.slice(0, 80)) {
+      body.dataset.logFingerprint = logHtml.slice(0, 80);
+      body.innerHTML = logHtml;
+    }
   }
 }
 
@@ -851,18 +873,24 @@ function resetSoulBaseline() {
 
 // ── CHAT ─────────────────────────────────────────────────────
 function renderChat(messages) {
-  if (!messages || !messages.length) return;
+  if (!messages) return;
   const container = document.getElementById('chat-messages');
-  // Only re-render when content changed (compare last message fingerprint)
-  const last = messages[messages.length - 1];
-  const fingerprint = `${messages.length}:${last.from}:${last.time}:${last.text.slice(0,30)}`;
+  // Filter to the active person's conversation
+  const filtered = messages.filter(m => !m.person_id || m.person_id === activePerson);
+  // Only re-render when content changed
+  const last = filtered[filtered.length - 1];
+  const fingerprint = `${activePerson}:${filtered.length}:${last ? last.from + last.time + last.text.slice(0,30) : ''}`;
   if (container.dataset.fingerprint === fingerprint) return;
   container.dataset.fingerprint = fingerprint;
+  if (!filtered.length) {
+    container.innerHTML = '<div style="color:var(--text3);padding:16px;font-size:11px">no messages yet</div>';
+    return;
+  }
   // Preserve scroll position — only snap to bottom if already near it
   const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
-  container.innerHTML = messages.map(m => `
+  container.innerHTML = filtered.map(m => `
     <div class="msg ${m.from === 'chloe' ? 'msg-chloe' + (m.autonomous ? ' msg-auto' : '') : 'msg-user'}">
-      <div class="msg-meta">${m.from === 'chloe' ? 'chloe' : 'you'} · ${m.time}${m.autonomous ? ' · unprompted' : ''}</div>
+      <div class="msg-meta">${m.from === 'chloe' ? 'chloe' : m.person_id || 'you'} · ${m.time}${m.autonomous ? ' · unprompted' : ''}</div>
       ${m.text}
     </div>`).join('');
   if (atBottom) container.scrollTop = container.scrollHeight;
