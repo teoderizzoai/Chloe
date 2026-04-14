@@ -4,7 +4,7 @@ Chloe is a persistent AI entity designed as a "third roommate," not a task assis
 She runs continuously, develops over time, forms memories and beliefs, tracks mood,
 and reaches out unprompted.
 
-<img src="https://i.ibb.co/fVnbm5jP/Chloe-Texting.png" alt="Chloe Texting" width="700" />
+<img src="https://i.ibb.co/fVnbm5jP/Chloe-Texting.png" alt="Chloe Texting" width="400" />
 
 ## What Chloe Is
 
