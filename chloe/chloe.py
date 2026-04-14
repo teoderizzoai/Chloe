@@ -367,6 +367,12 @@ class Chloe:
             self.last_journal_date = today
             asyncio.create_task(self._write_journal(today))
 
+        # 9b. End-of-day backup at 23:00
+        if hour == 23 and today != self.last_backup_date:
+            self.last_backup_date = today
+            self._save()
+            self._backup(today)
+
         # 10. Refresh weather every WEATHER_EVERY ticks (~1 hour)
         if self._tick % WEATHER_EVERY == 0:
             asyncio.create_task(self._refresh_weather())
@@ -822,6 +828,9 @@ class Chloe:
             "goals":            goals_to_dicts(self.goals),
             "soul_baseline":    self.soul_baseline,
             "last_journal_date": self.last_journal_date,
+            "last_backup_date":  self.last_backup_date,
+            # Runtime log — kept so restarts don't lose recent activity
+            "log":  self.log,
         }
         try:
             self.state_file.write_text(json.dumps(data, indent=2))
@@ -859,12 +868,26 @@ class Chloe:
             self.goals             = goals_from_dicts(data.get("goals", []))
             self.soul_baseline     = data.get("soul_baseline", {})
             self.last_journal_date = data.get("last_journal_date", "")
+            self.last_backup_date  = data.get("last_backup_date", "")
+            self.log               = data.get("log", [])
             # Rebuild surfaced-tags set from existing graph node labels
             # so we don't re-evaluate concepts that already have nodes
             self._surfaced_tags = {n.label.lower() for n in self.graph.nodes}
             self._log("State restored from disk.")
         except Exception as e:
             self._log(f"Could not load state: {e}. Starting fresh.")
+
+    def _backup(self, today: str):
+        """Copy current state file to backups/chloe_YYYY-MM-DD.json."""
+        import shutil
+        backup_dir = Path("backups")
+        backup_dir.mkdir(exist_ok=True)
+        dest = backup_dir / f"chloe_{today}.json"
+        try:
+            shutil.copy2(self.state_file, dest)
+            self._log(f"backup saved → backups/chloe_{today}.json")
+        except Exception as exc:
+            self._log(f"backup error: {exc}")
 
     # ── HELPERS ──────────────────────────────────────────────
 

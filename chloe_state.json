@@ -1,14 +1,14 @@
 {
   "soul": {
-    "EI": 46.96435639753702,
-    "SN": 46.99616608168579,
-    "TF": 47.09764370655182,
-    "JP": 47.029569304724234
+    "EI": 46.969467699182054,
+    "SN": 46.99689464883861,
+    "TF": 47.119005352103656,
+    "JP": 47.01175621972934
   },
   "vitals": {
-    "energy": 83.31399999999962,
-    "social_battery": 10.586000000000029,
-    "curiosity": 41.100000000002325
+    "energy": 100.0,
+    "social_battery": 16.10600000000016,
+    "curiosity": 35.100000000002666
   },
   "activity": "rest",
   "memories": [
@@ -19,7 +19,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.991026973,
+      "weight": 0.9616943356035061,
       "timestamp": 1776175526.6880476,
       "id": "7136a1c6"
     },
@@ -30,7 +30,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.991026973,
+      "weight": 0.9616943356035061,
       "timestamp": 1776175486.7494223,
       "id": "5c1dd253"
     },
@@ -41,7 +41,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.988053892081,
+      "weight": 0.9588092525966956,
       "timestamp": 1776175466.6547923,
       "id": "1a8cbbb9"
     },
@@ -52,7 +52,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.985089730404757,
+      "weight": 0.9559328248389055,
       "timestamp": 1776175412.5161965,
       "id": "318a0275"
     },
@@ -63,7 +63,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.985089730404757,
+      "weight": 0.9559328248389055,
       "timestamp": 1776175381.8059218,
       "id": "c930d219"
     },
@@ -76,7 +76,7 @@
         "self-awareness",
         "motivation"
       ],
-      "weight": 0.985089730404757,
+      "weight": 0.9559328248389055,
       "timestamp": 1776175364.4110382,
       "id": "57203b71"
     }
@@ -354,7 +354,7 @@
     }
   ],
   "ideas": [],
-  "tick": 3900,
+  "tick": 4020,
   "weather": {
     "condition": "clear",
     "description": "clear sky",
@@ -365,7 +365,7 @@
   },
   "affect": {
     "mood": "lonely",
-    "intensity": 0.44,
+    "intensity": 1.0,
     "color": "#6a5a8a",
     "desc": "present, unreached"
   },
@@ -377,7 +377,7 @@
       "id": "teo",
       "name": "Teo",
       "warmth": 100.0,
-      "distance": 1.2000000000000002,
+      "distance": 5.2,
       "notes": [
         {
           "text": "Teo acknowledged we're in early development stages and apologized for restarts, promising stability soon.",
