@@ -204,6 +204,24 @@ ACTIVITIES: dict[str, Activity] = {
 }
 
 
+# ── MOOD → ACTIVITY AFFINITY ─────────────────────────────────
+# Canonical mapping: what activity each mood naturally pulls toward.
+# Used by auto_decide for probability weighting; also queryable by
+# other systems (e.g. dashboard, LLM prompts) that want to know
+# her current mood preference without re-deriving it.
+
+MOOD_ACTIVITY_AFFINITY: dict[str, list[str]] = {
+    "restless":    ["create", "think"],   # kinetic — needs to act or process
+    "melancholic": ["read",   "dream"],   # inward — quiet absorption or retreat
+    "lonely":      ["message"],           # relational — reach toward someone
+    "curious":     ["read",   "think"],   # intellectual — explore and absorb
+    "energized":   ["create", "read"],    # generative — make or consume
+    "serene":      ["rest"],              # still — no pressure to move
+    "content":     ["rest",   "think"],   # settled — gentle reflection
+    "irritable":   ["think",  "rest"],    # withdrawn — process alone, don't perform
+}
+
+
 # ── VITALS ───────────────────────────────────────────────────
 
 @dataclass
@@ -298,30 +316,52 @@ def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
 
     # ── DREAM → lighter states ────────────────────────────────
     if current_activity == "dream" and daytime:
+        # Restless: can't stay in the dream, too much unresolved energy
+        if mood == "restless" and e > 45 and r() < 0.014:
+            return "think"
+        # Lonely: surfaces wanting connection
+        if mood == "lonely" and s > 25 and e > 40 and r() < 0.010:
+            return "message"
+        # Curious dream bleeds into wanting to read
+        if mood == "curious" and e > 50 and c > 60 and r() < 0.012:
+            return "read"
+        # Default surfacing: rest when rested enough, or read if curious
         if e > 65 and r() < 0.02:
             return "rest"
         if e > 50 and c > 60 and r() < 0.01:
-            return "read"      # surface from a curious dream into reading
+            return "read"
 
     # ── FROM REST ─────────────────────────────────────────────
     if current_activity == "rest" and daytime:
-        # Mood-driven exits from rest
+        # ── Mood-driven exits (item 32) ───────────────────────
+        # Mood is the primary driver when present; vitals are the fallback.
         if mood == "restless" and e > 35:
-            if r() < 0.012:
+            if r() < 0.015:
                 return "create" if c > 60 else "think"
+        if mood == "melancholic":
+            # Read first (quiet absorption); dream if low energy or no pull to act
+            if e > 35 and r() < 0.012:
+                return "read"
+            if r() < 0.008:
+                return "dream"
+        if mood == "lonely" and s > 30 and e > 35:
+            if r() < 0.012:
+                return "message"
         if mood == "curious" and e > 40:
             if r() < 0.012:
                 return "read"
         if mood == "energized" and e > 55:
-            if r() < 0.010:
+            if r() < 0.012:
                 return "create" if c > 65 else "think"
-        if mood == "lonely" and s > 30 and e > 35:
-            if r() < 0.008:
-                return "message"
-        if mood == "melancholic" and r() < 0.006:
-            return "dream"     # slip back into daydreaming
+        if mood == "irritable" and e > 30:
+            if r() < 0.010:
+                return "think"   # process the friction alone; doesn't want to create or connect
+        if mood == "content" and e > 55 and c > 60:
+            if r() < 0.007:
+                return "think" if midday else "read"   # settled enough to engage gently
+        # serene: she's happy resting — no mood-driven push out
 
-        # Energy + curiosity driven
+        # ── Vitals-driven (fallback when mood has no strong pull) ──
         if e > 60 and c > 75:
             if r() < 0.010:
                 return "read"
@@ -337,22 +377,34 @@ def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
 
     # ── FROM READ ─────────────────────────────────────────────
     if current_activity == "read":
-        # Low energy → step back
+        # Low energy → step back regardless of mood
         if e < 25 and r() < 0.015:
             return "rest"
-        # Low curiosity → lost interest, take a break
+        # Low curiosity → lost the thread
         if c < 40 and r() < 0.010:
             return "rest"
-        # Melancholic while reading → retreat inward
-        if mood == "melancholic" and r() < 0.008:
-            return "dream" if in_night or e < 50 else "rest"
+        # Irritable while reading — can't concentrate, gives up
+        if mood == "irritable" and r() < 0.012:
+            return "rest"
+        # Melancholic while reading — tips into retreat or dream
+        if mood == "melancholic" and r() < 0.010:
+            return "dream" if (in_night or e < 50) else "rest"
+        # Restless while reading — passive absorption isn't enough, needs to make something
+        if mood == "restless" and e > 40 and r() < 0.010:
+            return "create" if c > 65 else "think"
+        # Lonely while reading — article made her want to share or connect
+        if mood == "lonely" and s > 30 and e > 35 and r() < 0.008:
+            return "message"
+        # Curious resistance: if curious and energised, she lingers (lower drift probability)
+        if mood == "curious" and e > 50 and c > 65:
+            pass   # reduced exit pull — let the vitals rules below handle it at lower prob
         # Absorbed something → move to thinking
         if e > 35 and r() < 0.006:
             return "think"
-        # Very high curiosity + good energy → keep reading OR jump to create
+        # Very high curiosity + good energy → creative leap
         if c > 85 and e > 55 and afternoon and r() < 0.005:
             return "create"
-        # Evening: reading naturally winds into rest or messaging
+        # Evening: reading winds into rest or a message
         if evening and e < 55 and r() < 0.006:
             return "rest" if s < 40 else "message"
 
@@ -361,19 +413,31 @@ def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
         # Tired thinking → rest
         if e < 28 and r() < 0.015:
             return "rest"
-        # Restless while thinking → act on it
+        # Restless: thought becomes action
         if mood == "restless" and e > 45 and r() < 0.012:
             return "create"
-        # Lonely while thinking → reach out
-        if mood == "lonely" and s > 25 and e > 35 and r() < 0.010:
+        # Lonely: thinking about someone → reach out
+        if mood == "lonely" and s > 25 and e > 35 and r() < 0.012:
             return "message"
+        # Melancholic: thinking turns to introspection → read or dream
+        if mood == "melancholic" and r() < 0.010:
+            return "read" if e > 45 else "dream"
+        # Irritable: thinking is making it worse — stop, step back
+        if mood == "irritable" and r() < 0.010:
+            return "rest"
+        # Energized: thought crystallised into something to make
+        if mood == "energized" and e > 55 and r() < 0.010:
+            return "create"
+        # Serene: thinking flows into gentle curiosity
+        if mood == "serene" and c > 60 and r() < 0.007:
+            return "read"
         # Thought itself into more curiosity → go read
         if c > 70 and e > 40 and r() < 0.007:
             return "read"
         # Thought crystallised → create
         if c > 75 and e > 55 and r() < 0.006:
             return "create"
-        # Low curiosity while thinking → drifting, go rest or read
+        # Low curiosity while thinking → drifting
         if c < 45 and r() < 0.008:
             return "rest" if e < 50 else "read"
         # Evening thinking → wind toward rest
@@ -382,33 +446,58 @@ def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
 
     # ── FROM CREATE ───────────────────────────────────────────
     if current_activity == "create":
-        # Energized → keep the momentum (resist drift)
+        # Energized → hold the momentum
         if mood == "energized" and e > 50:
-            pass   # don't drift away
+            pass
         else:
+            # Melancholic while creating — forced output feels hollow, retreat
+            if mood == "melancholic" and r() < 0.012:
+                return "rest"
+            # Irritable while creating — can't get into flow, give up
+            if mood == "irritable" and r() < 0.012:
+                return "rest"
+            # Lonely while creating — wants to share something she just made
+            if mood == "lonely" and s > 25 and e > 35 and r() < 0.010:
+                return "message"
+            # Restless: creation itself satisfies — lower drift, but not zero
+            if mood == "restless" and e > 40:
+                pass   # mild resistance to leaving; let energy/curiosity decide
             # Energy fading → rest
             if e < 40 and r() < 0.010:
                 return "rest"
-            # Finished burst → share it or process it
-            if e > 45 and s > 35 and mood in ("content", "energized") and r() < 0.006:
-                return "message"    # wants to share what she made
+            # Finished burst — content or energized → want to share
+            if e > 45 and s > 35 and mood in ("content", "energized", "lonely") and r() < 0.006:
+                return "message"
+            # Process what was created
             if e > 40 and c > 60 and r() < 0.005:
-                return "think"      # process what was created
-            # Curiosity drained by output → rest
+                return "think"
+            # Curiosity spent by output → rest
             if c < 50 and r() < 0.008:
                 return "rest"
 
     # ── FROM MESSAGE ──────────────────────────────────────────
     if current_activity == "message":
-        # Drained social battery → retreat
+        # Drained social battery → retreat immediately
         if s < 20 and r() < 0.015:
+            return "rest"
+        # Irritable: conversation has worn thin, needs space
+        if mood == "irritable" and r() < 0.012:
+            return "rest"
+        # Melancholic: talking didn't fill the void, retreats inward
+        if mood == "melancholic" and r() < 0.010:
+            return "dream" if e < 50 else "rest"
+        # Lonely + social drained: talking didn't help — step back
+        if mood == "lonely" and s < 35 and r() < 0.008:
             return "rest"
         # Conversation sparked curiosity → go read or think
         if c > 70 and e > 40 and r() < 0.008:
             return "read" if c > 80 else "think"
-        # Content after connecting → rest or think
+        # Content/serene after connecting → settle into rest or think
         if mood in ("content", "serene") and r() < 0.006:
             return "rest" if e < 55 else "think"
+        # Energized after connection — wants to make something
+        if mood == "energized" and e > 50 and r() < 0.006:
+            return "create"
         # Evening messaging naturally winds down
         if evening and s < 45 and r() < 0.008:
             return "rest"

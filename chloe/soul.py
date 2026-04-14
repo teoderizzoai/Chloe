@@ -39,17 +39,17 @@ TRAIT_LABELS = {
 # How each activity nudges the soul per tick.
 # Positive = toward the right pole, negative = toward the left.
 #
-# Scale: ~0.0002–0.0004 per tick.
-# At 5s/tick, 1 hour = 720 ticks → a value of 0.0004 moves a trait ~0.29 pts/hour.
-# Visible drift requires days of consistent activity. MBTI flip takes weeks.
+# Scale: ~0.001–0.002 per tick.
+# At 5s/tick, 1 hour = 720 ticks → a value of 0.002 moves a trait ~1.4 pts/hour.
+# Visible drift after a few hours of consistent activity; MBTI flip takes days–weeks.
 ACTIVITY_DRIFT: dict[str, dict[str, float]] = {
-    "sleep":   {"EI": +0.0002, "SN":  0.0000, "TF":  0.0000, "JP": +0.0002},
-    "dream":   {"EI":  0.0000, "SN": +0.0004, "TF": +0.0002, "JP": +0.0002},
+    "sleep":   {"EI": +0.0010, "SN":  0.0000, "TF":  0.0000, "JP": +0.0010},
+    "dream":   {"EI":  0.0000, "SN": +0.0020, "TF": +0.0010, "JP": +0.0010},
     "rest":    {"EI":  0.0000, "SN":  0.0000, "TF":  0.0000, "JP":  0.0000},
-    "read":    {"EI": +0.0002, "SN": +0.0004, "TF": -0.0002, "JP": +0.0002},
-    "think":   {"EI": +0.0002, "SN": +0.0004, "TF": -0.0004, "JP": +0.0004},
-    "message": {"EI": -0.0004, "SN":  0.0000, "TF": +0.0004, "JP": -0.0002},
-    "create":  {"EI": -0.0002, "SN": +0.0002, "TF": +0.0002, "JP": +0.0004},
+    "read":    {"EI": +0.0010, "SN": +0.0020, "TF": -0.0010, "JP": +0.0010},
+    "think":   {"EI": +0.0010, "SN": +0.0020, "TF": -0.0020, "JP": +0.0020},
+    "message": {"EI": -0.0020, "SN":  0.0000, "TF": +0.0020, "JP": -0.0010},
+    "create":  {"EI": -0.0010, "SN": +0.0010, "TF": +0.0010, "JP": +0.0020},
 }
 
 
@@ -119,6 +119,45 @@ def drift(soul: Soul, activity_id: str) -> Soul:
     )
 
 
+# ── SEASONAL ACCUMULATION (item 39) ─────────────────────────
+# Per-tick nudges that accumulate over weeks and months.
+# At 5s/tick running 24/7, these add up to ~2 pts per trait per season.
+# The pattern: winter pulls inward/feeling; spring opens up/perceiving;
+# summer is extraverted/thinking; autumn turns inward/feeling/judging.
+# No flutter — seasonal drift is a slow deterministic tide, not noise.
+
+SEASONAL_DRIFT: dict[int, dict[str, float]] = {
+    # month: {EI, SN, TF, JP}
+    1:  {"EI": +0.0000016, "SN": +0.0000010, "TF": +0.0000010, "JP": +0.0000008},  # Jan — peak winter: inward, reflective
+    2:  {"EI": +0.0000014, "SN": +0.0000006, "TF": +0.0000008, "JP": +0.0000005},  # Feb — late winter
+    3:  {"EI": -0.0000008, "SN": +0.0000008, "TF":  0.0000000, "JP": +0.0000010},  # Mar — early spring: opening up
+    4:  {"EI": -0.0000012, "SN": +0.0000008, "TF":  0.0000000, "JP": +0.0000012},  # Apr — spring: possibility, spontaneous
+    5:  {"EI": -0.0000010, "SN": +0.0000005, "TF":  0.0000000, "JP": +0.0000008},  # May — late spring
+    6:  {"EI": -0.0000010, "SN":  0.0000000, "TF": -0.0000006, "JP":  0.0000000},  # Jun — early summer: extraverted, clearer
+    7:  {"EI": -0.0000012, "SN":  0.0000000, "TF": -0.0000006, "JP":  0.0000000},  # Jul — peak summer
+    8:  {"EI": -0.0000010, "SN":  0.0000000, "TF": -0.0000005, "JP":  0.0000000},  # Aug — late summer
+    9:  {"EI": +0.0000008, "SN":  0.0000000, "TF": +0.0000008, "JP": -0.0000008},  # Sep — early autumn: turning in
+    10: {"EI": +0.0000010, "SN": +0.0000005, "TF": +0.0000010, "JP": -0.0000010},  # Oct — mid autumn: nostalgic
+    11: {"EI": +0.0000012, "SN": +0.0000005, "TF": +0.0000010, "JP": -0.0000006},  # Nov — late autumn: closing up
+    12: {"EI": +0.0000014, "SN": +0.0000010, "TF": +0.0000010, "JP": +0.0000005},  # Dec — early winter
+}
+
+
+def seasonal_drift(soul: Soul, month: int) -> Soul:
+    """Per-tick seasonal soul accumulation. Accumulates ~2 pts per affected trait
+    per 3-month season when running 24/7. Pulls personality toward winter-I/F,
+    spring-E/N/P, summer-E/T, autumn-I/F/J. No random flutter — deterministic tide."""
+    nudges = SEASONAL_DRIFT.get(month, {})
+    if not nudges:
+        return soul
+    return Soul(
+        EI=_clamp(soul.EI + nudges.get("EI", 0.0)),
+        SN=_clamp(soul.SN + nudges.get("SN", 0.0)),
+        TF=_clamp(soul.TF + nudges.get("TF", 0.0)),
+        JP=_clamp(soul.JP + nudges.get("JP", 0.0)),
+    )
+
+
 def consolidate(soul: Soul) -> Soul:
     """During sleep the soul does a slow random walk.
     Dreams reshape personality in ways waking life doesn't.
@@ -172,4 +211,6 @@ def _clamp(val: float, lo: float = 0.0, hi: float = 100.0) -> float:
     return max(lo, min(hi, val))
 
 def _flutter() -> float:
-    return random.uniform(-0.002, 0.002)
+    # Small noise — same order of magnitude as drift so it adds texture
+    # without burying the directional signal.
+    return random.uniform(-0.0005, 0.0005)

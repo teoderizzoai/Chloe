@@ -540,6 +540,7 @@ button, .mtab, .person-pill, .sidebar-label, .topbar-name, .topbar-stat {
         <div class="graph-selected-info" id="sel-info">
           <div class="sel-label" id="sel-label"></div>
           <div class="sel-note"  id="sel-note"></div>
+          <div class="sel-hits"  id="sel-hits" style="font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;display:none"></div>
           <button class="sel-expand" id="sel-expand-btn">expand</button>
         </div>
       </div>
@@ -614,6 +615,9 @@ let activePerson = 'teo';
 let chatOpen     = false;
 let prevMsgCount = 0;
 let expandedPersons = new Set();
+
+// Soul drift tracking — compare against value from ~30s ago to show trend arrows
+let soulHistory  = [];   // [{EI, SN, TF, JP}, ...], max 8 entries (~32s at 4s polls)
 
 // Graph
 let selectedNodeId  = null;
@@ -788,11 +792,24 @@ function buildSoulSliders() {
 }
 
 function updateSoulSliders(soul) {
+  // Push to history ring (max 8 entries ≈ 32s at 4s poll)
+  soulHistory.push({ EI: soul.EI, SN: soul.SN, TF: soul.TF, JP: soul.JP });
+  if (soulHistory.length > 8) soulHistory.shift();
+  const baseline = soulHistory.length >= 4 ? soulHistory[0] : null;
+
   TRAITS.forEach(t => {
     const val = soul[t.key];
     document.getElementById(`sf-${t.key}`).style.width  = `${val}%`;
     document.getElementById(`st-${t.key}`).style.left   = `${val}%`;
-    document.getElementById(`sval-${t.key}`).textContent = Math.round(val);
+
+    // Trend arrow — compare against oldest entry in history window
+    let arrow = '';
+    if (baseline) {
+      const delta = val - baseline[t.key];
+      if      (delta >  0.05) arrow = ' ↑';
+      else if (delta < -0.05) arrow = ' ↓';
+    }
+    document.getElementById(`sval-${t.key}`).textContent = val.toFixed(1) + arrow;
     document.getElementById(`lbl-${t.key}-l`).classList.toggle('active', val < 50);
     document.getElementById(`lbl-${t.key}-r`).classList.toggle('active', val >= 50);
   });
@@ -1267,6 +1284,13 @@ function handleNodeClick(n) {
     const info = document.getElementById('sel-info');
     document.getElementById('sel-label').textContent = n.label;
     document.getElementById('sel-note').textContent  = n.note || '';
+    const hitsEl = document.getElementById('sel-hits');
+    if (n.hit_count > 0) {
+      hitsEl.textContent = `${n.hit_count} resonance${n.hit_count === 1 ? '' : 's'}`;
+      hitsEl.style.display = 'block';
+    } else {
+      hitsEl.style.display = 'none';
+    }
     info.classList.add('visible');
   }
 }
@@ -1350,6 +1374,8 @@ function draw(ctx, canvas) {
     const col = DEPTH_COLORS[Math.min(n.depth, DEPTH_COLORS.length-1)];
     const sel = n.id === selectedNodeId;
     const dragged = n === draggingNode;
+    // item 34: opacity bonus for repeatedly-hit nodes (caps at +0.18)
+    const hitGlow = Math.min(0.18, Math.log1p(n.hit_count || 0) * 0.03);
 
     if (sel || dragged) {
       ctx.beginPath(); ctx.arc(n.x, n.y, r+8, 0, Math.PI*2);
@@ -1362,14 +1388,14 @@ function draw(ctx, canvas) {
     }
 
     ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI*2);
-    ctx.fillStyle = col; ctx.globalAlpha = n.depth === 0 ? 0.25 : 0.15;
+    ctx.fillStyle = col; ctx.globalAlpha = (n.depth === 0 ? 0.25 : 0.15) + hitGlow;
     ctx.fill(); ctx.globalAlpha = 1;
 
     ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI*2);
-    ctx.strokeStyle = col; ctx.lineWidth = (sel||dragged) ? 1.5 : 0.7;
-    ctx.globalAlpha = (sel||dragged) ? 1 : 0.5; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = col; ctx.lineWidth = (sel||dragged) ? 1.5 : 0.7 + hitGlow * 3;
+    ctx.globalAlpha = (sel||dragged) ? 1 : 0.5 + hitGlow; ctx.stroke(); ctx.globalAlpha = 1;
 
-    ctx.fillStyle = col; ctx.globalAlpha = (sel||dragged) ? 1 : 0.65;
+    ctx.fillStyle = col; ctx.globalAlpha = (sel||dragged) ? 1 : 0.65 + hitGlow * 0.5;
     ctx.font = `${n.depth===0?500:400} ${n.depth===0?10:8}px 'DM Mono', monospace`;
     ctx.textAlign = 'center';
     ctx.fillText(n.label.toUpperCase(), n.x, n.y+r+11);
@@ -1381,7 +1407,9 @@ function draw(ctx, canvas) {
 
 function nodeRadius(n) {
   if (n.depth === 0) return 26;
-  return Math.max(7, 18 * (n.strength||0.8) * (1 - n.depth*0.1));
+  // item 34: log scale so early hits give visible boost, later hits diminish
+  const hitFactor = 1 + Math.log1p(n.hit_count || 0) * 0.12;
+  return Math.max(7, 18 * (n.strength||0.8) * (1 - n.depth*0.1) * hitFactor);
 }
 
 async function expandNode(nodeId) {

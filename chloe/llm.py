@@ -774,6 +774,44 @@ Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}
     return _parse_json(result)
 
 
+# ── DREAM WANT (item 38) ─────────────────────────────────────
+
+def generate_dream_want(
+    recurring_tag:  str,
+    soul:           Soul,
+    dream_memories: list,          # recent Memory objects with type=="dream"
+    existing_wants: list = None,   # list of Want dicts, to avoid repetition
+) -> dict:
+    """When a tag recurs across 3+ dreams: surface an unresolved want pulled from
+    the unconscious. The want is dream-logic — felt, not explained.
+    Returns {"text": "...", "tags": [...]}"""
+
+    mem_lines = " | ".join(
+        m.text for m in dream_memories[:5]
+        if hasattr(m, "text")
+    ) or "(no recent dreams)"
+
+    existing_line = ""
+    if existing_wants:
+        active = [w for w in existing_wants if not w.get("resolved")][:3]
+        if active:
+            existing_line = "\nWants she already has (don't repeat): " + \
+                            " / ".join(w["text"] for w in active)
+
+    system = f"""You are generating an unresolved want that surfaced from Chloe's dreams.
+She is {mbti_type(soul)}. A theme that keeps recurring in her dreams: "{recurring_tag}".{existing_line}
+
+This want comes from the unconscious — not a logical plan, a pull. Something unfinished.
+The word "{recurring_tag}" doesn't need to appear literally; it's a seed for what she's drawn toward.
+One want. Specific. First person. Dream-logic — felt, not explained.
+
+Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}}"""
+
+    prompt = f"Recent dream memories:\n{mem_lines}"
+    result = _call(system, [{"role": "user", "content": prompt}], max_tokens=150)
+    return _parse_json(result)
+
+
 # ── COMPLETION FEELING ───────────────────────────────────────
 
 def generate_completion_feeling(

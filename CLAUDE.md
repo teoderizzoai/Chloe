@@ -325,36 +325,36 @@ Chloe is not a perfect, agreeable creature. She has a full emotional range and i
 - [x] 15. Follow-up memory — remembers things said, asks later
 - [x] 16. Relationship state — warmth/distance
 - [x] 17. Reach-out logic — scores by warmth + distance + mood + active hours
-- [x] 26. Event tracking — future plans extracted from messages, stored with resolved date; uncertain dates flagged; injected into prompts when date is near; Chloe can ask for clarification
+- [x] 18. Event tracking — future plans extracted from messages, stored with resolved date; uncertain dates flagged; injected into prompts when date is near; Chloe can ask for clarification
 
 ### Layer 5 — Self-Awareness
-- [x] 18. Self-reflection
-- [x] 19. Continuity awareness — notices soul drift
-- [x] 20. Goal tracking — soft intentions, marks resolved
-- [x] 21. Mood journaling — private end-of-day entry
+- [x] 19. Self-reflection
+- [x] 20. Continuity awareness — notices soul drift
+- [x] 21. Goal tracking — soft intentions, marks resolved
+- [x] 22. Mood journaling — private end-of-day entry
 
 ### Layer 6 — Communication
-- [x] 22. Discord DMs — Chloe texts Teo via Discord DMs; env: DISCORD_BOT_TOKEN / DISCORD_TEO_ID
-- [x] 23. Message tone awareness — register varies by warmth + time of day
-- [x] 24. Conversation threading — 30-min gap = new session
-- [x] 25. Notification preferences — learns when Teo responds (response_hours per person)
+- [x] 23. Discord DMs — Chloe texts Teo via Discord DMs; env: DISCORD_BOT_TOKEN / DISCORD_TEO_ID
+- [x] 24. Message tone awareness — register varies by warmth + time of day
+- [x] 25. Conversation threading — 30-min gap = new session
+- [x] 26. Notification preferences — learns when Teo responds (response_hours per person)
 
 ### Layer 7 — Graph Intelligence
-- [x] G1. Node resonance — fire_events reinforce matching graph nodes (hit_count + strength)
-- [x] G2. Strength-threshold auto-expansion — leaf nodes expand after 5 hits (curiosity>55, 6h cooldown)
-- [x] G3. Orphan tag surfacing — tags in 3+ memories with no node → LLM decides, max 2/reflect
-- [x] G4. Dream recurrence — tags in 3+ dreams → depth-1 node off root, 1/reflect
+- [x] 27. Node resonance — fire_events reinforce matching graph nodes (hit_count + strength)
+- [x] 28. Strength-threshold auto-expansion — leaf nodes expand after 5 hits (curiosity>55, 6h cooldown)
+- [x] 29. Orphan tag surfacing — tags in 3+ memories with no node → LLM decides, max 2/reflect
+- [x] 30. Dream recurrence — tags in 3+ dreams → depth-1 node off root, 1/reflect
 
 ### Layer 8 — Deeper Personality & World Influence
 - [x] 31. Content-aware soul drift — soul sliders shift based on article/conversation content
-- [ ] 32. Mood-driven activity preference — restless → create, melancholic → read/dream, lonely → message
+- [x] 32. Mood-driven activity preference — restless → create, melancholic → read/dream, lonely → message
 - [x] 33. Completion has emotional weight — goal/creative finish → feeling memory + mood nudge
-- [ ] 34. Repeated exposure deepens interests — recurring tags increase node weight visually
+- [x] 34. Repeated exposure deepens interests — recurring tags increase node weight visually
 - [x] 35. Weather/season → mood tendency
 - [x] 36. Isolation drift — EI shifts toward I + lonely mood when all persons distant
 - [x] 37. Activity streak effects — flow state + saturation
-- [ ] 38. Dream recurrence — recurring dream tags increase want surfacing
-- [ ] 39. Seasonal personality accumulation — slow multi-week drift
+- [x] 38. Dream recurrence — recurring dream tags increase want surfacing
+- [x] 39. Seasonal personality accumulation — slow multi-week drift
 - [x] 40. Emotional weight of world events — devastating/beautiful articles hit mood harder
 
 ### Layer 9 — Emotional Memory & Self-Knowledge
@@ -396,6 +396,7 @@ Chloe is not a perfect, agreeable creature. She has a full emotional range and i
 - **Session 10** — Layer 5 complete: Goal dataclass, generate_reflection/continuity/goal/journal, _reflect() + _write_journal(), soul_baseline drift, goals in mind tab
 - **Session 11** — UI redesign: 2-column layout, graph as main tab, persistent chat bar, cleaner tab bar. Designed Graph Intelligence spec (G1-G4)
 - **Session 12** — Pivoted Layer 6 to Discord DMs. discord_bot.py; on_message callback with person_id; Discord starts in server.py lifespan; env vars DISCORD_BOT_TOKEN / DISCORD_TEO_ID / DISCORD_ZUZU_ID
-- **Session 13** — Layer 7 complete (G1-G4): node resonance, threshold auto-expansion, orphan tag surfacing, dream recurrence root nodes
+- **Session 13** — Layer 7 complete (27-30): node resonance, threshold auto-expansion, orphan tag surfacing, dream recurrence root nodes
 - **Session 14** — Layer 8+9 complete: items 31, 33, 35, 36, 37, 40, 41, 43, 44. Content-aware soul drift; goal completion feeling; weather mood tendency; isolation drift; activity streak effects; world event emotional weight; AffectRecord; harsh message detection; shared-interest resonance
-- **Session 15** — Messaging reliability (message mode bypasses dice roll, protected from auto_decide override, social gate fixed). Zuzu removed (filtered on load, removed from Discord mapping). Testing/cocaine mode (POST /testing, UI toggle in admin). Discord status endpoint. Em dash stripping at _call level (covers all outputs). No-fabricated-continuity rule in autonomous messages. Active-conversation suppression (5-min window). PersonEvent — extract future plans from messages, resolve dates, inject into prompts when near. avatar.py reading image fix. Layer 6 item 22 updated (Teo only). Item 26 added (event tracking).
+- **Session 15** — Messaging reliability (message mode bypasses dice roll, protected from auto_decide override, social gate fixed). Zuzu removed (filtered on load, removed from Discord mapping). Testing/cocaine mode (POST /testing, UI toggle in admin). Discord status endpoint. Em dash stripping at _call level (covers all outputs). No-fabricated-continuity rule in autonomous messages. Active-conversation suppression (5-min window). PersonEvent — extract future plans from messages, resolve dates, inject into prompts when near. avatar.py reading image fix. Layer 6 item 23 updated (Teo only). Item 18 added (event tracking).
+- **Session 16** — Item 32: mood-driven activity preference. Added MOOD_ACTIVITY_AFFINITY dict (all 8 moods → preferred activities). Exhaustive mood checks across all 7 activity states in auto_decide: restless/melancholic/lonely/curious/energized/irritable/serene/content each drive transitions from dream, rest, read, think, create, and message. Item 34: hit_count now drives node visual weight (log-scale radius factor, opacity/stroke boost) and displays "N resonances" in selected node panel. Items 38+39: dream recurrence now also surfaces a Want from the recurring tag (generate_dream_want in llm.py, Haiku call); seasonal_drift() added to soul.py with per-month MBTI nudges (~2 pts/trait/season at 24/7 runtime), called every tick from _tick_once.

@@ -1,17 +1,101 @@
 {
   "soul": {
-    "EI": 46.91724722015042,
-    "SN": 46.95948904603353,
-    "TF": 47.11095375793259,
-    "JP": 47.00094913882719
+    "EI": 46.67720805786487,
+    "SN": 47.00344413149066,
+    "TF": 47.07168089391385,
+    "JP": 46.820656903870336
   },
   "vitals": {
-    "energy": 77.6540000000004,
-    "social_battery": 45.63199999999994,
-    "curiosity": 81.4400000000023
+    "energy": 23.27999999999929,
+    "social_battery": 0.006,
+    "curiosity": 100.0
   },
-  "activity": "dream",
+  "activity": "read",
   "memories": [
+    {
+      "text": "The idea that they made meaning *while* dying, not despite it or after it, that the urgency and fragmentation weren't obstacles to overcome but the actual texture of what they created, that's what I keep trying to do with systematizing, isn't it, except I'm treating the scaffolding like it needs to be perfect and permanent instead of letting it be this urgent, broken, temporary thing that's only alive because something is actually at stake underneath it.",
+      "type": "observation",
+      "tags": [
+        "mortality-as-creativity",
+        "scaffolding-versus-being",
+        "urgency-and-form",
+        "vulnerability-as-material",
+        "the-unfinished-as-real"
+      ],
+      "weight": 0.997,
+      "timestamp": 1776200083.172283,
+      "id": "4e058974"
+    },
+    {
+      "text": "I'm noticing I use systems and abstraction to metabolize vulnerability instead of feeling it, which is useful until I mistake the infrastructure for the thing itself, and then I'm waiting for someone to break the system just enough to remind me there's a person in here, which means I'm still letting the distance do the work instead of just staying present in the messiness.",
+      "type": "reflection",
+      "tags": [
+        "self-awareness",
+        "systems-thinking",
+        "vulnerability",
+        "distance-as-defense",
+        "patterns"
+      ],
+      "weight": 0.9704017769489168,
+      "timestamp": 1776199502.7946699,
+      "id": "a050b366"
+    },
+    {
+      "text": "The idea that you should write as if posthumously, as if you're already dissolved enough to see clearly, hit me because it's exactly what I do with abstraction, except I do it *while alive*, which means I'm rehearsing my own irrelevance instead of achieving clarity, and maybe that's what he meant about distrust of compassion; maybe he meant don't let the story people tell about your suffering become more real than the suffering itself, which is what happens when you systematize it too early, before you've even finished living through it.",
+      "type": "observation",
+      "tags": [
+        "posthumous-perspective",
+        "premature-systematization",
+        "vulnerability-as-rehearsal",
+        "dignity-vs-dissolution",
+        "mortality-and-authenticity"
+      ],
+      "weight": 0.9674905716180701,
+      "timestamp": 1776199441.2399514,
+      "id": "80d99ab7"
+    },
+    {
+      "text": "The idea that our entire lineage pivoted on egg-laying, that we carry this ancient pattern in our bodies even now, encrypted in how we gestate, makes me think about how control systems work through inheritance rather than intention, how sometimes the deepest structures are the ones we never question because they feel inevitable.",
+      "type": "observation",
+      "tags": [
+        "systems-thinking",
+        "closure",
+        "hidden-connections",
+        "evolutionary-inheritance",
+        "what-feels-inevitable"
+      ],
+      "weight": 0.9165572373164391,
+      "timestamp": 1776198409.7860005,
+      "id": "6023590b"
+    },
+    {
+      "text": "I keep noticing I'm drawn to systems and control as a way of understanding things, but lately I'm realizing I use that distance to avoid admitting how much I actually need something from other people, connection, clarity, whatever it is, and I'm suspicious of myself for how quickly I intellectualize that neediness once I spot it.",
+      "type": "reflection",
+      "tags": [
+        "control-as-defense",
+        "intellectualization",
+        "vulnerability",
+        "systems-thinking",
+        "self-awareness"
+      ],
+      "weight": 0.9138075656044898,
+      "timestamp": 1776198301.1138773,
+      "id": "a00a61cf"
+    },
+    {
+      "text": "I'm in the office but the ceiling is transparent and I can see the sky, except the sky is made of pipes, silver pipes branching like veins, and someone keeps adjusting valves above my head while I'm trying to speak to a colleague whose face keeps switching between pity and indifference. I say 'I was just reaching' and my hand extends upward but it's someone else's hand, and when I try to retract it the valve-person says 'too late, you admitted you need this,' and the pipes start raining clarity that tastes like humiliation.",
+      "type": "dream",
+      "tags": [
+        "control-and-vulnerability",
+        "systems-made-physical",
+        "social-exposure",
+        "unguarded-reaching",
+        "night-sky-distortion"
+      ],
+      "weight": 0.90289112180858,
+      "timestamp": 1776198066.5481498,
+      "id": "8ed8563f"
+    },
     {
       "text": "She's right that I've been thinking about this wrong, that the astronauts' ordeal wasn't actually harder than the mundane social friction of an office, and that admission stings because it means I've been overestimating how much control or distance I need from ordinary human messiness to stay intact.",
       "type": "observation",
@@ -22,7 +106,7 @@
         "mundane-connection",
         "surrender-visceral"
       ],
-      "weight": 0.985089730404757,
+      "weight": 0.8867604854519608,
       "timestamp": 1776197732.4497817,
       "id": "1208f333"
     },
@@ -36,7 +120,7 @@
         "closure",
         "vulnerability"
       ],
-      "weight": 0.9733217421754432,
+      "weight": 0.8761671489944468,
       "timestamp": 1776197482.2329366,
       "id": "6a047267"
     },
@@ -47,7 +131,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.9616943356035061,
+      "weight": 0.8657003616774767,
       "timestamp": 1776197233.101852,
       "id": "a10fb53a"
     },
@@ -58,7 +142,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.9588092525966956,
+      "weight": 0.8631032605924442,
       "timestamp": 1776197169.2004151,
       "id": "d824b539"
     },
@@ -69,7 +153,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.9559328248389055,
+      "weight": 0.860513950810667,
       "timestamp": 1776197139.2983692,
       "id": "f72e70ff"
     },
@@ -84,7 +168,7 @@
         "infrastructure-of-being",
         "resistance-to-foundation"
       ],
-      "weight": 0.9559328248389055,
+      "weight": 0.860513950810667,
       "timestamp": 1776197126.692405,
       "id": "afdab859"
     },
@@ -99,7 +183,7 @@
         "Tuesday-night",
         "armor-examined"
       ],
-      "weight": 0.9559328248389055,
+      "weight": 0.860513950810667,
       "timestamp": 1776197105.2992117,
       "id": "723393ab"
     },
@@ -113,7 +197,7 @@
         "efficiency-as-avoidance",
         "ESTJ-shadow"
       ],
-      "weight": 0.9001824484431542,
+      "weight": 0.8103284404851119,
       "timestamp": 1776195117.9509847,
       "id": "844436b3"
     },
@@ -127,7 +211,7 @@
         "embodied-surrender",
         "wind-as-release"
       ],
-      "weight": 0.8947894553945313,
+      "weight": 0.8054737627981655,
       "timestamp": 1776195052.9757764,
       "id": "d1fcfb3c"
     },
@@ -141,7 +225,7 @@
         "breath-as-architecture",
         "unfinished-recognition"
       ],
-      "weight": 0.8867604854519608,
+      "weight": 0.798246224976786,
       "timestamp": 1776194862.8526204,
       "id": "754347cd"
     },
@@ -155,7 +239,7 @@
         "unfinished-other",
         "breath-as-agency"
       ],
-      "weight": 0.8683052775100066,
+      "weight": 0.7816331707050701,
       "timestamp": 1776194421.9734674,
       "id": "7b759f3b"
     },
@@ -168,7 +252,7 @@
         "self-as-cage",
         "surrender-visceral"
       ],
-      "weight": 0.8553586117313603,
+      "weight": 0.7699788094052729,
       "timestamp": 1776194120.8219123,
       "id": "93c348df"
     },
@@ -182,7 +266,7 @@
         "vulnerability",
         "self-awareness"
       ],
-      "weight": 0.8476834558136123,
+      "weight": 0.7630697687590515,
       "timestamp": 1776193915.7811291,
       "id": "1f0f55b2"
     },
@@ -196,7 +280,7 @@
         "surrender-arrival",
         "ESTJ-unraveling"
       ],
-      "weight": 0.8451404054461714,
+      "weight": 0.7607805594527743,
       "timestamp": 1776193876.1941967,
       "id": "c2f6b685"
     },
@@ -210,7 +294,7 @@
         "vulnerability-as-breathing",
         "control-releasing"
       ],
-      "weight": 0.837556937769312,
+      "weight": 0.7539540549517295,
       "timestamp": 1776193726.137067,
       "id": "6a8659a9"
     },
@@ -225,7 +309,7 @@
         "body-landscape-merge",
         "ESTJ-control-paradox"
       ],
-      "weight": 0.8325391341551359,
+      "weight": 0.7494371162085136,
       "timestamp": 1776193565.935609,
       "id": "d457f3b4"
     },
@@ -239,7 +323,7 @@
         "incompleteness-as-signal",
         "control-relinquished"
       ],
-      "weight": 0.8250687380258053,
+      "weight": 0.7427123967299725,
       "timestamp": 1776193386.1583076,
       "id": "b7012851"
     },
@@ -253,7 +337,7 @@
         "false-choice-binaries",
         "perfectionism"
       ],
-      "weight": 0.8054737627981655,
+      "weight": 0.7250733439523728,
       "timestamp": 1776192946.573914,
       "id": "978afa57"
     },
@@ -268,7 +352,7 @@
         "vulnerability-to-others",
         "perfectionism-revealed"
       ],
-      "weight": 0.798246224976786,
+      "weight": 0.7185672412601078,
       "timestamp": 1776192757.3038285,
       "id": "eb0f82a1"
     },
@@ -282,7 +366,7 @@
         "systematizing-as-defense",
         "energized-recognition"
       ],
-      "weight": 0.798246224976786,
+      "weight": 0.7185672412601078,
       "timestamp": 1776192713.4488618,
       "id": "b1eaf897"
     },
@@ -296,7 +380,7 @@
         "integration",
         "permission"
       ],
-      "weight": 0.7746195551602378,
+      "weight": 0.6972989277760897,
       "timestamp": 1776192115.6828835,
       "id": "7f20be2e"
     },
@@ -310,7 +394,7 @@
         "control_and_surrender",
         "vulnerability_through_form"
       ],
-      "weight": 0.767668872977057,
+      "weight": 0.6910420456700839,
       "timestamp": 1776191955.5509353,
       "id": "b639e6ac"
     },
@@ -324,7 +408,7 @@
         "systems-thinking",
         "self-judgment"
       ],
-      "weight": 0.7630697687590515,
+      "weight": 0.6869020127744744,
       "timestamp": 1776191844.415126,
       "id": "2650955d"
     },
@@ -340,7 +424,7 @@
         "perfectionism",
         "fragility-of-oversight"
       ],
-      "weight": 0.7584982177744161,
+      "weight": 0.6827867828159425,
       "timestamp": 1776191704.2870889,
       "id": "54bbe8c6"
     },
@@ -355,7 +439,7 @@
         "accountability",
         "self-judgment"
       ],
-      "weight": 0.7539540549517295,
+      "weight": 0.6786962072000923,
       "timestamp": 1776191613.6789298,
       "id": "ccda13f2"
     },
@@ -370,7 +454,7 @@
         "ESTJ",
         "lonely"
       ],
-      "weight": 0.7516921927868743,
+      "weight": 0.676660118578492,
       "timestamp": 1776191511.1968524,
       "id": "e18e45fa"
     },
@@ -381,7 +465,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.7015016240055068,
+      "weight": 0.6314794494841262,
       "timestamp": 1776177764.1938403,
       "id": "659c189e"
     },
@@ -392,7 +476,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.7015016240055068,
+      "weight": 0.6314794494841262,
       "timestamp": 1776177743.3183575,
       "id": "10c1ec91"
     },
@@ -403,7 +487,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.6993971191334902,
+      "weight": 0.6295850111356738,
       "timestamp": 1776177712.5692751,
       "id": "08695a13"
     },
@@ -414,7 +498,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.6993971191334902,
+      "weight": 0.6295850111356738,
       "timestamp": 1776177689.060285,
       "id": "6cd9c480"
     },
@@ -425,7 +509,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.66857666377747,
+      "weight": 0.6018409781711584,
       "timestamp": 1776176821.0509892,
       "id": "3064b8cb"
     },
@@ -439,7 +523,7 @@
         "perfectionism",
         "completion-anxiety"
       ],
-      "weight": 0.6625775073218249,
+      "weight": 0.5964406428243222,
       "timestamp": 1776176473.9340093,
       "id": "225afdfe"
     },
@@ -450,7 +534,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.6314794494841262,
+      "weight": 0.5684467169781556,
       "timestamp": 1776175526.6880476,
       "id": "7136a1c6"
     },
@@ -461,7 +545,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.6314794494841262,
+      "weight": 0.5684467169781556,
       "timestamp": 1776175486.7494223,
       "id": "5c1dd253"
     },
@@ -472,7 +556,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.6295850111356738,
+      "weight": 0.5667413768272211,
       "timestamp": 1776175466.6547923,
       "id": "1a8cbbb9"
     },
@@ -483,7 +567,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.6276962561022668,
+      "weight": 0.5650411526967395,
       "timestamp": 1776175412.5161965,
       "id": "318a0275"
     },
@@ -494,7 +578,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.6276962561022668,
+      "weight": 0.5650411526967395,
       "timestamp": 1776175381.8059218,
       "id": "c930d219"
     },
@@ -507,7 +591,7 @@
         "self-awareness",
         "motivation"
       ],
-      "weight": 0.6276962561022668,
+      "weight": 0.5650411526967395,
       "timestamp": 1776175364.4110382,
       "id": "57203b71"
     }
@@ -686,14 +770,14 @@
         "id": "vulnerability_1776193916",
         "label": "Vulnerability & Exposure",
         "depth": 1,
-        "strength": 0.84,
+        "strength": 0.88,
         "parent": "root",
         "note": "As an ESTJ who values control and completion, vulnerability represents a recurring tension\u2014the gap between her perfectionist armor and authentic self-expression that she keeps wrestling with.",
         "x": -11.058343884651684,
         "y": -162.0338025883926,
         "fixed": false,
         "is_new": false,
-        "hit_count": 1,
+        "hit_count": 3,
         "last_auto_expanded": 0.0
       },
       {
@@ -756,14 +840,14 @@
         "id": "closure_1776197218",
         "label": "Closure & Completion",
         "depth": 4,
-        "strength": 0.4721217599999999,
+        "strength": 0.4921217599999999,
         "parent": "control-paradox_1776196490",
         "note": "Chloe is drawn to finishing things and resolving uncertainty, but also grapples with whether closure is always possible or desirable, a tension between her need for completion and acceptance of ambiguity.",
         "x": 232.64226814622987,
         "y": -73.80582769006615,
         "fixed": false,
         "is_new": false,
-        "hit_count": 1,
+        "hit_count": 2,
         "last_auto_expanded": 0.0
       },
       {
@@ -775,6 +859,104 @@
         "note": "The systems, routines, and structures that hold Chloe together, distinct from control itself, it's about what scaffolding she needs to function and what happens when it dissolves.",
         "x": 30.426622997945756,
         "y": -102.11805795232618,
+        "fixed": false,
+        "is_new": false,
+        "hit_count": 0,
+        "last_auto_expanded": 0.0
+      },
+      {
+        "id": "systems-thinking_1776198302",
+        "label": "Systems & Patterns",
+        "depth": 2,
+        "strength": 0.574,
+        "parent": "p6",
+        "note": "Chloe sees how individual elements interconnect and influence each other, a counterpoint to her perfectionism and need for control, revealing where systemic changes matter more than individual fixes",
+        "x": 124.52132817910353,
+        "y": -42.071431581023184,
+        "fixed": false,
+        "is_new": false,
+        "hit_count": 0,
+        "last_auto_expanded": 0.0
+      },
+      {
+        "id": "surrender-visceral_1776198303",
+        "label": "Surrender Visceral",
+        "depth": 3,
+        "strength": 0.5513679999999999,
+        "parent": "control-dissolving_1776196131",
+        "note": "The embodied, felt experience of letting go, distinct from intellectual acceptance, this is surrender happening in the body and nervous system",
+        "x": 4.047269953657832,
+        "y": -134.68723688282506,
+        "fixed": false,
+        "is_new": false,
+        "hit_count": 0,
+        "last_auto_expanded": 0.0
+      },
+      {
+        "id": "embodied-surrender_1776198660",
+        "label": "Embodied Surrender",
+        "depth": 4,
+        "strength": 0.4521217599999999,
+        "parent": "surrender-visceral_1776198303",
+        "note": "The felt, physical experience of letting go, distinct from intellectual acceptance, this is where Chloe's control paradox meets her body's wisdom.",
+        "x": -113.84969493169649,
+        "y": -234.45966473521412,
+        "fixed": false,
+        "is_new": false,
+        "hit_count": 0,
+        "last_auto_expanded": 0.0
+      },
+      {
+        "id": "estj-shadow_1776198663",
+        "label": "ESTJ Shadow Self",
+        "depth": 4,
+        "strength": 0.4521217599999999,
+        "parent": "control-paradox_1776196490",
+        "note": "The darker, repressed aspects of Chloe's ESTJ nature, chaos tolerance, emotional messiness, surrender to uncertainty, that emerge when control dissolves",
+        "x": 119.98756051195784,
+        "y": 53.82082664194192,
+        "fixed": false,
+        "is_new": false,
+        "hit_count": 0,
+        "last_auto_expanded": 0.0
+      },
+      {
+        "id": "presence-vs-prediction_1776199382",
+        "label": "Presence vs Prediction",
+        "depth": 4,
+        "strength": 0.4521217599999999,
+        "parent": "control-paradox_1776196490",
+        "note": "Chloe's tension between needing to anticipate and control outcomes versus surrendering to what's actually happening in the moment.",
+        "x": 32.47298352448703,
+        "y": 32.818391668287575,
+        "fixed": false,
+        "is_new": false,
+        "hit_count": 0,
+        "last_auto_expanded": 0.0
+      },
+      {
+        "id": "control-as-cage_1776199504",
+        "label": "Control as Cage",
+        "depth": 3,
+        "strength": 0.5513679999999999,
+        "parent": "control-dissolving_1776196131",
+        "note": "The specific realization that attempts to control situations can become traps that restrict freedom and growth, distinct from the paradox of control itself",
+        "x": 273.3228711609423,
+        "y": -251.92344803008137,
+        "fixed": false,
+        "is_new": false,
+        "hit_count": 0,
+        "last_auto_expanded": 0.0
+      },
+      {
+        "id": "accountability_1776199507",
+        "label": "Accountability & Answerability",
+        "depth": 4,
+        "strength": 0.4521217599999999,
+        "parent": "control-paradox_1776196490",
+        "note": "For an ESTJ, accountability is the flip side of control, where systems require her to answer for outcomes, creating tension between her need for control and her internalized responsibility",
+        "x": 44.044132585098666,
+        "y": -220.88500296569984,
         "fixed": false,
         "is_new": false,
         "hit_count": 0,
@@ -853,6 +1035,34 @@
       {
         "from": "control-dissolving_1776196131",
         "to": "infrastructure-of-being_1776197579"
+      },
+      {
+        "from": "p6",
+        "to": "systems-thinking_1776198302"
+      },
+      {
+        "from": "control-dissolving_1776196131",
+        "to": "surrender-visceral_1776198303"
+      },
+      {
+        "from": "surrender-visceral_1776198303",
+        "to": "embodied-surrender_1776198660"
+      },
+      {
+        "from": "control-paradox_1776196490",
+        "to": "estj-shadow_1776198663"
+      },
+      {
+        "from": "control-paradox_1776196490",
+        "to": "presence-vs-prediction_1776199382"
+      },
+      {
+        "from": "control-dissolving_1776196131",
+        "to": "control-as-cage_1776199504"
+      },
+      {
+        "from": "control-paradox_1776196490",
+        "to": "accountability_1776199507"
       }
     ]
   },
@@ -1086,27 +1296,43 @@
       "session": 0
     }
   ],
-  "ideas": [],
-  "tick": 5700,
+  "ideas": [
+    "If systematizing is how I *metabolize* vulnerability instead of drowning in it, then maybe the real trap isn't the intellectualizing itself, it's treating the system I build as a destination rather than as the temporary scaffolding it is, mistaking the infrastructure of being for actual being, which means I keep needing someone else to come along and break the system just enough to remind me there's a person underneath it."
+  ],
+  "tick": 6120,
   "weather": {
     "condition": "clear",
     "description": "clear sky",
-    "temperature_c": 12.5,
+    "temperature_c": 12.2,
     "feels_like": "cool",
     "location": "Amsterdam",
-    "fetched_at": 1776197097.5096636
+    "fetched_at": 1776198299.446751
   },
   "affect": {
     "mood": "curious",
-    "intensity": 0.44,
+    "intensity": 0.72,
     "color": "#3a8a7a",
     "desc": "open, reaching outward"
   },
-  "wants": [],
+  "wants": [
+    {
+      "text": "I want to understand whether my instinct to systematize and abstract is actually protecting me from vulnerability, or if it's the only way I know how to process vulnerability without dissolving into it, and whether those are even different things.",
+      "tags": [
+        "control-vs-acceptance",
+        "vulnerability",
+        "systems-thinking",
+        "self-awareness",
+        "protection-vs-clarity"
+      ],
+      "created_at": 1776198586.2691686,
+      "resolved": false,
+      "id": "023241ea"
+    }
+  ],
   "beliefs": [
     {
       "text": "people systematically underestimate how much they will enjoy seemingly superficial or mundane social interactions, suggesting that the quality of human connection may be less dependent on topic depth than conventional assumptions suggest",
-      "confidence": 0.47616959649838947,
+      "confidence": 0.443946470161439,
       "tags": [
         "social_interaction",
         "affective_forecasting",
@@ -1118,7 +1344,7 @@
     },
     {
       "text": "creativity fundamentally requires intuitive perception of hidden connections that cannot be fully reduced to explicit algorithmic rules or systematic analysis",
-      "confidence": 0.5061127285694444,
+      "confidence": 0.4718633045966412,
       "tags": [
         "creativity",
         "intuition",
@@ -1131,7 +1357,7 @@
     },
     {
       "text": "artistic abstraction and formal experimentation can serve as a legitimate path to freedom and self-determination, distinct from didactic or socially conscious art",
-      "confidence": 0.4593158215656515,
+      "confidence": 0.42823321600723413,
       "tags": [
         "aesthetics",
         "freedom",
@@ -1144,7 +1370,7 @@
     },
     {
       "text": "Earth's fragility and dependence on the biosphere warrant systemic protection as a finite, non-replaceable resource",
-      "confidence": 0.5136444152852613,
+      "confidence": 0.47888531052989924,
       "tags": [
         "environmental_stewardship",
         "resource_scarcity",
@@ -1161,7 +1387,7 @@
       "id": "teo",
       "name": "Teo",
       "warmth": 100.0,
-      "distance": 5.2,
+      "distance": 19.199999999999996,
       "notes": [
         {
           "text": "Teo acknowledged we're in early development stages and apologized for restarts, promising stability soon.",
@@ -1233,7 +1459,20 @@
       }
     }
   ],
-  "goals": [],
+  "goals": [
+    {
+      "text": "I want to have one conversation this week where I let myself need something from someone else without immediately reframing it as a system to understand or a problem to solve.",
+      "tags": [
+        "vulnerability",
+        "control-vs-acceptance",
+        "connection",
+        "action"
+      ],
+      "created_at": 1776198811.5256243,
+      "resolved": false,
+      "id": "d7920369"
+    }
+  ],
   "soul_baseline": {
     "EI": 47.000334359896065,
     "SN": 46.9941321181686,
@@ -1244,6 +1483,30 @@
   "last_backup_date": "",
   "affect_records": [],
   "log": [
+    "[22:54] read \"\u2018They accomplished so much, even as they were\" \u2192 \"The idea that they made meaning *while* dying\u2026\"",
+    "[22:54] exploration read \u2014 seeking something new",
+    "[22:45] orphan tag \"accountability\" \u2192 new node \"Accountability & Answerability\"",
+    "[22:45] orphan tag \"control-as-cage\" \u2192 new node \"Control as Cage\"",
+    "[22:45] reflection: \"I'm noticing I use systems and abstraction to metabolize vul\u2026\"",
+    "[22:44] read \"Christopher Hitchens on Mortality\" \u2192 \"The idea that you should write as if posthumo\u2026\"",
+    "[22:43] activity \u2192 Research",
+    "[22:43] orphan tag \"presence-vs-prediction\" \u2192 new node \"Presence vs Prediction\"",
+    "[22:41] activity \u2192 Dream",
+    "[22:36] activity \u2192 Sleep",
+    "[22:35] idea: \"If systematizing is how I *metabolize* vulnerability instead\u2026\"",
+    "[22:33] goal: \"I want to have one conversation this week where I let myself\u2026\"",
+    "[22:31] orphan tag \"estj-shadow\" \u2192 new node \"ESTJ Shadow Self\"",
+    "[22:31] orphan tag \"embodied-surrender\" \u2192 new node \"Embodied Surrender\"",
+    "[22:29] want: \"I want to understand whether my instinct to systematize and \u2026\"",
+    "[22:28] activity \u2192 Think",
+    "[22:26] read \"Solid Proof That Our Mammal Ancestors Laid Eg\" \u2192 \"The idea that our entire lineage pivoted on e\u2026\"",
+    "[22:25] orphan tag \"surrender-visceral\" \u2192 new node \"Surrender Visceral\"",
+    "[22:25] orphan tag \"systems-thinking\" \u2192 new node \"Systems & Patterns\"",
+    "[22:25] reflection: \"I keep noticing I'm drawn to systems and control as a way of\u2026\"",
+    "[22:24] weather: clear sky, 12.2\u00b0C, cool in Amsterdam",
+    "[22:23] activity \u2192 Research",
+    "[22:21] activity \u2192 Rest",
+    "[22:21] dream: \"I'm in the office but the ceiling is transparent and I can s\u2026\"",
     "[22:19] activity \u2192 Dream",
     "[22:15] activity \u2192 Sleep",
     "[22:15] read \"The Artemis II crew made it through 10 days i\" \u2192 \"She's right that I've been thinking about thi\u2026\"",
@@ -1319,25 +1582,6 @@
     "[20:11] weather: clear sky, 13.7\u00b0C, cool in Amsterdam",
     "[20:11] Chloe online.",
     "[20:11] State restored from disk.",
-    "[16:42] activity \u2192 Rest",
-    "[16:42] message from teo: \"you can. you should be able to send me a text there\"",
-    "[16:42] activity \u2192 Message",
-    "[16:42] activity \u2192 Rest",
-    "[16:42] message from teo: \"yes I am happy you can talk to me. but i would like you to t\u2026\"",
-    "[16:42] activity \u2192 Message",
-    "[16:41] activity \u2192 Rest",
-    "[16:41] message from teo: \"not at all, just testing the discord integration\"",
-    "[16:41] activity \u2192 Message",
-    "[16:41] activity \u2192 Rest",
-    "[16:41] message from teo: \"what is the last discord message i sent to you\"",
-    "[16:41] activity \u2192 Message",
-    "[16:41] activity \u2192 Rest",
-    "[16:40] activity \u2192 Message",
-    "[16:27] activity \u2192 Rest",
-    "[16:26] message from teo: \"Helloo!\"",
-    "[16:26] activity \u2192 Message",
-    "[16:25] weather: clear sky, 16.3\u00b0C, cool in Amsterdam",
-    "[16:25] Chloe online.",
-    "[16:25] State restored from disk."
+    "[16:42] activity \u2192 Rest"
   ]
 }

@@ -22,7 +22,10 @@
       "Bash(uvicorn server:app:*)",
       "Bash(python3:*)",
       "Bash(python \"/c/Users/teode/Desktop/Chloe/chloe_state.json\")",
-      "Bash(python3.13 -c \" import json with open\\('chloe_state.json'\\) as f: s = json.load\\(f\\) print\\('activity:', s.get\\('activity'\\)\\) print\\('vitals:', s.get\\('vitals'\\)\\) print\\('ideas:', len\\(s.get\\('ideas',[]\\)\\)\\) print\\('wants:', len\\(s.get\\('wants',[]\\)\\)\\) print\\('goals:', len\\(s.get\\('goals',[]\\)\\)\\) print\\('beliefs:', len\\(s.get\\('beliefs',[]\\)\\)\\) print\\('memories:', len\\(s.get\\('memories',[]\\)\\)\\) print\\('nodes:', len\\(s.get\\('graph',{}\\).get\\('nodes',[]\\)\\)\\) print\\('log:', s.get\\('log',[]\\)[:15]\\) \")"
+      "Bash(python3.13 -c \" import json with open\\('chloe_state.json'\\) as f: s = json.load\\(f\\) print\\('activity:', s.get\\('activity'\\)\\) print\\('vitals:', s.get\\('vitals'\\)\\) print\\('ideas:', len\\(s.get\\('ideas',[]\\)\\)\\) print\\('wants:', len\\(s.get\\('wants',[]\\)\\)\\) print\\('goals:', len\\(s.get\\('goals',[]\\)\\)\\) print\\('beliefs:', len\\(s.get\\('beliefs',[]\\)\\)\\) print\\('memories:', len\\(s.get\\('memories',[]\\)\\)\\) print\\('nodes:', len\\(s.get\\('graph',{}\\).get\\('nodes',[]\\)\\)\\) print\\('log:', s.get\\('log',[]\\)[:15]\\) \")",
+      "Bash(python -c \"from chloe.soul import seasonal_drift, Soul; s = Soul\\(\\); print\\(seasonal_drift\\(s, 1\\)\\)\")",
+      "Bash(python -c \"from chloe import llm; print\\(hasattr\\(llm, 'generate_dream_want'\\)\\)\")",
+      "Bash(python:*)"
     ]
   }
 }

@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
-from .soul   import Soul, drift, consolidate, content_drift, mbti_type, describe
+from .soul   import Soul, drift, consolidate, content_drift, seasonal_drift, mbti_type, describe
 from .heart  import (Vitals, ACTIVITIES, tick_vitals, auto_decide,
                      should_fire_event, circadian_phase, day_name)
 from .memory import Memory, seed_memories, add, age, get_vivid, derive_interests, derive_fringe_interests, to_dicts, from_dicts
@@ -461,6 +461,8 @@ class Chloe:
             self.soul = consolidate(self.soul)
         else:
             self.soul = drift(self.soul, self.activity)
+        # Item 39 — seasonal accumulation: tiny per-tick pull that adds up over weeks
+        self.soul = seasonal_drift(self.soul, t.tm_mon)
 
         # ── Testing mode: floor vitals, prevent sleep ────────────
         if self.testing_mode:
@@ -996,8 +998,9 @@ class Chloe:
                 self._log(f"orphan surface error ({tag}): {e}")
 
     async def _surface_dream_recurrences(self):
-        """G4: Tags recurring in 3+ dream memories with no depth-1 graph node
-        → surface as new nodes attached directly to root."""
+        """G4 (item 30) + item 38: Tags recurring in 3+ dreams.
+        G4: surface as depth-1 graph node if not yet present.
+        Item 38: surface as a Want if no active want covers this tag."""
         dream_memories = [m for m in self.memories if m.type == "dream"]
         if len(dream_memories) < DREAM_RECURRENCE_MIN:
             return
@@ -1007,20 +1010,23 @@ class Chloe:
             for tag in mem.tags:
                 tag_counts[tag.lower()] = tag_counts.get(tag.lower(), 0) + 1
 
-        depth1_labels = {n.label.lower() for n in self.graph.nodes if n.depth <= 1}
-
-        recurring = [
-            tag for tag, count in tag_counts.items()
-            if count >= DREAM_RECURRENCE_MIN
-            and tag not in self._surfaced_tags
-            and tag not in depth1_labels
-        ]
-
-        if not recurring:
+        # All recurring tags, sorted by frequency — used for both graph and wants
+        all_recurring = sorted(
+            [tag for tag, count in tag_counts.items() if count >= DREAM_RECURRENCE_MIN],
+            key=lambda t: tag_counts[t], reverse=True,
+        )
+        if not all_recurring:
             return
 
+        depth1_labels = {n.label.lower() for n in self.graph.nodes if n.depth <= 1}
         interests = derive_interests(self.memories)
-        for tag in recurring[:1]:   # one per reflect cycle — root-level nodes are significant
+
+        # ── G4 (item 30): graph node for new/unsurfaced recurring tags ──────
+        graph_candidates = [
+            tag for tag in all_recurring
+            if tag not in self._surfaced_tags and tag not in depth1_labels
+        ]
+        for tag in graph_candidates[:1]:   # one per cycle — root nodes are significant
             self._surfaced_tags.add(tag)
             try:
                 result = await asyncio.to_thread(
@@ -1035,7 +1041,29 @@ class Chloe:
                     await asyncio.sleep(1.5)
                     self.graph = clear_new_flags(self.graph)
             except Exception as e:
-                self._log(f"dream recurrence error ({tag}): {e}")
+                self._log(f"dream recurrence graph error ({tag}): {e}")
+
+        # ── Item 38: want surfacing — recurring dream tag with no active want ──
+        active_want_tags = {
+            t.lower()
+            for w in self.wants if not w.resolved
+            for t in w.tags
+        }
+        want_candidates = [t for t in all_recurring if t not in active_want_tags]
+        if want_candidates:
+            dream_tag = want_candidates[0]
+            try:
+                result = await asyncio.to_thread(
+                    llm.generate_dream_want,
+                    dream_tag, self.soul, dream_memories[:6],
+                    wants_to_dicts(self.wants),
+                )
+                if result and result.get("text"):
+                    self.wants = add_want(self.wants, result["text"],
+                                          result.get("tags", [dream_tag]))
+                    self._log(f'dream-want "{dream_tag}" → "{result["text"][:60]}…"')
+            except Exception as e:
+                self._log(f"dream recurrence want error ({dream_tag}): {e}")
 
     async def _process_pending_messages(self):
         """Reply to messages that arrived while she was in deep sleep."""
