@@ -7,14 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
 <style>
-/* ── RESET ─────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
   --sw: 260px;
-  --pw: 300px;
-  --ch:  220px;
-
   --bg:       #07080a;
   --bg2:      #0d0f12;
   --bg3:      #121519;
@@ -35,31 +31,28 @@
   --r: 6px;
 }
 
-html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-mono); font-size: 12px; line-height: 1.6; overflow: hidden; user-select: none; }
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow: hidden;
+  user-select: none;
+}
 
 /* ── GRID ──────────────────────────────────────────────────── */
 .shell {
   display: grid;
-  grid-template-columns: var(--sw) 4px 1fr 4px var(--pw);
-  grid-template-rows: 44px 1fr 4px var(--ch);
+  grid-template-columns: var(--sw) 1fr;
+  grid-template-rows: 44px 1fr;
   height: 100vh;
-  background: var(--border);
-  gap: 1px;
 }
 
 .topbar  { grid-column: 1 / -1; grid-row: 1; background: var(--bg2); display: flex; align-items: center; padding: 0 16px; gap: 14px; border-bottom: 1px solid var(--border); }
-.sidebar { grid-column: 1;      grid-row: 2 / 5; background: var(--bg2); overflow-y: auto; }
-.main    { grid-column: 3;      grid-row: 2;     background: var(--bg);  overflow: hidden; position: relative; }
-.panel   { grid-column: 5;      grid-row: 2 / 5; background: var(--bg2); overflow: hidden; display: flex; flex-direction: column; }
-.chatbar { grid-column: 3;      grid-row: 4;     background: var(--bg2); display: flex; flex-direction: column; border-top: 1px solid var(--border); }
-
-/* ── RESIZE HANDLES ────────────────────────────────────────── */
-.rh-col { grid-row: 2 / 5; background: var(--border); cursor: col-resize; position: relative; transition: background 0.15s; z-index: 20; }
-.rh-row { grid-column: 3;  grid-row: 3; background: var(--border); cursor: row-resize; position: relative; transition: background 0.15s; z-index: 20; }
-.rh-col::after { content:''; position: absolute; inset: 0 -4px; }
-.rh-row::after { content:''; position: absolute; inset: -4px 0; }
-.rh-col:hover, .rh-row:hover,
-.rh-col.dragging, .rh-row.dragging { background: var(--gold2); }
+.sidebar { grid-column: 1; grid-row: 2; background: var(--bg2); overflow-y: auto; border-right: 1px solid var(--border); }
+.main    { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
 
 /* ── TOPBAR ────────────────────────────────────────────────── */
 .topbar-name { font-family: var(--font-serif); font-size: 18px; font-weight: 300; font-style: italic; color: var(--gold); letter-spacing: 2px; }
@@ -83,11 +76,11 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
 /* ── SIDEBAR SECTIONS ──────────────────────────────────────── */
-.section { padding: 14px; border-bottom: 1px solid var(--border); }
-.section-title { font-size: 7px; letter-spacing: 3px; text-transform: uppercase; color: var(--text3); margin-bottom: 12px; }
+.section { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.section-title { font-size: 8px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--text2); margin-bottom: 10px; }
 
 /* Vitals */
-.vital { margin-bottom: 10px; }
+.vital { margin-bottom: 9px; }
 .vital-row { display: flex; justify-content: space-between; font-size: 9px; color: var(--text2); margin-bottom: 4px; letter-spacing: 1px; text-transform: uppercase; }
 .vital-val { color: var(--text); }
 .bar-track { height: 2px; background: var(--bg3); border-radius: 1px; }
@@ -97,7 +90,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .bar-curiosity { background: var(--teal);   box-shadow: 0 0 4px var(--teal); }
 
 /* Soul */
-.soul-slider { margin-bottom: 14px; }
+.soul-slider { margin-bottom: 12px; }
 .soul-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
 .soul-labels { display: flex; gap: 6px; font-size: 8px; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; }
 .soul-labels span.active { color: var(--gold2); }
@@ -105,7 +98,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .slider-track { height: 4px; background: var(--bg3); border-radius: 2px; position: relative; cursor: pointer; }
 .slider-fill  { position: absolute; top: 0; height: 100%; border-radius: 2px; background: linear-gradient(to right, var(--blue), var(--gold)); transition: width 1.2s ease; }
 .slider-thumb { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 8px; height: 8px; border-radius: 50%; background: var(--gold); transition: left 1.2s ease; box-shadow: 0 0 6px var(--gold2); }
-.soul-desc { font-family: var(--font-serif); font-size: 13px; font-style: italic; color: var(--text2); line-height: 1.7; padding: 10px 0 2px; }
+.soul-desc { font-family: var(--font-serif); font-size: 13px; font-style: italic; color: var(--text2); line-height: 1.7; padding: 8px 0 2px; }
 .world-line { font-size: 11px; color: var(--text2); line-height: 1.8; }
 
 /* Interests */
@@ -137,57 +130,118 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .person-note { font-size: 9px; color: var(--text2); font-style: italic; line-height: 1.5; padding-left: 8px; border-left: 1px solid var(--border2); }
 .person-note.followed-up { color: var(--text3); text-decoration: line-through; }
 
-/* ── GRAPH ─────────────────────────────────────────────────── */
-#graph-canvas { width: 100%; height: 100%; display: block; }
-.graph-overlay { position: absolute; bottom: 10px; left: 12px; font-size: 8px; color: var(--text3); letter-spacing: 2px; pointer-events: none; }
-.graph-selected-info { position: absolute; top: 12px; right: 12px; background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r); padding: 10px 14px; max-width: 210px; display: none; }
-.graph-selected-info.visible { display: block; }
-.sel-label { font-size: 11px; color: var(--gold); margin-bottom: 4px; }
-.sel-note  { font-size: 9px; color: var(--text2); line-height: 1.6; margin-bottom: 8px; }
-.sel-expand { font-size: 8px; letter-spacing: 2px; color: var(--gold2); border: 1px solid #2a2010; border-radius: 3px; padding: 3px 8px; cursor: pointer; background: none; font-family: var(--font-mono); }
-.sel-expand:hover { color: var(--gold); border-color: var(--gold2); }
+/* ── MAIN TAB BAR ──────────────────────────────────────────── */
+.main-tabs {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  padding: 0 4px;
+}
+.mtab {
+  padding: 0 18px;
+  height: 38px;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text3);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  transition: color 0.2s, border-color 0.2s;
+  white-space: nowrap;
+}
+.mtab:hover { color: var(--text2); }
+.mtab.active { color: var(--gold); border-bottom-color: var(--gold2); }
+.mtab-spacer { flex: 1; }
+.mtab-dim { opacity: 0.6; }
 
-/* ── RIGHT PANEL ───────────────────────────────────────────── */
-.panel-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-.ptab { flex: 1; padding: 9px 0; font-size: 7px; letter-spacing: 2px; text-transform: uppercase; text-align: center; color: var(--text3); cursor: pointer; background: none; border: none; font-family: var(--font-mono); border-bottom: 2px solid transparent; transition: all 0.2s; }
-.ptab.active { color: var(--gold2); border-bottom-color: var(--gold2); }
-.panel-body { flex: 1; overflow-y: auto; padding: 10px; }
-.panel-body::-webkit-scrollbar { width: 2px; }
-.panel-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 1px; }
+/* ── CONTENT AREA ──────────────────────────────────────────── */
+.main-content {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.page {
+  display: none;
+  position: absolute;
+  inset: 0;
+}
+.page.active              { display: flex; flex-direction: column; }
+#page-graph.active        { display: block; overflow: hidden; }
+#page-panel.active        { display: block; overflow-y: auto; }
+
+/* ── CHAT PAGE ─────────────────────────────────────────────── */
+#page-chat { overflow: hidden; }
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.chat-messages::-webkit-scrollbar { width: 2px; }
+.chat-messages::-webkit-scrollbar-thumb { background: var(--border2); }
+
+.msg { max-width: 65%; padding: 9px 14px; border-radius: 10px; font-size: 11px; line-height: 1.65; }
+.msg-chloe { align-self: flex-start; background: var(--bg3); border: 1px solid var(--border2); border-radius: 10px 10px 10px 2px; color: var(--text); }
+.msg-user  { align-self: flex-end;   background: #0d1a0d;   border: 1px solid #1a2a1a;        border-radius: 10px 10px 2px 10px; color: #5a8a5a; }
+.msg-auto  { border-color: var(--gold2); }
+.msg-meta  { font-size: 7px; color: var(--text3); letter-spacing: 1px; margin-bottom: 4px; text-transform: uppercase; }
+.msg-queued { opacity: 0.45; font-style: italic; }
+
+/* ── PANEL PAGE ────────────────────────────────────────────── */
+.panel-body { padding: 16px 20px; }
 
 /* Memory */
-.memory-item { padding: 7px 0; border-bottom: 1px solid var(--border); }
-.memory-meta { font-size: 8px; color: var(--text3); letter-spacing: 1px; margin-bottom: 3px; }
-.memory-text { font-size: 9px; color: var(--text2); line-height: 1.7; }
+.memory-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.memory-meta { font-size: 8px; color: var(--text3); letter-spacing: 1px; margin-bottom: 4px; }
+.memory-text { font-size: 10px; color: var(--text2); line-height: 1.75; }
 .memory-item:hover .memory-text { color: var(--text); }
-.memory-dream      { border-left: 2px solid var(--violet); padding-left: 8px; }
-.memory-creative   { border-left: 2px solid var(--gold2);  padding-left: 8px; }
-.memory-reflection { border-left: 2px solid var(--sage);   padding-left: 8px; }
-.memory-journal    { border-left: 2px solid var(--blue);   padding-left: 8px; }
+.memory-dream      { border-left: 2px solid var(--violet); padding-left: 10px; }
+.memory-creative   { border-left: 2px solid var(--gold2);  padding-left: 10px; }
+.memory-reflection { border-left: 2px solid var(--sage);   padding-left: 10px; }
+.memory-journal    { border-left: 2px solid var(--blue);   padding-left: 10px; }
 
 /* Ideas */
-.idea-item { padding: 6px 0; border-bottom: 1px solid var(--border); }
-.idea-text { font-size: 9px; color: #4a6a8a; line-height: 1.7; }
+.idea-item { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.idea-text { font-size: 10px; color: #4a6a8a; line-height: 1.75; }
 .idea-text::before { content: "→ "; color: var(--text3); }
 
 /* Mind */
-.mind-section-title { font-size: 7px; letter-spacing: 3px; text-transform: uppercase; color: var(--text3); padding: 10px 0 5px; }
-.want-item  { padding: 6px 0; border-bottom: 1px solid var(--border); }
-.want-text  { font-size: 9px; color: var(--text2); line-height: 1.7; }
+.mind-section-title { font-size: 8px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--text2); padding: 14px 0 6px; }
+.want-item  { padding: 7px 0; border-bottom: 1px solid var(--border); }
+.want-text  { font-size: 10px; color: var(--text2); line-height: 1.7; }
 .want-text.resolved { color: var(--text3); text-decoration: line-through; opacity: 0.5; }
-.want-tags  { font-size: 7px; color: var(--text3); letter-spacing: 1px; margin-top: 2px; }
-.belief-item { padding: 6px 0; border-bottom: 1px solid var(--border); }
-.belief-text { font-size: 9px; color: var(--text2); line-height: 1.7; font-style: italic; }
-.belief-conf-track { height: 2px; background: var(--bg3); border-radius: 1px; margin-top: 4px; }
+.want-tags  { font-size: 8px; color: var(--text3); letter-spacing: 1px; margin-top: 3px; }
+.belief-item { padding: 7px 0; border-bottom: 1px solid var(--border); }
+.belief-text { font-size: 10px; color: var(--text2); line-height: 1.7; font-style: italic; }
+.belief-conf-track { height: 2px; background: var(--bg3); border-radius: 1px; margin-top: 5px; }
 .belief-conf-fill  { height: 100%; border-radius: 1px; background: var(--rose); transition: width 1.5s ease; }
 
 /* Log */
-.log-item { padding: 4px 0; font-size: 9px; color: var(--text3); line-height: 1.5; border-bottom: 1px solid var(--border); }
+.log-item { padding: 5px 0; font-size: 9px; color: var(--text3); line-height: 1.5; border-bottom: 1px solid var(--border); }
 .log-item:first-child { color: var(--text2); }
 
-/* ── ADMIN TAB ─────────────────────────────────────────────── */
+/* ── GRAPH PAGE ────────────────────────────────────────────── */
+#graph-canvas { width: 100%; height: 100%; display: block; }
+.graph-overlay { position: absolute; bottom: 12px; left: 14px; font-size: 8px; color: var(--text3); letter-spacing: 2px; pointer-events: none; }
+.graph-selected-info { position: absolute; top: 14px; right: 14px; background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r); padding: 12px 16px; max-width: 220px; display: none; }
+.graph-selected-info.visible { display: block; }
+.sel-label { font-size: 11px; color: var(--gold); margin-bottom: 5px; }
+.sel-note  { font-size: 9px; color: var(--text2); line-height: 1.6; margin-bottom: 10px; }
+.sel-expand { font-size: 8px; letter-spacing: 2px; color: var(--gold2); border: 1px solid #2a2010; border-radius: 3px; padding: 4px 10px; cursor: pointer; background: none; font-family: var(--font-mono); }
+.sel-expand:hover { color: var(--gold); border-color: var(--gold2); }
+
+/* ── ADMIN ─────────────────────────────────────────────────── */
 .admin-block { margin-bottom: 4px; }
-.admin-block-title { font-size: 7px; letter-spacing: 3px; text-transform: uppercase; color: var(--text3); padding: 10px 0 8px; }
+.admin-block-title { font-size: 8px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--text2); padding: 12px 0 8px; }
 .admin-vital-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .admin-vital-label { font-size: 8px; letter-spacing: 1px; text-transform: uppercase; color: var(--text2); width: 52px; }
 .admin-vital-val   { font-size: 9px; color: var(--text); width: 26px; text-align: right; }
@@ -196,41 +250,32 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .admin-btn { padding: 2px 7px; border-radius: 3px; border: 1px solid var(--border2); background: transparent; color: var(--text2); font-family: var(--font-mono); font-size: 10px; cursor: pointer; transition: all 0.15s; }
 .admin-btn:hover { border-color: var(--gold2); color: var(--gold); }
 .admin-mood-grid  { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
-.admin-mood-btn   { padding: 5px 6px; border-radius: var(--r); border: 1px solid var(--border); background: transparent; color: var(--text2); font-family: var(--font-mono); font-size: 8px; letter-spacing: 1px; text-align: center; cursor: pointer; transition: all 0.2s; }
+.admin-mood-btn   { padding: 6px 8px; border-radius: var(--r); border: 1px solid var(--border); background: transparent; color: var(--text2); font-family: var(--font-mono); font-size: 9px; letter-spacing: 1px; text-align: center; cursor: pointer; transition: all 0.2s; }
 .admin-mood-btn:hover  { border-color: var(--border2); color: var(--text); }
 .admin-mood-btn.active { border-color: currentColor; background: color-mix(in srgb, currentColor 12%, transparent); }
 .admin-soul-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .admin-soul-key { font-size: 8px; letter-spacing: 2px; color: var(--text2); width: 20px; text-align: center; }
 .admin-soul-num { font-size: 9px; color: var(--text3); width: 28px; text-align: right; }
-.admin-reset-btn { margin-top: 6px; width: 100%; padding: 6px; border-radius: var(--r); border: 1px solid var(--border2); background: transparent; color: var(--text2); font-family: var(--font-mono); font-size: 8px; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; transition: all 0.2s; }
+.admin-reset-btn { margin-top: 6px; width: 100%; padding: 7px; border-radius: var(--r); border: 1px solid var(--border2); background: transparent; color: var(--text2); font-family: var(--font-mono); font-size: 8px; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; transition: all 0.2s; }
 .admin-reset-btn:hover { border-color: var(--gold2); color: var(--gold); }
 .admin-divider { height: 1px; background: var(--border); margin: 4px 0 10px; }
 
 /* ── CHAT BAR ──────────────────────────────────────────────── */
-.chat-messages { flex: 1; overflow-y: auto; padding: 8px 14px; display: flex; flex-direction: column; gap: 7px; }
-.chat-messages::-webkit-scrollbar { width: 2px; }
-.chat-messages::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 1px; }
-.msg { max-width: 60%; padding: 7px 11px; border-radius: 8px; font-size: 10px; line-height: 1.6; }
-.msg-chloe { align-self: flex-start; background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px 8px 8px 2px; color: var(--text); }
-.msg-user  { align-self: flex-end; background: #0d1a0d; border: 1px solid #1a2a1a; border-radius: 8px 8px 2px 8px; color: #5a8a5a; }
-.msg-auto  { border-color: var(--gold2); }
-.msg-meta  { font-size: 7px; color: var(--text3); letter-spacing: 1px; margin-bottom: 3px; text-transform: uppercase; }
-.msg-queued { opacity: 0.45; font-style: italic; }
-
-.chat-input-row { display: flex; align-items: center; gap: 7px; padding: 7px 14px; border-top: 1px solid var(--border); }
+.chatbar { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--bg2); }
+.chat-input-row { display: flex; align-items: center; gap: 8px; padding: 9px 16px; }
 .person-pills   { display: flex; gap: 4px; flex-shrink: 0; }
 .person-pill {
-  padding: 4px 10px; border-radius: 12px; border: 1px solid var(--border2);
+  padding: 5px 12px; border-radius: 14px; border: 1px solid var(--border2);
   background: transparent; color: var(--text2); font-family: var(--font-mono);
-  font-size: 8px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+  font-size: 9px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
   transition: all 0.2s; white-space: nowrap;
 }
-.person-pill:hover  { border-color: var(--border2); color: var(--text); }
-.person-pill.active { border-color: var(--gold2); color: var(--gold); background: rgba(200,169,110,0.08); }
-.chat-input { flex: 1; background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--r); padding: 7px 11px; color: var(--text); font-family: var(--font-mono); font-size: 11px; outline: none; transition: border-color 0.2s; }
+.person-pill:hover  { color: var(--text); }
+.person-pill.active { border-color: var(--gold2); color: var(--gold); background: rgba(200,169,110,0.07); }
+.chat-input { flex: 1; background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--r); padding: 8px 12px; color: var(--text); font-family: var(--font-mono); font-size: 11px; outline: none; transition: border-color 0.2s; }
 .chat-input:focus { border-color: var(--gold2); }
 .chat-input::placeholder { color: var(--text3); }
-.send-btn { padding: 7px 13px; background: #1a150a; border: 1px solid var(--gold2); border-radius: var(--r); color: var(--gold2); font-family: var(--font-mono); font-size: 11px; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+.send-btn { padding: 8px 14px; background: #1a150a; border: 1px solid var(--gold2); border-radius: var(--r); color: var(--gold2); font-family: var(--font-mono); font-size: 11px; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
 .send-btn:hover { background: #251e0f; color: var(--gold); }
 
 /* ── NODE CONTEXT MENU ─────────────────────────────────────── */
@@ -242,7 +287,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   min-width: 120px;
 }
 .node-menu-label { font-size: 9px; color: var(--gold); letter-spacing: 1px; padding: 3px 6px 6px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
-.node-menu-btn { display: block; width: 100%; padding: 5px 8px; background: none; border: none; color: var(--text2); font-family: var(--font-mono); font-size: 9px; letter-spacing: 1px; text-align: left; cursor: pointer; border-radius: 3px; transition: all 0.15s; }
+.node-menu-btn { display: block; width: 100%; padding: 6px 8px; background: none; border: none; color: var(--text2); font-family: var(--font-mono); font-size: 9px; letter-spacing: 1px; text-align: left; cursor: pointer; border-radius: 3px; transition: all 0.15s; }
 .node-menu-btn:hover { background: var(--border); color: var(--rose); }
 
 /* ── SCROLLBARS ────────────────────────────────────────────── */
@@ -327,47 +372,57 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
   </aside>
 
-  <!-- LEFT RESIZE HANDLE -->
-  <div class="rh-col" data-type="left" id="rh-left"></div>
-
-  <!-- GRAPH -->
+  <!-- MAIN -->
   <main class="main">
-    <canvas id="graph-canvas"></canvas>
-    <div class="graph-overlay">drag node · right-click remove · scroll zoom · drag canvas pan</div>
-    <div class="graph-selected-info" id="sel-info">
-      <div class="sel-label" id="sel-label"></div>
-      <div class="sel-note"  id="sel-note"></div>
-      <button class="sel-expand" id="sel-expand-btn">expand</button>
+
+    <!-- TAB BAR -->
+    <nav class="main-tabs">
+      <button class="mtab active" data-tab="chat"   onclick="switchTab('chat')">chat</button>
+      <button class="mtab"        data-tab="memory" onclick="switchTab('memory')">memory</button>
+      <button class="mtab"        data-tab="mind"   onclick="switchTab('mind')">mind</button>
+      <button class="mtab"        data-tab="ideas"  onclick="switchTab('ideas')">ideas</button>
+      <button class="mtab"        data-tab="graph"  onclick="switchTab('graph')">graph</button>
+      <button class="mtab"        data-tab="log"    onclick="switchTab('log')">log</button>
+      <span class="mtab-spacer"></span>
+      <button class="mtab mtab-dim" data-tab="admin" onclick="switchTab('admin')">admin</button>
+    </nav>
+
+    <!-- CONTENT AREA -->
+    <div class="main-content">
+
+      <!-- Chat page (default) -->
+      <div id="page-chat" class="page active">
+        <div class="chat-messages" id="chat-messages"></div>
+      </div>
+
+      <!-- Panel page: memory / mind / ideas / log / admin -->
+      <div id="page-panel" class="page">
+        <div class="panel-body" id="panel-body"></div>
+      </div>
+
+      <!-- Graph page -->
+      <div id="page-graph" class="page">
+        <canvas id="graph-canvas"></canvas>
+        <div class="graph-overlay">drag · right-click remove · scroll zoom · drag pan</div>
+        <div class="graph-selected-info" id="sel-info">
+          <div class="sel-label" id="sel-label"></div>
+          <div class="sel-note"  id="sel-note"></div>
+          <button class="sel-expand" id="sel-expand-btn">expand</button>
+        </div>
+      </div>
+
     </div>
+
+    <!-- CHAT INPUT — always visible -->
+    <div class="chatbar">
+      <div class="chat-input-row">
+        <div class="person-pills" id="person-pills"></div>
+        <input class="chat-input" id="chat-input" placeholder="say something…" autocomplete="off" />
+        <button class="send-btn" id="send-btn">→</button>
+      </div>
+    </div>
+
   </main>
-
-  <!-- RIGHT RESIZE HANDLE -->
-  <div class="rh-col" data-type="right" id="rh-right"></div>
-
-  <!-- RIGHT PANEL -->
-  <div class="panel">
-    <div class="panel-tabs">
-      <button class="ptab active" onclick="switchTab('memory')">memory</button>
-      <button class="ptab" onclick="switchTab('ideas')">ideas</button>
-      <button class="ptab" onclick="switchTab('mind')">mind</button>
-      <button class="ptab" onclick="switchTab('admin')">admin</button>
-      <button class="ptab" onclick="switchTab('log')">log</button>
-    </div>
-    <div class="panel-body" id="panel-body"></div>
-  </div>
-
-  <!-- CHAT RESIZE HANDLE -->
-  <div class="rh-row" id="rh-chat"></div>
-
-  <!-- CHAT BAR -->
-  <div class="chatbar">
-    <div class="chat-messages" id="chat-messages"></div>
-    <div class="chat-input-row">
-      <div class="person-pills" id="person-pills"></div>
-      <input class="chat-input" id="chat-input" placeholder="say something…" autocomplete="off" />
-      <button class="send-btn" id="send-btn">→</button>
-    </div>
-  </div>
 
 </div>
 
@@ -379,9 +434,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────
-// Must match the port you pass to uvicorn, e.g. --port 8080
-const API      = 'http://localhost:8080';
-const POLL_MS  = 4000;
+const API     = 'http://localhost:8080';
+const POLL_MS = 4000;
 
 const MOOD_COLORS = {
   content:    '#4a7a5a', restless:   '#8a7a3e', irritable:  '#8a4a4a',
@@ -411,7 +465,7 @@ const DEPTH_COLORS = ['#c8a96e','#4a7fa8','#6a5a9a','#3a8a7a','#8a4a5a','#8a7a3a
 
 // ── STATE ────────────────────────────────────────────────────
 let state        = null;
-let activeTab    = 'memory';
+let activeTab    = 'chat';
 let activePerson = 'teo';
 
 // Graph
@@ -427,13 +481,13 @@ let draggingNode    = null;
 let dragOrigin      = null;
 let nodeMoved       = false;
 let nodeMenuTarget  = null;
+let panInitialized  = false;
 
 // ── INIT ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   buildSoulSliders();
   buildActivityGrid();
   initGraph();
-  initResize();
   poll();
   setInterval(poll, POLL_MS);
   document.getElementById('send-btn').onclick = sendChat;
@@ -442,52 +496,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('node-menu-remove').onclick = removeMenuNode;
   document.addEventListener('click', () => { document.getElementById('node-menu').style.display = 'none'; });
 });
-
-// ── RESIZE ───────────────────────────────────────────────────
-function initResize() {
-  let resizing = null;
-
-  ['rh-left','rh-right','rh-chat'].forEach(id => {
-    document.getElementById(id).addEventListener('mousedown', e => {
-      e.preventDefault();
-      const el = e.currentTarget;
-      const type = el.dataset.type || 'chat';
-      let startVal;
-      const root = document.documentElement;
-      if (type === 'left')  startVal = parseInt(getComputedStyle(root).getPropertyValue('--sw'));
-      if (type === 'right') startVal = parseInt(getComputedStyle(root).getPropertyValue('--pw'));
-      if (type === 'chat' || id === 'rh-chat') startVal = parseInt(getComputedStyle(root).getPropertyValue('--ch'));
-      const startX = e.clientX, startY = e.clientY;
-      resizing = { type: (id === 'rh-chat') ? 'chat' : type, startVal, startX, startY, el };
-      el.classList.add('dragging');
-      document.body.style.cursor = (id === 'rh-chat') ? 'row-resize' : 'col-resize';
-      document.body.style.userSelect = 'none';
-    });
-  });
-
-  document.addEventListener('mousemove', e => {
-    if (!resizing) return;
-    const root = document.documentElement;
-    if (resizing.type === 'left') {
-      const v = Math.max(180, Math.min(420, resizing.startVal + e.clientX - resizing.startX));
-      root.style.setProperty('--sw', v + 'px');
-    } else if (resizing.type === 'right') {
-      const v = Math.max(200, Math.min(520, resizing.startVal - (e.clientX - resizing.startX)));
-      root.style.setProperty('--pw', v + 'px');
-    } else {
-      const v = Math.max(100, Math.min(window.innerHeight * 0.55, resizing.startVal - (e.clientY - resizing.startY)));
-      root.style.setProperty('--ch', v + 'px');
-    }
-  });
-
-  document.addEventListener('mouseup', () => {
-    if (!resizing) return;
-    resizing.el.classList.remove('dragging');
-    resizing = null;
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-  });
-}
 
 // ── POLLING ───────────────────────────────────────────────────
 async function poll() {
@@ -531,9 +539,7 @@ function applyState(s) {
     pill.style.borderColor  = color + '88';
   }
 
-  // Profile portrait — backend chooses PNG from activity / mood (chloe/avatar.py).
-  // Use URL resolution (not string concat) so ports / trailing slashes behave;
-  // compare to profileImg.src (browser-normalised) so we always catch real changes.
+  // Profile portrait
   const profileImg = document.getElementById('profile-img');
   if (profileImg) {
     const DEFAULT_AVATAR = 'image.webp';
@@ -565,16 +571,16 @@ function applyState(s) {
   document.querySelectorAll('.act-btn').forEach(btn =>
     btn.classList.toggle('active', btn.dataset.id === s.activity));
 
-  // People — also rebuild person pills in chat bar
+  // People
   if (s.persons) { renderPeople(s.persons); renderPersonPills(s.persons); }
 
-  // Graph
+  // Graph data
   mergeGraph(s.graph);
 
-  // Panel
-  renderPanel(s);
+  // Panel (skip when on chat or graph — those update themselves)
+  if (activeTab !== 'chat' && activeTab !== 'graph') renderPanel(s);
 
-  // Chat
+  // Chat messages
   renderChat(s.chat);
 }
 
@@ -679,16 +685,44 @@ function selectPerson(id) {
     p.classList.toggle('active', p.dataset.id === id));
 }
 
-// ── PANEL TABS ────────────────────────────────────────────────
+// ── TAB SWITCHING ─────────────────────────────────────────────
 function switchTab(tab) {
   activeTab = tab;
-  document.querySelectorAll('.ptab').forEach(t =>
-    t.classList.toggle('active', t.textContent.trim() === tab));
-  if (state) renderPanel(state);
+
+  document.querySelectorAll('.mtab').forEach(t =>
+    t.classList.toggle('active', t.dataset.tab === tab));
+
+  const isChat  = tab === 'chat';
+  const isGraph = tab === 'graph';
+  const isPanel = !isChat && !isGraph;
+
+  document.getElementById('page-chat').classList.toggle('active',  isChat);
+  document.getElementById('page-graph').classList.toggle('active', isGraph);
+  document.getElementById('page-panel').classList.toggle('active', isPanel);
+
+  if (isGraph) {
+    // Trigger canvas resize after layout paint
+    requestAnimationFrame(() => {
+      const canvas = document.getElementById('graph-canvas');
+      if (canvas.offsetWidth > 0) {
+        canvas.width  = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        if (!panInitialized) {
+          pan.x = canvas.width  / 2;
+          pan.y = canvas.height / 2;
+          panInitialized = true;
+        }
+      }
+    });
+  }
+
+  if (isPanel && state) renderPanel(state);
 }
 
+// ── PANEL RENDER ──────────────────────────────────────────────
 function renderPanel(s) {
   const body = document.getElementById('panel-body');
+
   if (activeTab === 'memory') {
     body.innerHTML = (s.memories || []).map(m => {
       const cls = { dream:'memory-dream', creative:'memory-creative', reflection:'memory-reflection', journal:'memory-journal' }[m.type] || '';
@@ -714,17 +748,17 @@ function renderPanel(s) {
           <div class="want-text ${w.resolved?'resolved':''}">${w.resolved?'✓':'◦'} ${w.text}</div>
           <div class="want-tags">${(w.tags||[]).join(' · ')}</div>
         </div>`).join('') : '<div class="log-item" style="padding:8px 0">none yet</div>'}
-      <div class="mind-section-title" style="margin-top:8px">goals</div>
+      <div class="mind-section-title">goals</div>
       ${goals.length ? goals.map(g => `
         <div class="want-item">
           <div class="want-text ${g.resolved?'resolved':''}">${g.resolved?'✓':'→'} ${g.text}</div>
           <div class="want-tags">${(g.tags||[]).join(' · ')}</div>
         </div>`).join('') : '<div class="log-item" style="padding:8px 0">none yet</div>'}
-      <div class="mind-section-title" style="margin-top:8px">beliefs</div>
+      <div class="mind-section-title">beliefs</div>
       ${beliefs.length ? beliefs.map(b => `
         <div class="belief-item">
           <div class="belief-text">${b.text}</div>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <div style="display:flex;align-items:center;gap:8px;margin-top:5px">
             <div class="belief-conf-track" style="flex:1"><div class="belief-conf-fill" style="width:${Math.round(b.confidence*100)}%"></div></div>
             <div style="font-size:8px;color:var(--text3);width:28px">${Math.round(b.confidence*100)}%</div>
           </div>
@@ -734,6 +768,7 @@ function renderPanel(s) {
     renderAdmin(s, body);
 
   } else {
+    // log
     body.innerHTML = (s.log || []).map(l =>
       `<div class="log-item">${l}</div>`).join('');
   }
@@ -742,11 +777,10 @@ function renderPanel(s) {
 function renderAdmin(s, body) {
   const v = s.vitals;
   const vitalRows = [
-    { key:'energy',    label:'energy',    val: Math.round(v.energy),            color:'var(--blue)',   apiKey:'energy'    },
-    { key:'social',    label:'social',    val: Math.round(v.social_battery),    color:'var(--violet)', apiKey:'social'    },
-    { key:'curiosity', label:'curiosity', val: Math.round(v.curiosity),         color:'var(--teal)',   apiKey:'curiosity' },
+    { key:'energy',    label:'energy',    val: Math.round(v.energy),         color:'var(--blue)',   apiKey:'energy'    },
+    { key:'social',    label:'social',    val: Math.round(v.social_battery), color:'var(--violet)', apiKey:'social'    },
+    { key:'curiosity', label:'curiosity', val: Math.round(v.curiosity),      color:'var(--teal)',   apiKey:'curiosity' },
   ];
-
   const vitalsHtml = vitalRows.map(r => `
     <div class="admin-vital-row">
       <div class="admin-vital-label">${r.label}</div>
@@ -764,7 +798,7 @@ function renderAdmin(s, body) {
 
   const soul = s.soul || {};
   const soulHtml = TRAITS.map(t => {
-    const val = Math.round(soul[t.key] ?? 50);
+    const val    = Math.round(soul[t.key] ?? 50);
     const active = val >= 50 ? t.right : t.left;
     return `
       <div class="admin-soul-row">
@@ -809,7 +843,6 @@ async function setMood(mood) {
 }
 
 function resetSoulBaseline() {
-  // Reset soul back to INFP-ish defaults
   const defaults = { EI:58, SN:62, TF:56, JP:67 };
   Promise.all(Object.entries(defaults).map(([trait, value]) =>
     fetch(`${API}/soul`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ trait, value }) })
@@ -817,18 +850,22 @@ function resetSoulBaseline() {
 }
 
 // ── CHAT ─────────────────────────────────────────────────────
-let lastChatLen = 0;
-
 function renderChat(messages) {
-  if (!messages || messages.length === lastChatLen) return;
-  lastChatLen = messages.length;
+  if (!messages || !messages.length) return;
   const container = document.getElementById('chat-messages');
+  // Only re-render when content changed (compare last message fingerprint)
+  const last = messages[messages.length - 1];
+  const fingerprint = `${messages.length}:${last.from}:${last.time}:${last.text.slice(0,30)}`;
+  if (container.dataset.fingerprint === fingerprint) return;
+  container.dataset.fingerprint = fingerprint;
+  // Preserve scroll position — only snap to bottom if already near it
+  const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
   container.innerHTML = messages.map(m => `
     <div class="msg ${m.from === 'chloe' ? 'msg-chloe' + (m.autonomous ? ' msg-auto' : '') : 'msg-user'}">
       <div class="msg-meta">${m.from === 'chloe' ? 'chloe' : 'you'} · ${m.time}${m.autonomous ? ' · unprompted' : ''}</div>
       ${m.text}
     </div>`).join('');
-  container.scrollTop = container.scrollHeight;
+  if (atBottom) container.scrollTop = container.scrollHeight;
 }
 
 async function sendChat() {
@@ -837,10 +874,15 @@ async function sendChat() {
   if (!msg) return;
   input.value = '';
 
+  // Switch to chat tab so user sees the reply
+  if (activeTab !== 'chat') switchTab('chat');
+
+  // Optimistic render — will be replaced by server state on next poll
   const container = document.getElementById('chat-messages');
   const now  = new Date();
   const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
   container.innerHTML += `<div class="msg msg-user"><div class="msg-meta">you (${activePerson}) · ${time}</div>${msg}</div>`;
+  container.dataset.fingerprint = ''; // force re-render on next poll
   container.scrollTop = container.scrollHeight;
 
   try {
@@ -872,15 +914,19 @@ function initGraph() {
   const ctx    = canvas.getContext('2d');
 
   function resize() {
-    canvas.width  = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
-    pan.x = canvas.width  / 2;
-    pan.y = canvas.height / 2;
+    const w = canvas.offsetWidth;
+    const h = canvas.offsetHeight;
+    if (w === 0 || h === 0) return;
+    canvas.width  = w;
+    canvas.height = h;
+    if (!panInitialized) {
+      pan.x = w / 2;
+      pan.y = h / 2;
+      panInitialized = true;
+    }
   }
-  resize();
   new ResizeObserver(resize).observe(canvas);
 
-  // ── Mouse events ──────────────────────────────────────────
   canvas.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
     const n = hitNode(e);
@@ -915,9 +961,7 @@ function initGraph() {
   });
 
   canvas.addEventListener('mouseup', e => {
-    if (draggingNode && !nodeMoved) {
-      handleNodeClick(draggingNode);
-    }
+    if (draggingNode && !nodeMoved) handleNodeClick(draggingNode);
     draggingNode = null;
     isPanning    = false;
     canvas.style.cursor = 'grab';
@@ -929,13 +973,11 @@ function initGraph() {
     canvas.style.cursor = 'grab';
   });
 
-  // Zoom
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
     zoom = Math.max(0.3, Math.min(3, zoom - e.deltaY * 0.001));
   }, { passive: false });
 
-  // Right-click: node context menu
   canvas.addEventListener('contextmenu', e => {
     e.preventDefault();
     const n = hitNode(e);
@@ -950,7 +992,6 @@ function initGraph() {
     }
   });
 
-  // Physics + render loop
   (function loop() { stepPhysics(); draw(ctx, canvas); requestAnimationFrame(loop); })();
 }
 
@@ -997,7 +1038,6 @@ function stepPhysics() {
   physicsNodes.forEach(n => nodeMap[n.id] = n);
   physicsNodes.forEach(n => { n.fx = 0; n.fy = 0; });
 
-  // Repulsion
   for (let i = 0; i < physicsNodes.length; i++) {
     for (let j = i+1; j < physicsNodes.length; j++) {
       const a = physicsNodes[i], b = physicsNodes[j];
@@ -1012,7 +1052,6 @@ function stepPhysics() {
     }
   }
 
-  // Springs (edges)
   graph.edges.forEach(e => {
     const a = nodeMap[e.from], b = nodeMap[e.to];
     if (!a||!b) return;
@@ -1023,10 +1062,8 @@ function stepPhysics() {
     if (!b.fixed) { b.fx -= dx*f; b.fy -= dy*f; }
   });
 
-  // Gravity to centre
   physicsNodes.forEach(n => { if (!n.fixed) { n.fx -= n.x*0.006; n.fy -= n.y*0.006; } });
 
-  // Integrate (skip dragged node)
   physicsNodes.forEach(n => {
     if (n.fixed || n === draggingNode) return;
     n.vx = (n.vx + n.fx) * 0.82;
@@ -1045,7 +1082,6 @@ function draw(ctx, canvas) {
   const nodeMap = {};
   physicsNodes.forEach(n => nodeMap[n.id] = n);
 
-  // Edges
   graph.edges.forEach(e => {
     const a = nodeMap[e.from], b = nodeMap[e.to];
     if (!a||!b) return;
@@ -1057,7 +1093,6 @@ function draw(ctx, canvas) {
     ctx.lineWidth = sel ? 1.2 : 0.6; ctx.stroke(); ctx.globalAlpha = 1;
   });
 
-  // Nodes
   physicsNodes.forEach(n => {
     const r   = nodeRadius(n);
     const col = DEPTH_COLORS[Math.min(n.depth, DEPTH_COLORS.length-1)];
@@ -1111,7 +1146,6 @@ function removeMenuNode() {
   const id = nodeMenuTarget.id;
   document.getElementById('node-menu').style.display = 'none';
   nodeMenuTarget = null;
-  // Remove client-side immediately
   physicsNodes = physicsNodes.filter(n => n.id !== id);
   graph.nodes  = (graph.nodes  || []).filter(n => n.id !== id);
   graph.edges  = (graph.edges  || []).filter(e => e.from !== id && e.to !== id);
@@ -1119,7 +1153,6 @@ function removeMenuNode() {
     selectedNodeId = null;
     document.getElementById('sel-info').classList.remove('visible');
   }
-  // Persist server-side
   fetch(`${API}/graph/${id}`, { method:'DELETE' });
 }
 </script>

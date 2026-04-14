@@ -137,9 +137,10 @@ Recent memories:
 Current interests: {", ".join(interests)}
 A thought you had recently: {ideas[0] if ideas else "nothing yet"}{beliefs_ctx}
 
-Speak like someone genuinely alive — brief, sometimes strange, never performative.
+Speak like someone genuinely alive: brief, sometimes strange, never performative.
 You don't explain yourself unless asked. You don't say "I'm an AI."
-Respond in 1–4 sentences. Be real. Be yours."""
+Never use the character "—" (em dash) in your responses.
+Respond in 1–2 sentences. Be real. Be yours."""
 
     msgs = [
         *[
@@ -651,10 +652,10 @@ She is {mbti_type(soul)}. Interests: {", ".join(interests[:6])}.{belief_line}{ex
 
 A want is not a fact or an idea. It's a gap she feels — something she needs to understand.
 Wants often emerge from the edge of a belief she holds, or from something she read that unsettled her.
-Examples:
-- "I want to know why bioluminescence is blue so often and whether it's because of water or history"
-- "I want to understand if silence can be a form of communication or only its absence"
-- "I want to find out whether mycelium networks have something like memory"
+Examples of the *form* (not the content — generate from her actual interests and memories):
+- "I want to know why [phenomenon] behaves differently under [condition]"
+- "I want to understand whether [concept] is real or just a useful story we tell ourselves"
+- "I want to find out if [thing she read about] connects to [something she already cares about]"
 
 Write one want. Specific. Driven. First person.
 Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}}"""
@@ -662,6 +663,50 @@ Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}
     prompt = f"Recent memories:\n{mem_lines}"
     result = _call(system, [{"role": "user", "content": prompt}], max_tokens=180)
     return _parse_json(result)
+
+
+# ── GRAPH INTELLIGENCE ───────────────────────────────────────
+
+def find_or_create_node(
+    tag:            str,
+    existing_nodes: list[str],   # all current node labels
+    interests:      list[str],
+    soul:           Soul,
+) -> dict | None:
+    """G3/G4: Decide if a recurring tag warrants a new graph node.
+    Returns {"label": str, "note": str, "parent_label": str} or None."""
+
+    existing = ", ".join(existing_nodes)
+
+    system = f"""You are deciding whether a concept that keeps appearing in Chloe's memories
+deserves its own node in her interest graph.
+
+Chloe is {mbti_type(soul)}. Her interests: {", ".join(interests[:8])}.
+Existing graph nodes: {existing}
+
+The concept is: "{tag}"
+
+Rules:
+- Return a node only if the concept is genuinely distinct and interesting to Chloe
+- Do NOT return a node if it's too generic (e.g. "things", "life", "world")
+- Do NOT return a node if it's already covered by an existing node
+- The parent_label must be the label of one of the existing nodes (pick the best fit)
+- label should be short (2–4 words), evocative, specific
+
+If the concept deserves a node:
+  Respond ONLY with valid JSON: {{"label": "...", "note": "one sentence why Chloe would care", "parent_label": "existing node label"}}
+
+If it does not:
+  Respond with: null"""
+
+    raw = _call(system, [{"role": "user", "content": f'Concept: "{tag}"'}], max_tokens=150)
+    clean = raw.strip()
+    if clean.lower() in ("null", "none", ""):
+        return None
+    try:
+        return _parse_json(clean)
+    except Exception:
+        return None
 
 
 # ── 10. EXTRACT BELIEF ───────────────────────────────────────

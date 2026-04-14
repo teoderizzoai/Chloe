@@ -27,6 +27,9 @@ class Node:
     y:        float   = 0.0
     fixed:    bool    = False   # root node is fixed at centre
     is_new:   bool    = False   # briefly True after insertion, for animation
+    # Graph Intelligence (G1/G2) — organic growth tracking
+    hit_count:          int   = 0    # times a memory tag matched this node
+    last_auto_expanded: float = 0.0  # unix timestamp of last auto-expand
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -107,7 +110,8 @@ def seed_graph() -> Graph:
         Node(id="p10", label="Technology & Tools", depth=1, strength=0.7),
     ]
     
-    edges = [Edge(source="root", target=n.id) for n in nodes if n.id != "root"]
+    # Edge uses from_id / to_id (see to_dict keys "from" / "to" for the frontend)
+    edges = [Edge(from_id="root", to_id=n.id) for n in nodes if n.id != "root"]
     return Graph(nodes=nodes, edges=edges)
 
 
@@ -172,6 +176,58 @@ def get_labels(graph: Graph) -> list[str]:
 
 def node_exists(graph: Graph, label: str) -> bool:
     return any(n.label.lower() == label.lower() for n in graph.nodes)
+
+
+# ── GRAPH INTELLIGENCE HELPERS ───────────────────────────────
+
+def reinforce_node(graph: Graph, node_id: str) -> Graph:
+    """G1: A memory tag matched this node — increment hit count, boost strength."""
+    new_nodes = []
+    for n in graph.nodes:
+        if n.id == node_id:
+            n = Node(**{**n.to_dict(),
+                        "hit_count": n.hit_count + 1,
+                        "strength":  min(1.0, n.strength + 0.02)})
+        new_nodes.append(n)
+    return Graph(nodes=new_nodes, edges=graph.edges)
+
+
+def match_nodes_by_tags(graph: Graph, tags: list[str]) -> list[Node]:
+    """G1: Return nodes whose label appears (case-insensitive substring) in any tag,
+    or any tag appears in the node label. Skips root."""
+    matches: list[Node] = []
+    tags_lower = [t.lower() for t in tags]
+    for node in graph.nodes:
+        if node.id == "root":
+            continue
+        label_lower = node.label.lower()
+        if any(label_lower in t or t in label_lower for t in tags_lower):
+            matches.append(node)
+    return matches
+
+
+def get_leaf_nodes(graph: Graph) -> list[Node]:
+    """G2: Nodes that have no outgoing edges (no children)."""
+    parents = {e.from_id for e in graph.edges}
+    return [n for n in graph.nodes if n.id not in parents]
+
+
+def mark_auto_expanded(graph: Graph, node_id: str) -> Graph:
+    """G2: Reset hit_count and record timestamp after auto-expansion."""
+    new_nodes = []
+    for n in graph.nodes:
+        if n.id == node_id:
+            n = Node(**{**n.to_dict(),
+                        "hit_count": 0,
+                        "last_auto_expanded": time.time()})
+        new_nodes.append(n)
+    return Graph(nodes=new_nodes, edges=graph.edges)
+
+
+def find_node_by_label(graph: Graph, label: str) -> Node | None:
+    """Find a node by exact or case-insensitive label match."""
+    label_lower = label.lower()
+    return next((n for n in graph.nodes if n.label.lower() == label_lower), None)
 
 
 # ── HELPERS ──────────────────────────────────────────────────

@@ -23,17 +23,22 @@ from pydantic import BaseModel
 import json
 
 from chloe import Chloe
+from chloe.discord_bot import ChloeDiscordBot
 
 # ── App lifecycle ─────────────────────────────────────────────
 
-chloe: Chloe = None
+chloe:       Chloe           = None
+discord_bot: ChloeDiscordBot = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global chloe
+    global chloe, discord_bot
     chloe = Chloe()
     await chloe.start()
+    discord_bot = ChloeDiscordBot()
+    await discord_bot.start(chloe)
     yield
+    await discord_bot.stop()
     await chloe.stop()
 
 app = FastAPI(title="Chloe", lifespan=lifespan)

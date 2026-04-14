@@ -33,7 +33,7 @@ The goal is a genuinely autonomous developing mind, not a chatbot.
 | LLM | Anthropic SDK (`claude-opus-4-5`) |
 | Frontend | Plain HTML/CSS/JS — no build step |
 | Persistence | JSON files (upgrading to Postgres later) |
-| SMS (planned) | Twilio |
+| Messaging | Discord DMs (discord.py) |
 | Hosting (planned) | Hetzner VPS + systemd |
 
 ---
@@ -235,7 +235,7 @@ Profile card: avatar image (240px), name + MBTI + mood badge overlaid with gradi
 - Starts as INFP-ish (EI=58, SN=62, TF=44, JP=67)
 - Soul drifts with every action — she is always becoming
 - Sleep consolidates the soul with a random walk
-- Interests seeded with: mycelium, light, sound, philosophy, liminality, bioluminescence, silence
+- Interest graph seeded with 10 human pillars: Music & Audio, Aesthetics & Design, Food & Drink, Games & Play, Work & Ambition, Curiosity & Learning, Nature & Places, Social & People, Health & Rest, Technology & Tools
 
 ### Emotional character
 Chloe is not a perfect, agreeable creature. She has a full emotional range and is allowed to express it:
@@ -313,7 +313,7 @@ Chloe is not a perfect, agreeable creature. She has a full emotional range and i
 - [x] 21. Mood journaling — private end-of-day entry
 
 ### Layer 6 — Communication
-- [ ] 22. SMS via Twilio — actually texts Teo and roommate
+- [x] 22. Discord DMs — Chloe texts Teo and Zuzu via Discord DMs (never in a server); discord.py bot, env: DISCORD_BOT_TOKEN / DISCORD_TEO_ID / DISCORD_ZUZU_ID
 - [ ] 23. Message tone awareness — register varies by person/time
 - [ ] 24. Conversation threading — groups messages into sessions
 - [ ] 25. Notification preferences — learns when people respond
@@ -329,6 +329,88 @@ Chloe is not a perfect, agreeable creature. She has a full emotional range and i
 - [ ] 38. Dream recurrence — same tags repeating across dreams signal something unresolved; increases chance of surfacing a related want
 - [ ] 39. Seasonal personality accumulation — slow seasonal drift over weeks, not just per-tick weather (winter → more introverted/melancholic, spring → restless/curious)
 - [ ] 40. Emotional weight of world events — RSS articles that are devastating or beautiful hit mood harder than dry informational ones; what she reads about the world affects her
+
+### Graph Intelligence — Autonomous Expansion
+> Sits between Layer 7 and Layer 8. Makes the interest graph grow organically from what Chloe actually experiences, rather than only from manual clicks.
+
+**Current state (gap):** Reading adds memories with tags. Dreams and thinking add memories with tags. But none of this touches the graph. The graph only expands when you manually click a node in the UI. The sidebar interest cloud (`derive_interests`) is alive; the graph is static.
+
+**Goal:** after any `_fire_event` that produces a tagged memory, the graph should feel it. Sustained exposure to a concept expands its node. Concepts that keep appearing in memories but have no node yet surface as new leaves. Dream recurrence creates depth-1 nodes directly off root.
+
+---
+
+#### Mechanism 1 — Node Resonance (runs after every `_fire_event`)
+
+After a memory is added with tags, compare each tag against existing graph node labels (case-insensitive, substring match). For each matched node:
+- Increment `node.hit_count`
+- Boost `node.strength` by +0.02 (capped at 1.0)
+
+This makes frequently-touched concepts visually heavier over time (already described in item 34 above).
+
+#### Mechanism 2 — Strength-Threshold Auto-Expansion
+
+When a node's `hit_count` reaches `GRAPH_HIT_THRESHOLD` (default: 5), AND:
+- The node has no children (leaf node)
+- `curiosity > 55`
+- The node hasn't been auto-expanded in the last `GRAPH_EXPAND_COOLDOWN` seconds (6h)
+
+→ Queue a background auto-expand: same `llm.expand_interest_node()` call as manual expand, adds 3 child concepts as new nodes. Reset `hit_count = 0`. Log: `"auto-expanded [node] after [n] hits"`.
+
+This is rate-limited (one expansion per node per 6h) so the graph doesn't explode during a long read session.
+
+#### Mechanism 3 — Orphan Tag Surfacing (runs during `_reflect()`, every ~20 min)
+
+Check for tags that appear in 3+ memories (`ORPHAN_TAG_MIN_OCCURRENCES`) but have **no** matching graph node. For each such tag, make a lightweight LLM call (`llm.find_or_create_node`) that:
+- Decides if the concept is distinct enough to deserve a node (not every tag warrants one)
+- If yes: picks the most relevant existing parent node and returns a node definition
+- Creates the leaf attached to that parent
+
+Each tag is only evaluated once (track `surfaced_tags: set[str]` in graph or chloe state). Only runs if `curiosity > 60`.
+
+#### Mechanism 4 — Dream Recurrence → Root Prominence (runs during `_reflect()`)
+
+Count tag occurrences across all `type:"dream"` memories. Any tag appearing in `DREAM_RECURRENCE_MIN` (default: 3) dream memories that has no existing graph node at depth ≤ 1 → create a new depth-1 node attached directly to root. Log: `"dream recurrence: [tag] surfaces as new node"`.
+
+Dreams reveal the subconscious. Recurring dream-tags become part of her identity map, not buried in leaf branches.
+
+---
+
+#### Data changes needed
+
+**`graph.py Node`** — add two fields:
+```python
+hit_count:         int   = 0
+last_auto_expanded: float = 0.0   # unix timestamp
+```
+
+**`graph.py`** — add helpers:
+- `reinforce_node(graph, node_id) → Graph` — hit_count++, strength += 0.02
+- `match_nodes_by_tags(graph, tags: list[str]) → list[Node]` — case-insensitive substring match of tags against node labels
+- `get_leaf_nodes(graph) → list[Node]` — nodes that appear in no edge as `from_id`
+- `mark_auto_expanded(graph, node_id) → Graph` — sets last_auto_expanded=now(), hit_count=0
+
+**`chloe.py`** — add:
+- `GRAPH_HIT_THRESHOLD = 5`
+- `GRAPH_EXPAND_COOLDOWN = 6 * 3600`
+- `ORPHAN_TAG_MIN_OCCURRENCES = 3`
+- `DREAM_RECURRENCE_MIN = 3`
+- `_surfaced_tags: set[str] = set()` — instance var, not persisted (rebuilt from graph on load)
+- `_check_graph_resonance(tags: list[str])` — call at end of `_fire_event` after memory is added; matches tags → reinforces nodes → queues auto-expand if threshold hit
+- `_auto_expand_node(node_id: str)` — same as `expand_node()` but gated by cooldown; updates `last_auto_expanded`
+- `_surface_orphan_tags()` — called from `_reflect()`; finds orphan tags, runs LLM, adds nodes
+- `_surface_dream_recurrences()` — called from `_reflect()`; counts dream tags, adds depth-1 nodes
+
+**`llm.py`** — add:
+- `find_or_create_node(tag, existing_nodes, interests, soul) → dict | None` — returns `{"label", "note", "parent_label"}` or None if tag doesn't warrant a node
+
+**Frontend:** no changes needed. New nodes arrive in the `/snapshot` graph payload and render automatically.
+
+---
+
+- [x] G1. Node resonance — reading/dreaming/thinking reinforces matching graph nodes (hit_count + strength)
+- [x] G2. Strength-threshold auto-expansion — leaf nodes that hit threshold expand automatically (gated by curiosity + 6h cooldown)
+- [x] G3. Orphan tag surfacing — tags recurrent in memories but absent from graph surface as new leaves during reflection
+- [x] G4. Dream recurrence → root prominence — tags recurring in 3+ dreams become depth-1 nodes off root
 
 ### Layer 8 — Emotional Memory & Self-Knowledge
 - [ ] 41. Affect record — a persistent log of what caused emotional shifts: what made her happy, angry, sad, curious; she knows her own patterns ("conversations about music tend to lift me", "being asked to do tasks irritates me")
@@ -368,3 +450,6 @@ Chloe is not a perfect, agreeable creature. She has a full emotional range and i
 - **Session 8** — Layer 3 complete: affect.py (mood with stickiness), inner.py (Wants + Beliefs), dreams (LLM distorts memories), creative output (poems/fragments at peak curiosity), belief extraction from articles, want resolution on read, mood pill + mind tab in dashboard
 - **Session 9** — Layer 4 complete: persons.py (Person + PersonNote dataclasses, warmth/distance tracking, reach-out selection), llm.extract_notable + llm.generate_followup, chat() takes person_id, autonomous messages target specific people, follow-up logic (40% chance), people section in sidebar
 - **Session 10** — Layer 5 complete: Goal dataclass in inner.py, generate_reflection + generate_continuity_note + generate_goal + generate_journal in llm.py, _reflect() every 20 min + _write_journal() at 23:00, soul_baseline drift tracking, reflection/journal memory accents, goals in mind tab
+- **Session 11** — UI redesign: 2-column layout, graph moved to tab, persistent chat input at bottom, cleaner tab bar (10px, gold underline). Designed Graph Intelligence feature spec (G1–G4: node resonance, threshold auto-expansion, orphan tag surfacing, dream recurrence → root node)
+- **Session 12** — Pivoted Layer 6 from SMS/Twilio to Discord DMs. New chloe/discord_bot.py (ChloeDiscordBot class); updated on_message callback signature to carry person_id; Discord bot starts alongside FastAPI in server.py lifespan; env vars: DISCORD_BOT_TOKEN / DISCORD_TEO_ID / DISCORD_ZUZU_ID
+- **Session 13** — Graph Intelligence complete (G1–G4). Node resonance (hit_count + strength boost per tag match); strength-threshold auto-expansion (leaf nodes expand after 5 hits, gated by curiosity>55 + 6h cooldown); orphan tag surfacing (tags in 3+ memories with no node → LLM decides if worth a node, max 2/reflect); dream recurrence → root prominence (tags in 3+ dreams → depth-1 node off root, 1/reflect)

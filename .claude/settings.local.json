@@ -9,7 +9,9 @@
       "Bash(.venv/Scripts/python -m uvicorn server:app --port 8080)",
       "Bash(curl -s http://localhost:8080/snapshot)",
       "Bash(python -c ':*)",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(winget upgrade:*)",
+      "Bash(.venv/Scripts/python -c \"from chloe.graph import reinforce_node, match_nodes_by_tags, get_leaf_nodes, mark_auto_expanded, find_node_by_label; from chloe import llm; from chloe.chloe import Chloe; print\\('imports OK'\\)\")"
     ]
   }
 }

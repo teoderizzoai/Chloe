@@ -23,7 +23,9 @@ from .soul   import Soul, drift, consolidate, mbti_type, describe
 from .heart  import (Vitals, ACTIVITIES, tick_vitals, auto_decide,
                      should_fire_event, circadian_phase, day_name)
 from .memory import Memory, seed_memories, add, age, get_vivid, derive_interests, to_dicts, from_dicts
-from .graph  import Graph, seed_graph, expand, clear_new_flags, get_labels
+from .graph  import (Graph, seed_graph, expand, clear_new_flags, get_labels,
+                     reinforce_node, match_nodes_by_tags, get_leaf_nodes,
+                     mark_auto_expanded, find_node_by_label)
 from .affect import Affect, update_mood
 from .avatar import portrait_meta
 from .inner  import (Want, Belief, Goal,
@@ -45,6 +47,12 @@ SAVE_EVERY     = 60     # persist state every N ticks (~5 min)
 WEATHER_EVERY  = 720    # refresh weather every N ticks (~1 hour)
 REFLECT_EVERY  = 240    # self-reflection + continuity check every N ticks (~20 min)
 STATE_FILE     = Path("chloe_state.json")
+
+# ── Graph Intelligence constants ─────────────────────────────
+GRAPH_HIT_THRESHOLD        = 5        # hits before a leaf node auto-expands
+GRAPH_EXPAND_COOLDOWN      = 6 * 3600 # seconds between auto-expands per node
+ORPHAN_TAG_MIN_OCCURRENCES = 3        # tag must appear in this many memories
+DREAM_RECURRENCE_MIN       = 3        # tag must appear in this many dreams
 
 # Autonomous `_fire_event` pacing — separate from TICK_SECONDS. Even with a slow
 # tick, `should_fire_event` rolls could feel spammy if Haiku returns fast and the
@@ -82,6 +90,11 @@ class Chloe:
         self.soul_baseline:    dict       = {}   # soul at last continuity check
         self.last_journal_date: str       = ""   # "YYYY-MM-DD"
 
+        # ── Graph Intelligence ──
+        # Tags we've already evaluated for orphan surfacing — not persisted,
+        # rebuilt from graph labels on load so we don't re-evaluate known nodes.
+        self._surfaced_tags: set[str] = set()
+
         # ── Sleep / messaging ──
         self.pending_messages: list[dict] = []   # messages received during deep sleep
         self._prev_activity:   str        = "rest"
@@ -95,8 +108,9 @@ class Chloe:
         # Monotonic clock at last autonomous `_fire_event` spawn — rate-limits background noise
         self._last_autonomous_fire_mono: float = time.monotonic() - MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS
 
-        # ── Optional callbacks (set by API layer) ──
-        self.on_message: Optional[Callable[[str], None]] = None
+        # ── Optional callbacks (set by API layer / Discord bot) ──
+        # on_message(text, person_id) — person_id is None when no specific target
+        self.on_message: Optional[Callable[[str, Optional[str]], None]] = None
         self.on_tick:    Optional[Callable[[dict], None]] = None
 
         self._load()
@@ -387,6 +401,7 @@ class Chloe:
                     )
                     self.memories = add(self.memories, mem["text"], "observation", mem.get("tags", []))
                     self._log(f'read "{article.title[:45]}" → "{mem["text"][:45]}…"')
+                    self._check_graph_resonance(mem.get("tags", []))
 
                     # Resolve wants + goals that overlap with what was just read
                     self.wants = resolve_wants(self.wants, mem.get("tags", []))
@@ -415,6 +430,7 @@ class Chloe:
                     )
                     self.memories = add(self.memories, mem["text"], "observation", mem.get("tags", []))
                     self._log(f'memory: "{mem["text"][:60]}…"')
+                    self._check_graph_resonance(mem.get("tags", []))
 
             elif self.activity == "dream":
                 # Real dream pass — distorts recent memories, wants, ideas
@@ -424,6 +440,7 @@ class Chloe:
                 )
                 self.memories = add(self.memories, mem["text"], "dream", mem.get("tags", []))
                 self._log(f'dream: "{mem["text"][:60]}…"')
+                self._check_graph_resonance(mem.get("tags", []))
 
             elif self.activity == "think":
                 # 30% want · 15% goal · 55% idea
@@ -435,6 +452,7 @@ class Chloe:
                     )
                     self.wants = add_want(self.wants, want_data["text"], want_data.get("tags", []))
                     self._log(f'want: "{want_data["text"][:60]}…"')
+                    self._check_graph_resonance(want_data.get("tags", []))
                 elif roll < 0.45:
                     goal_data = await asyncio.to_thread(
                         llm.generate_goal, vivid, interests, soul,
@@ -442,6 +460,7 @@ class Chloe:
                     )
                     self.goals = add_goal(self.goals, goal_data["text"], goal_data.get("tags", []))
                     self._log(f'goal: "{goal_data["text"][:60]}…"')
+                    self._check_graph_resonance(goal_data.get("tags", []))
                 else:
                     idea = await asyncio.to_thread(
                         llm.generate_idea, vivid, interests, soul,
@@ -465,6 +484,7 @@ class Chloe:
                     )
                     self._log(f'created {piece.get("form","piece")}: "{piece["text"][:50]}…"')
                     self.goals = resolve_goals(self.goals, "create", piece.get("tags", []))
+                    self._check_graph_resonance(piece.get("tags", []))
                 else:
                     topic = interests[0] if interests else "something"
                     mem   = await asyncio.to_thread(
@@ -473,6 +493,7 @@ class Chloe:
                     )
                     self.memories = add(self.memories, mem["text"], "observation", mem.get("tags", []))
                     self._log(f'memory: "{mem["text"][:60]}…"')
+                    self._check_graph_resonance(mem.get("tags", []))
 
             elif self.activity == "message" and self.vitals.social_battery > 40:
                 # Choose who to reach out to
@@ -508,12 +529,152 @@ class Chloe:
 
                 self._add_chat("chloe", msg, autonomous=True)
                 if self.on_message:
-                    self.on_message(msg)
+                    self.on_message(msg, target.id if target else None)
 
         except Exception as e:
             self._log(f"event error: {e}")
 
         self._busy = False
+
+    # ── GRAPH INTELLIGENCE ───────────────────────────────────
+
+    def _check_graph_resonance(self, tags: list[str]):
+        """G1 + G2: Match tags against graph nodes, reinforce them, and queue
+        auto-expansion for any leaf node that crosses the hit threshold."""
+        if not tags:
+            return
+
+        matched = match_nodes_by_tags(self.graph, tags)
+        for node in matched:
+            self.graph = reinforce_node(self.graph, node.id)
+
+        # Re-read nodes after reinforcement to get updated hit counts
+        leaf_ids = {n.id for n in get_leaf_nodes(self.graph)}
+        for node in matched:
+            updated = next((n for n in self.graph.nodes if n.id == node.id), None)
+            if not updated:
+                continue
+            if (updated.hit_count >= GRAPH_HIT_THRESHOLD
+                    and updated.id in leaf_ids
+                    and self.vitals.curiosity > 55):
+                asyncio.create_task(self._auto_expand_node(updated.id))
+
+    async def _auto_expand_node(self, node_id: str):
+        """G2: Auto-expand a leaf node that has been hit enough times,
+        gated by the 6-hour cooldown."""
+        node = next((n for n in self.graph.nodes if n.id == node_id), None)
+        if not node:
+            return
+
+        since_last = time.time() - node.last_auto_expanded
+        if since_last < GRAPH_EXPAND_COOLDOWN:
+            return
+
+        self._log(f'auto-expanding "{node.label}" after {node.hit_count} hits')
+        self.graph = mark_auto_expanded(self.graph, node_id)
+
+        try:
+            defs = await asyncio.to_thread(
+                llm.expand_interest_node,
+                concept=node.label,
+                existing_nodes=get_labels(self.graph),
+                interests=derive_interests(self.memories),
+            )
+            self.graph = expand(self.graph, node_id, defs)
+            labels = [d["label"] for d in defs]
+            self._log(f'auto-expanded "{node.label}" → {", ".join(labels)}')
+            for d in defs:
+                self.memories = add(self.memories, d.get("note", d["label"]),
+                                    "interest", [d["label"]])
+            await asyncio.sleep(1.5)
+            self.graph = clear_new_flags(self.graph)
+        except Exception as e:
+            self._log(f"auto-expand error: {e}")
+
+    async def _surface_orphan_tags(self):
+        """G3: Find tags recurring in 3+ memories with no graph node → surface as new leaves."""
+        if self.vitals.curiosity <= 60:
+            return
+
+        # Count tag occurrences across all memories
+        tag_counts: dict[str, int] = {}
+        for mem in self.memories:
+            for tag in mem.tags:
+                tag_counts[tag.lower()] = tag_counts.get(tag.lower(), 0) + 1
+
+        # Orphans: frequent enough, not already surfaced, no matching node
+        orphans = [
+            tag for tag, count in tag_counts.items()
+            if count >= ORPHAN_TAG_MIN_OCCURRENCES
+            and tag not in self._surfaced_tags
+            and not match_nodes_by_tags(self.graph, [tag])
+        ]
+
+        if not orphans:
+            return
+
+        interests = derive_interests(self.memories)
+        # Process at most 2 per reflect cycle to avoid LLM burst
+        for tag in orphans[:2]:
+            self._surfaced_tags.add(tag)
+            try:
+                result = await asyncio.to_thread(
+                    llm.find_or_create_node,
+                    tag, get_labels(self.graph), interests, self.soul,
+                )
+                if result:
+                    parent = find_node_by_label(self.graph, result["parent_label"])
+                    parent_id = parent.id if parent else "root"
+                    self.graph = expand(self.graph, parent_id,
+                                        [{"id": tag, "label": result["label"],
+                                          "note": result["note"]}])
+                    self._log(f'orphan tag "{tag}" → new node "{result["label"]}"')
+                    await asyncio.sleep(1.5)
+                    self.graph = clear_new_flags(self.graph)
+            except Exception as e:
+                self._log(f"orphan surface error ({tag}): {e}")
+
+    async def _surface_dream_recurrences(self):
+        """G4: Tags recurring in 3+ dream memories with no depth-1 graph node
+        → surface as new nodes attached directly to root."""
+        dream_memories = [m for m in self.memories if m.type == "dream"]
+        if len(dream_memories) < DREAM_RECURRENCE_MIN:
+            return
+
+        tag_counts: dict[str, int] = {}
+        for mem in dream_memories:
+            for tag in mem.tags:
+                tag_counts[tag.lower()] = tag_counts.get(tag.lower(), 0) + 1
+
+        depth1_labels = {n.label.lower() for n in self.graph.nodes if n.depth <= 1}
+
+        recurring = [
+            tag for tag, count in tag_counts.items()
+            if count >= DREAM_RECURRENCE_MIN
+            and tag not in self._surfaced_tags
+            and tag not in depth1_labels
+        ]
+
+        if not recurring:
+            return
+
+        interests = derive_interests(self.memories)
+        for tag in recurring[:1]:   # one per reflect cycle — root-level nodes are significant
+            self._surfaced_tags.add(tag)
+            try:
+                result = await asyncio.to_thread(
+                    llm.find_or_create_node,
+                    tag, get_labels(self.graph), interests, self.soul,
+                )
+                if result:
+                    self.graph = expand(self.graph, "root",
+                                        [{"id": tag, "label": result["label"],
+                                          "note": result["note"]}])
+                    self._log(f'dream recurrence "{tag}" → root node "{result["label"]}"')
+                    await asyncio.sleep(1.5)
+                    self.graph = clear_new_flags(self.graph)
+            except Exception as e:
+                self._log(f"dream recurrence error ({tag}): {e}")
 
     async def _process_pending_messages(self):
         """Reply to messages that arrived while she was in deep sleep."""
@@ -552,7 +713,7 @@ class Chloe:
                 self._add_chat("chloe", reply)
                 self._log(f"replied to queued message from {person_name}")
                 if self.on_message:
-                    self.on_message(reply)
+                    self.on_message(reply, pm["person_id"])
             except Exception as e:
                 self._log(f"pending message reply error: {e}")
 
@@ -590,6 +751,12 @@ class Chloe:
                     self.soul_baseline = self.soul.to_dict()
             else:
                 self.soul_baseline = self.soul.to_dict()
+
+            # G3: surface orphan tags → new graph nodes
+            await self._surface_orphan_tags()
+
+            # G4: dream recurrence → depth-1 nodes
+            await self._surface_dream_recurrences()
 
         except Exception as e:
             self._log(f"reflect error: {e}")
@@ -677,6 +844,9 @@ class Chloe:
             self.goals             = goals_from_dicts(data.get("goals", []))
             self.soul_baseline     = data.get("soul_baseline", {})
             self.last_journal_date = data.get("last_journal_date", "")
+            # Rebuild surfaced-tags set from existing graph node labels
+            # so we don't re-evaluate concepts that already have nodes
+            self._surfaced_tags = {n.label.lower() for n in self.graph.nodes}
             self._log("State restored from disk.")
         except Exception as e:
             self._log(f"Could not load state: {e}. Starting fresh.")
