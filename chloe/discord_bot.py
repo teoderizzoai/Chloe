@@ -128,7 +128,26 @@ class ChloeDiscordBot:
         chloe.on_tick    = self._on_chloe_tick
 
         # Start the Discord client as a background task
-        self._task = asyncio.create_task(self._client.start(token))
+        self._task = asyncio.create_task(self._run_bot(token))
+
+    @property
+    def is_ready(self) -> bool:
+        return self._ready
+
+    def status(self) -> dict:
+        """Return connection status — used by the /discord/status endpoint."""
+        return {
+            "available":  DISCORD_AVAILABLE,
+            "ready":      self._ready,
+            "persons_mapped": list(self._person_to_discord.keys()),
+            "task_alive": self._task is not None and not self._task.done(),
+            "task_error": (
+                str(self._task.exception())
+                if self._task and self._task.done() and not self._task.cancelled()
+                and self._task.exception()
+                else None
+            ),
+        }
 
     async def stop(self):
         """Graceful shutdown."""
@@ -139,11 +158,18 @@ class ChloeDiscordBot:
 
     # ── INTERNAL ─────────────────────────────────────────────
 
+    async def _run_bot(self, token: str):
+        """Wrapper around client.start() that logs errors instead of silently dying."""
+        try:
+            await self._client.start(token)
+        except Exception as e:
+            print(f"[discord] bot crashed: {e}")
+            self._ready = False
+
     def _load_mappings(self):
         """Read Discord user IDs from environment variables."""
         mapping = {
-            "teo":      os.environ.get("DISCORD_TEO_ID",  "").strip(),
-            "roommate": os.environ.get("DISCORD_ZUZU_ID", "").strip(),
+            "teo": os.environ.get("DISCORD_TEO_ID", "").strip(),
         }
         for person_id, raw_id in mapping.items():
             if raw_id:

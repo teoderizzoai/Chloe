@@ -181,6 +181,26 @@ def health():
     return {"alive": True, "tick": chloe._tick, "loop_alive": loop_alive}
 
 
+@app.post("/testing")
+def toggle_testing(enabled: Optional[bool] = None):
+    """Toggle or set testing mode.
+    Testing mode: prevents sleep, floors vitals, outreach every 5 min instead of 2h."""
+    if enabled is None:
+        chloe.testing_mode = not chloe.testing_mode
+    else:
+        chloe.testing_mode = enabled
+    chloe._log(f"testing mode {'ON' if chloe.testing_mode else 'OFF'}")
+    return {"testing_mode": chloe.testing_mode}
+
+
+@app.get("/discord/status")
+def discord_status():
+    """Check Discord bot connection status."""
+    if discord_bot is None:
+        return {"error": "Discord bot not initialised"}
+    return discord_bot.status()
+
+
 # Mounted **after** API routes so `/snapshot` etc. are not shadowed.
 _chloe_images_dir = Path(__file__).resolve().parent / "chloe" / "images"
 if _chloe_images_dir.is_dir():

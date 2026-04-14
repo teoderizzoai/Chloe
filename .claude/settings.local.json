@@ -19,7 +19,10 @@
       "Bash(.venv/Scripts/python:*)",
       "Bash(tasklist)",
       "Bash(taskkill //F //PID 11324 //PID 17576)",
-      "Bash(uvicorn server:app:*)"
+      "Bash(uvicorn server:app:*)",
+      "Bash(python3:*)",
+      "Bash(python \"/c/Users/teode/Desktop/Chloe/chloe_state.json\")",
+      "Bash(python3.13 -c \" import json with open\\('chloe_state.json'\\) as f: s = json.load\\(f\\) print\\('activity:', s.get\\('activity'\\)\\) print\\('vitals:', s.get\\('vitals'\\)\\) print\\('ideas:', len\\(s.get\\('ideas',[]\\)\\)\\) print\\('wants:', len\\(s.get\\('wants',[]\\)\\)\\) print\\('goals:', len\\(s.get\\('goals',[]\\)\\)\\) print\\('beliefs:', len\\(s.get\\('beliefs',[]\\)\\)\\) print\\('memories:', len\\(s.get\\('memories',[]\\)\\)\\) print\\('nodes:', len\\(s.get\\('graph',{}\\).get\\('nodes',[]\\)\\)\\) print\\('log:', s.get\\('log',[]\\)[:15]\\) \")"
     ]
   }
 }

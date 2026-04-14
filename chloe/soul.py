@@ -53,6 +53,60 @@ ACTIVITY_DRIFT: dict[str, dict[str, float]] = {
 }
 
 
+# ── CONTENT-AWARE DRIFT (item 31) ────────────────────────────
+# Tag keywords that signal a soul dimension. Each matched cluster
+# nudges the corresponding trait by ~0.08 pts — small per event,
+# meaningful over days of consistent exposure.
+
+_CONTENT_CLUSTERS: list[tuple[list[str], str, float]] = [
+    # (keywords, trait, delta)  delta positive = toward right pole
+    (["abstract","pattern","possibility","theory","symbolic","conceptual",
+      "philosophical","metaphor","systemic","emergent","speculative",
+      "meaning","framework","invisible"],          "SN", +0.08),  # → Intuition
+    (["concrete","practical","physical","embodied","specific","literal",
+      "empirical","data","evidence","tangible","measurable"],      "SN", -0.08),  # → Sensing
+    (["vulnerability","emotion","relationship","empathy","personal",
+      "grief","love","compassion","identity","belonging","hurt",
+      "care","longing","tenderness"],               "TF", +0.08),  # → Feeling
+    (["logic","analysis","systematic","rational","objective","structure",
+      "mechanism","efficiency","argument","critique","reasoning"],  "TF", -0.08),  # → Thinking
+    (["open","explore","curious","discovery","uncertain","fluid",
+      "wandering","question","unresolved","ambiguous","wonder"],    "JP", +0.08),  # → Perceiving
+    (["resolve","complete","decide","plan","goal","commitment",
+      "closure","order","finish","organised","deadline"],           "JP", -0.08),  # → Judging
+    (["solitude","introspection","quiet","inner","alone","private",
+      "withdrawal","reflection","internal","inward"],               "EI", +0.08),  # → Introversion
+    (["social","community","connection","dialogue","collective",
+      "shared","together","public","engage","outward"],             "EI", -0.08),  # → Extraversion
+]
+
+
+def content_drift(soul: Soul, tags: list[str]) -> Soul:
+    """Nudge soul based on the conceptual content of what was just absorbed.
+    Tags are matched against keyword clusters — abstract/philosophical content
+    nudges N; emotional/relational content nudges F; etc.
+    Cap: ±0.15 per trait per event so no single article hijacks the soul."""
+    if not tags:
+        return soul
+
+    tag_text = " ".join(t.lower().replace("-", " ").replace("_", " ") for t in tags)
+    nudges: dict[str, float] = {"EI": 0.0, "SN": 0.0, "TF": 0.0, "JP": 0.0}
+
+    for keywords, trait, delta in _CONTENT_CLUSTERS:
+        if any(kw in tag_text for kw in keywords):
+            nudges[trait] += delta
+
+    # Cap each trait nudge — multiple clusters can fire but total is bounded
+    capped = {t: max(-0.15, min(0.15, v)) for t, v in nudges.items()}
+
+    return Soul(
+        EI=_clamp(soul.EI + capped["EI"] + _flutter()),
+        SN=_clamp(soul.SN + capped["SN"] + _flutter()),
+        TF=_clamp(soul.TF + capped["TF"] + _flutter()),
+        JP=_clamp(soul.JP + capped["JP"] + _flutter()),
+    )
+
+
 def drift(soul: Soul, activity_id: str) -> Soul:
     """Nudge the soul one tick based on the current activity.
     Adds a small random flutter — Chloe is never perfectly predictable."""

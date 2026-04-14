@@ -44,15 +44,23 @@ class Affect:
         )
 
 
-def _target_mood(vitals, weather, hour: int, activity: str) -> str:
+def _target_mood(vitals, weather, hour: int, activity: str, season: str = "") -> str:
     """Derive the ideal mood from current conditions."""
     e = vitals.energy
     s = vitals.social_battery
     c = vitals.curiosity
 
-    rainy    = weather and any(
-        w in weather.description.lower() for w in ("rain", "drizzle", "shower")
-    )
+    desc_lower = weather.description.lower() if weather else ""
+    rainy    = any(w in desc_lower for w in ("rain", "drizzle", "shower", "storm"))
+    overcast = any(w in desc_lower for w in ("cloud", "overcast", "fog", "mist"))
+    clear    = any(w in desc_lower for w in ("clear", "sunny", "sun"))
+    cold     = weather and weather.temperature_c < 5
+    hot      = weather and weather.temperature_c > 27
+
+    season_lower = season.lower()
+    is_winter = any(w in season_lower for w in ("winter", "december", "january", "february"))
+    is_spring = any(w in season_lower for w in ("spring", "march", "april", "may"))
+
     is_night = hour >= 22 or hour < 6
     is_morn  = 7 <= hour <= 10
 
@@ -60,14 +68,14 @@ def _target_mood(vitals, weather, hour: int, activity: str) -> str:
     if s < 20 and activity not in ("message", "create"):
         return "lonely"
     if e < 25:
-        return "melancholic" if (is_night or rainy) else "irritable"
+        return "melancholic" if (is_night or rainy or overcast) else "irritable"
     if s < 30 and activity == "message":
         return "irritable"
 
     # Positive peaks
     if e > 72 and s > 65:
         return "energized"
-    if e > 58 and s > 50 and is_morn and not rainy:
+    if e > 58 and s > 50 and is_morn and (clear or not rainy):
         return "serene"
 
     # Curiosity-driven
@@ -80,26 +88,48 @@ def _target_mood(vitals, weather, hour: int, activity: str) -> str:
     if e < 42 and (rainy or is_night):
         return "melancholic"
 
+    # ── Weather/season tendency (item 35) — a thumb on the scale ──
+    # These only activate if no stronger signal has fired above.
+    if rainy and random.random() < 0.4:
+        return "melancholic"
+    if overcast and is_winter and random.random() < 0.3:
+        return "melancholic"
+    if clear and cold and random.random() < 0.3:
+        return "serene"
+    if hot and random.random() < 0.25:
+        return "restless"
+    if is_spring and clear and random.random() < 0.25:
+        return "curious"
+    if is_winter and random.random() < 0.15:
+        # Winter pulls slightly inward — content rather than energized
+        return "content"
+
     return "content"
 
 
-def update_mood(affect: Affect, vitals, weather, hour: int, activity: str) -> Affect:
+def update_mood(affect: Affect, vitals, weather, hour: int, activity: str,
+                season: str = "") -> Affect:
     """Mood is sticky — only re-evaluates ~10% of ticks.
     When it shifts, it eases in at low intensity."""
     if random.random() > 0.10:
         return affect
 
-    target = _target_mood(vitals, weather, hour, activity)
+    target = _target_mood(vitals, weather, hour, activity, season)
 
     if target == affect.mood:
-        # Deepen current mood slowly
         return Affect(mood=affect.mood, intensity=min(1.0, affect.intensity + 0.04))
 
-    # 55% chance to actually shift to target mood
     if random.random() < 0.55:
         return Affect(mood=target, intensity=0.40)
 
     return affect
+
+
+def force_mood(mood: str, intensity: float = 0.65) -> Affect:
+    """Immediately set mood to a given state — used for strong emotional events
+    (harsh messages, beautiful moments, completions) that bypass the drift system."""
+    mood = mood if mood in MOODS else "content"
+    return Affect(mood=mood, intensity=max(0.0, min(1.0, intensity)))
 
 
 def mood_color(mood: str) -> str:

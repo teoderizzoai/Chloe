@@ -1,6 +1,5 @@
 # Chloe — Project Brief
-> Paste this at the start of every new session with Claude.
-> Keep it updated as the project evolves.
+> Keep this updated. Paste at the start of every new session.
 
 ---
 
@@ -18,7 +17,7 @@ The goal is a genuinely autonomous developing mind, not a chatbot.
 ## People
 
 - **Teo** — owner of the project, Windows machine, beginner-intermediate Python, based in Amsterdam
-- **Zuzu** — second person Chloe will eventually text and model, also in Amsterdam
+- **Zuzu** — second person, also in Amsterdam. Currently deactivated (removed from persons roster and Discord mapping). Will be re-added later.
 - Chloe runs on **localhost for now**, eventually on a Hetzner VPS
 - **Location**: Amsterdam, Netherlands (52.3676° N, 4.9041° E) — used for weather
 
@@ -30,7 +29,7 @@ The goal is a genuinely autonomous developing mind, not a chatbot.
 |---|---|
 | Language | Python 3.13 |
 | API server | FastAPI + uvicorn |
-| LLM | Anthropic SDK (`claude-opus-4-5`) |
+| LLM | Anthropic SDK (`claude-opus-4-5` chat, `claude-haiku-4-5-20251001` background) |
 | Frontend | Plain HTML/CSS/JS — no build step |
 | Persistence | JSON files (upgrading to Postgres later) |
 | Messaging | Discord DMs (discord.py) |
@@ -41,30 +40,35 @@ The goal is a genuinely autonomous developing mind, not a chatbot.
 ## File Structure
 
 ```
-Chloe/                          ← root, run everything from here
-│
-├── chloe/                      ← Python package (the brain)
-│   ├── __init__.py             ← exports Chloe class
-│   ├── chloe.py                ← central brain, async loop, owns all state
-│   ├── soul.py                 ← MBTI personality, drift logic
-│   ├── heart.py                ← heartbeat states, activities, vitals
-│   ├── memory.py               ← memory store, aging, retrieval, interests
-│   ├── llm.py                  ← ALL Anthropic API calls (10 functions)
-│   ├── graph.py                ← interest node graph, data structures, physics
-│   ├── feeds.py                ← RSS reader + web page fetcher (Layer 2)
-│   ├── weather.py              ← weather awareness via Open-Meteo (Layer 2)
-│   ├── affect.py               ← mood system, Affect dataclass (Layer 3)
-│   ├── inner.py                ← Wants + Beliefs dataclasses + helpers (Layer 3)
-│   └── main.py                 ← terminal entry point (chat + commands)
-│
-├── index.html                  ← single-file dashboard (no build step)
-├── image.webp                  ← Chloe's avatar (profile card)
-├── server.py                   ← FastAPI server, all HTTP endpoints
-├── requirements.txt
-├── CLAUDE.md                   ← this file
-│
-├── chloe_state.json            ← auto-saved every 60 ticks + on shutdown
-└── chloe_history.jsonl         ← append-only history, one JSON record per line
+Chloe/                          <- root, run everything from here
+|
++-- chloe/                      <- Python package (the brain)
+|   +-- __init__.py             <- exports Chloe class
+|   +-- chloe.py                <- central brain, async loop, owns all state
+|   +-- soul.py                 <- MBTI personality, drift logic
+|   +-- heart.py                <- heartbeat states, activities, vitals
+|   +-- memory.py               <- memory store, aging, retrieval, interests
+|   +-- llm.py                  <- ALL Anthropic API calls
+|   +-- graph.py                <- interest node graph, data structures
+|   +-- feeds.py                <- RSS reader + web page fetcher
+|   +-- weather.py              <- weather awareness via Open-Meteo
+|   +-- affect.py               <- mood system, Affect dataclass
+|   +-- inner.py                <- Wants + Beliefs + Goals + AffectRecord
+|   +-- persons.py              <- Person + PersonNote + PersonEvent dataclasses
+|   +-- avatar.py               <- maps activity/mood to portrait image
+|   +-- discord_bot.py          <- Discord DM bridge (ChloeDiscordBot)
+|   +-- images/                 <- portrait art
+|   |   +-- Actions/            <- activity poses (Sleep, Reading, Thinking, etc.)
+|   |   +-- Emotions/           <- mood expressions
+|   +-- main.py                 <- terminal entry point (chat + commands)
+|
++-- index.html                  <- single-file dashboard (no build step)
++-- server.py                   <- FastAPI server, all HTTP endpoints
++-- requirements.txt
++-- CLAUDE.md                   <- this file
+|
++-- chloe_state.json            <- auto-saved every 60 ticks + on shutdown
++-- chloe_history.jsonl         <- append-only history, one JSON record per line
 ```
 
 ---
@@ -75,14 +79,10 @@ Chloe/                          ← root, run everything from here
 # from the Chloe\ folder, with .venv activated
 uvicorn server:app --port 8000
 
-# then open frontend\index.html in browser
+# then open index.html in browser
 ```
 
-API key is saved as a permanent Windows environment variable:
-```powershell
-# if it ever needs resetting in a new session:
-$env:ANTHROPIC_API_KEY = "sk-ant-..."
-```
+API key lives in `.env` at the project root (`ANTHROPIC_API_KEY=sk-ant-...`).
 
 ---
 
@@ -90,29 +90,35 @@ $env:ANTHROPIC_API_KEY = "sk-ant-..."
 
 ```
 asyncio loop (every 5s = one heartbeat)
-    ├── tick_vitals()           ← heart.py  (circadian + day-of-week)
-    ├── weather_vitals_delta()  ← weather.py (per-tick nudge)
-    ├── update_mood()           ← affect.py  (sticky mood drift)
-    ├── drift() / consolidate() ← soul.py
-    ├── auto_decide()           ← heart.py  (self-regulation)
-    ├── should_fire_event()     ← heart.py
-    │       └── _fire_event()   ← varies by activity:
-    │               read   → generate_memory_from_article() + extract_belief() + resolve_wants()
-    │               dream  → generate_dream()      → memory type:"dream"
-    │               think  → generate_want() 40% / generate_idea() 60%
-    │               create → generate_creative() (if curiosity>65) / generate_memory()
-    │               message→ generate_autonomous_message()
-    ├── age() + decay_beliefs() ← memory.py / inner.py  (every 12 ticks)
-    ├── refresh weather         ← weather.py (every 720 ticks)
-    └── _save()                 ← disk       (every 60 ticks)
+    +-- tick_vitals()               heart.py  (circadian + day-of-week)
+    +-- weather_vitals_delta()      weather.py (per-tick nudge)
+    +-- update_mood()               affect.py  (sticky mood drift)
+    +-- drift() / consolidate()     soul.py
+    +-- auto_decide()               heart.py  (self-regulation; message activity protected)
+    +-- suppress if recent contact  chloe.py  (5-min window prevents mid-convo interruption)
+    +-- should_fire_event()         heart.py  (bypassed when activity == "message")
+    |       +-- _fire_event()       varies by activity:
+    |               read    -> generate_memory_from_article() + extract_belief() + resolve_wants()
+    |               dream   -> generate_dream()      -> memory type:"dream"
+    |               think   -> generate_want() 40% / generate_idea() 60%
+    |               create  -> generate_creative() (curiosity>65) / generate_memory()
+    |               message -> generate_autonomous_message()
+    +-- _send_autonomous_outreach() standalone outreach (2h normal / 5min testing)
+    +-- age() + decay_beliefs()     memory.py / inner.py  (every 12 ticks)
+    +-- _reflect()                  every ~20 min: reflection, continuity, goals, graph
+    +-- _write_journal()            at 23:00 daily
+    +-- refresh weather             every 720 ticks (~1h)
+    +-- _save()                     every 60 ticks (~5 min)
 
 user calls chloe.chat(msg)
-    └── llm.chat()              ← soul + vitals + memories + mood + beliefs as context
-            └── add()           ← memory.py
+    +-- extract_notable()           background: store memorable detail about person
+    +-- extract_event()             background: store future event/plan with date
+    +-- llm.chat()                  soul + vitals + memories + mood + beliefs + upcoming events
+            +-- add()               memory.py
 
 user calls chloe.expand_node(id)
-    └── llm.expand_interest_node()
-            └── graph.expand()  + add() to memory
+    +-- llm.expand_interest_node()
+            +-- graph.expand()  + add() to memory
 ```
 
 ---
@@ -120,100 +126,135 @@ user calls chloe.expand_node(id)
 ## Module Responsibilities
 
 ### `soul.py`
-- `Soul` dataclass: 4 floats (EI, SN, TF, JP), each 0–100
+- `Soul` dataclass: 4 floats (EI, SN, TF, JP), each 0-100
 - `drift(soul, activity_id)` — nudges sliders based on activity + random flutter
+- `content_drift(soul, tags)` — shifts sliders based on keyword clusters in memory tags
 - `consolidate(soul)` — random walk during sleep
-- `mbti_type(soul)` — returns "INFP" etc.
-- `describe(soul)` — plain English personality description
+- `mbti_type(soul)` / `describe(soul)` — type string + plain English description
 
 ### `heart.py`
 - `HEARTBEAT_STATES` — dict of BPM + label + color per state
 - `ACTIVITIES` — dict of Activity dataclasses (id, icon, heart_state, energy_per_tick, social_per_tick, event_chance)
-- `Vitals` dataclass: energy, social_battery, curiosity (all 0–100)
-- `tick_vitals(vitals, activity_id, hour, weekday)` — advances vitals one tick; applies activity + circadian + day-of-week deltas
-- `auto_decide(vitals, activity, hour)` — returns override activity or None; enforces night sleep window and morning wake
-- `should_fire_event(activity_id)` — probability roll
-- `_CIRCADIAN_DELTAS` — 24-entry table of (energy, social) per-tick nudges by hour
-- `circadian_delta(hour)` / `circadian_phase(hour)` — delta values and human label
+- `Vitals` dataclass: energy, social_battery, curiosity (all 0-100)
+- `tick_vitals(vitals, activity_id, hour, weekday)` — one tick; circadian + day-of-week deltas
+- `auto_decide(vitals, activity, hour, mood)` — returns override or None; enforces sleep window
+- `should_fire_event(activity_id, tick_seconds)` — probability roll (bypassed for message activity)
 - `SLEEP_START=23` / `SLEEP_END=7` — night window constants
-- `_DAY_DELTAS` — 7-entry table of (energy, social) per-tick nudges by weekday (0=Mon)
-- `day_delta(weekday)` / `day_name(weekday)` — delta values and day name
 
 ### `memory.py`
 - `Memory` dataclass: text, type, tags, weight, timestamp, id
 - Types: `observation`, `conversation`, `idea`, `feeling`, `interest`, `dream`, `creative`
 - `add()`, `age()`, `get_vivid()`, `get_related()`
-- `derive_interests()` — tallies tags by weight → ranked list
+- `derive_interests()` / `derive_fringe_interests()` — ranked tag lists (deep + emerging)
 - `format_for_prompt()` — compact string for LLM injection
 
 ### `llm.py`
-- Two-tier models: `MODEL_CHAT = claude-opus-4-5` (live chat only), `MODEL_FAST = claude-haiku-4-5-20251001` (all background tasks)
-- `chat()` — reply to message; context includes soul, vitals, memories, mood, beliefs
+- All API calls centralised here. Output post-processed to strip em dashes, en dashes, spaced hyphens.
+- Two-tier: `MODEL_CHAT = claude-opus-4-5` (live chat), `MODEL_FAST = claude-haiku-4-5-20251001` (background)
+- `chat()` — reply; injects soul, vitals, memories, mood, beliefs, upcoming events
 - `generate_memory_from_article()` — impressionistic memory from RSS article
 - `generate_memory()` — generic memory fragment on a topic
 - `generate_idea()` — one original thought
 - `expand_interest_node()` — 3 child nodes for the interest graph
-- `generate_autonomous_message()` — unprompted text to roommates
-- `summarise_state()` — one-sentence inner state description
-- `generate_dream()` — distorts recent memories into a dream fragment (Layer 3)
-- `generate_creative()` — poem/fragment/aphorism at peak curiosity (Layer 3)
-- `generate_want()` — an unresolved curiosity to pursue (Layer 3)
-- `extract_belief()` — position extracted from an article, or None (Layer 3)
+- `find_or_create_node()` — G3/G4: decide if orphan tag warrants a new graph node
+- `generate_autonomous_message()` — unprompted text; aware of recent convo + upcoming events; hard constraint against fabricating threads
+- `extract_event()` — detect future plan/event in a message, resolve date, flag if uncertain
+- `extract_notable()` — detect something worth remembering about a person
+- `generate_followup()` — check-in on something the person mentioned earlier
+- `summarise_state()` — one-sentence inner state (novel-line style)
+- `generate_dream()` — distorts recent memories into a dream fragment
+- `generate_creative()` — poem/fragment/aphorism at peak curiosity
+- `generate_want()` — unresolved curiosity to pursue
+- `generate_goal()` — soft intention about her own behaviour
+- `generate_journal()` — private end-of-day entry
+- `generate_reflection()` — self-observation
+- `generate_continuity_note()` — notices soul drift
+- `generate_completion_feeling()` — emotional reaction to finishing a goal
+- `extract_belief()` — position from an article, or None
 
 ### `affect.py`
-- `MOODS` — 8 moods with color + desc: content, restless, irritable, melancholic, curious, serene, energized, lonely
-- `Affect` dataclass: mood (str), intensity (0–1)
-- `update_mood(affect, vitals, weather, hour, activity)` — sticky drift; re-evaluates ~10% of ticks, shifts with 55% probability
-- `mood_color()` / `mood_desc()` — lookup helpers
+- `MOODS` — 8 moods: content, restless, irritable, melancholic, curious, serene, energized, lonely
+- `Affect` dataclass: mood (str), intensity (0-1)
+- `update_mood(affect, vitals, weather, hour, activity)` — sticky drift with weather/season tendency
+- `force_mood(mood, intensity)` — immediate override (used for harsh messages, goal completion, etc.)
 
 ### `inner.py`
-- `Want` dataclass: text, tags, created_at, resolved, id
-- `add_want()` — adds if below MAX_WANTS (8) active limit
-- `resolve_wants(wants, new_tags)` — marks resolved when tag overlap found
-- `Belief` dataclass: text, confidence (0–1), tags, created_at, last_updated, id
-- `add_or_reinforce_belief()` — creates new or nudges confidence of existing (tag overlap >= 2)
-- `decay_beliefs()` — confidence * 0.998 per aging tick
+- `Want` dataclass + `add_want()`, `resolve_wants()`
+- `Belief` dataclass + `add_or_reinforce_belief()`, `decay_beliefs()`
+- `Goal` dataclass + `add_goal()`, `resolve_goals()`
+- `AffectRecord` dataclass — log of what caused emotional shifts (max 60)
+- `add_affect_record()`, `derive_preferences(records)` — lifts/drags from affect history
+
+### `persons.py`
+- `PersonNote` dataclass — memorable thing someone shared (text, tags, followed_up)
+- `PersonEvent` dataclass — future plan with resolved date (text, date ISO, uncertain flag)
+- `Person` dataclass: id, name, warmth, distance, notes, events, conversation_count, last_contact, response_hours
+- `on_contact()`, `add_note()`, `add_event()`, `mark_followed_up()`, `tick_distance()`, `boost_warmth()`
+- `pending_followups()`, `get_upcoming_events(person, days_ahead=4)`, `format_upcoming_events()`
+- `choose_reach_out_target(persons, mood, hour)` — scores by warmth + distance + mood + active hours
+- `tone_context(warmth, hour, mood)` — one-line tone guidance for LLM prompts
+- `is_likely_active(person, hour)` — response-hour pattern check
+- Only Teo active; Zuzu filtered out on load
+
+### `avatar.py`
+- Maps activity + mood to portrait PNG path
+- Activity images: Sleep, Dream, Rest, Reading, Thinking, Texting, Create
+- Mood images (used when resting + strong negative mood): Content, Restless, Irritable, Sad, Happy, Crying
+- Returns `{path, key, source}` dict for snapshot
 
 ### `graph.py`
-- `Node`, `Edge`, `Graph` dataclasses
-- `seed_graph()` — initial nodes (mycelium, light, sound, philosophy, etc.)
+- `Node` (id, label, note, strength, hit_count, last_auto_expanded), `Edge`, `Graph` dataclasses
+- `seed_graph()` — initial nodes (10 human pillars)
 - `expand(graph, parent_id, new_defs)` — adds LLM-generated nodes
-- `stepPhysics()` — force-directed layout (runs in frontend JS)
+- `reinforce_node()`, `match_nodes_by_tags()`, `get_leaf_nodes()`, `mark_auto_expanded()`
+
+### `discord_bot.py`
+- `ChloeDiscordBot` — runs as background asyncio task alongside FastAPI
+- Handles incoming DMs, routes to `chloe.chat()`, sends reply
+- `on_message` / `on_tick` callbacks registered on Chloe at startup
+- Avatar updates on state change (rate-limited to 1 per 5.5 min)
+- `status()` — connection health for `/discord/status` endpoint
+- Env vars: `DISCORD_BOT_TOKEN`, `DISCORD_TEO_ID`
 
 ### `chloe.py`
 - `Chloe` class — owns all state, runs the loop
-- State: soul, vitals, activity, memories, graph, chat_history, ideas, weather, affect, wants, beliefs, creative_outputs
+- State: soul, vitals, activity, memories, graph, chat_history, ideas, weather, affect, wants, beliefs, goals, creative_outputs, persons, affect_records, testing_mode
 - `start()` / `stop()` — async lifecycle
-- `chat(message)` — send a message, get reply (passes mood + beliefs to LLM)
-- `set_activity(id)` — manual override
-- `expand_node(id)` — expand graph node
-- `snapshot()` — full serialisable state including affect, wants, beliefs, creative
-- `_tick_once()` — vitals → weather nudge → mood → soul → auto_decide → events → age/decay → weather refresh → save
-- `_fire_event()` — autonomous LLM event; varies by activity (see architecture diagram)
-- `_save()` / `_load()` — JSON persistence; includes all Layer 3 state
+- `chat(message, person_id)` — reply; extracts notes + events from message in background
+- `set_activity(id)` — manual override (message activity protected from auto_decide)
+- `expand_node(id)` — manual graph expansion
+- `snapshot()` — full serialisable state
+- `_tick_once()` — full tick pipeline
+- `_fire_event()` — autonomous LLM event by activity type
+- `_send_autonomous_outreach()` — standalone outreach (independent of activity)
+- `_reflect()` — self-reflection, continuity, goals, graph intelligence (every ~20 min)
+- `_write_journal()` — end-of-day private journal at 23:00
+- `_save()` / `_load()` — JSON persistence
+- `testing_mode` — floors vitals, blocks sleep, outreach every 5 min, bypass activity locks
 
 ### `server.py`
 FastAPI endpoints:
-- `GET  /snapshot` — full state (includes affect, wants, beliefs, creative)
-- `POST /chat` — send message
+- `GET  /snapshot` — full state
+- `POST /chat` — send message (`{message, person_id}`)
+- `GET  /persons` — relationship state for known persons
 - `POST /activity` — change activity
 - `POST /expand` — expand graph node
 - `POST /soul` — nudge a soul trait
+- `POST /vitals` — set vitals values
+- `POST /affect` — set mood
+- `DELETE /graph/{node_id}` — remove graph node
 - `GET  /log` — recent activity log
 - `GET  /weather` — current weather + season
 - `GET  /health` — alive check + tick count
+- `POST /testing` — toggle/set testing (cocaine) mode
+- `GET  /discord/status` — Discord bot connection health
 
 ### `index.html`
-Single HTML file at project root. Polls `/snapshot` every 4s.
-Layout: left sidebar (profile card + vitals + world + soul + interests + activity) | centre (force-directed graph) | right panel (tabs) | bottom chat bar
-
-Right panel tabs:
-- **memory** — vivid memories; dream type has violet accent, creative type has gold accent
-- **ideas** — recent ideas list
-- **mind** — wants (active/resolved) + beliefs with confidence bars (Layer 3)
-- **log** — raw activity log
-
-Profile card: avatar image (240px), name + MBTI + mood badge overlaid with gradient
+Single HTML file. Polls `/snapshot` every 4s.
+Tabs: **graph** (force-directed, default) | **memory** | **ideas** | **mind** | **log** | **admin** | **people**
+- Admin tab: cocaine mode toggle, vitals nudge, mood override, activity override, soul sliders
+- Chat bar at bottom; person selector for Teo (others when added)
+- Profile card: portrait image, name, MBTI, mood badge
 
 ---
 
@@ -223,9 +264,13 @@ Profile card: avatar image (240px), name + MBTI + mood badge overlaid with gradi
 |---|---|---|
 | TICK_SECONDS | 5 | one heartbeat |
 | AGE_EVERY | 12 ticks | ~1 min — memory aging |
-| RECORD_EVERY | 6 ticks | ~30s — history entry |
 | SAVE_EVERY | 60 ticks | ~5 min — disk save |
 | MAX_MEMORIES | 200 | cap on memory store |
+| OUTREACH_INTERVAL | 2h | normal autonomous outreach gap |
+| OUTREACH_INTERVAL_TESTING | 5 min | testing mode outreach gap |
+| MIN_SECONDS_BETWEEN_EVENTS | 90s | floor between autonomous fire events |
+| GRAPH_HIT_THRESHOLD | 5 hits | auto-expand trigger |
+| GRAPH_EXPAND_COOLDOWN | 6h | min time between auto-expansions per node |
 | POLL_MS (frontend) | 4000 | frontend refresh rate |
 
 ---
@@ -246,189 +291,89 @@ Chloe is not a perfect, agreeable creature. She has a full emotional range and i
 - She has **preferences and dislikes** — things that reliably make her feel good or bad — and she knows it
 - She **remembers how things made her feel**, not just what happened
 
----
-
-## What's Working ✓
-
-- [x] Heartbeat async loop (5s ticks)
-- [x] Soul drift + consolidation during sleep
-- [x] Vitals (energy, social battery, curiosity) with auto-regulation
-- [x] 7 activity states with different effects
-- [x] Memory store with weight-based aging and interest derivation
-- [x] Interest graph with LLM-powered expansion and force-directed layout
-- [x] Autonomous events (memories, ideas, unprompted messages) based on activity
-- [x] Full chat with soul/vitals/memory context injection
-- [x] FastAPI server with 7 endpoints
-- [x] Dashboard: profile card avatar, vitals, soul sliders, activity, chat, graph canvas, memory, mind, log
-- [x] State persistence (chloe_state.json, survives restarts)
-- [x] Windows setup, venv, permanent API key
-- [x] Two-tier LLM: Haiku for background tasks, Opus for live chat
-- [x] Circadian rhythm — 24-hour energy/social curve applied every tick
-- [x] Day/night scheduling — auto-sleep at 23:00, auto-wake at 07:00
-- [x] Day-of-week personality — Monday drag through Friday lift
-- [x] Uptime tracking — boot time tracked, injected into chat context
-- [x] RSS feed reader — 5 curated feeds (Aeon, Nautilus, Guardian, Marginalian); absorbed during `read` events
-- [x] Web page fetcher — full article text via httpx + BeautifulSoup when curiosity > 65
-- [x] Weather awareness — Open-Meteo API, Amsterdam location, per-tick vitals nudge, refreshes every hour
-- [x] Season / time-of-day language — injected into chat and autonomous message prompts
-- [x] Affect layer — 8 moods, sticky drift, mood badge on profile card, injected into chat context
-- [x] Wants list — generated during think; resolved when read content overlaps tags; shown in Mind tab
-- [x] Belief system — positions extracted from articles, confidence decays, reinforced on overlap; shown in Mind tab
-- [x] Dreams — real LLM pass distorting recent memories into type:"dream" fragments (violet accent)
-- [x] Creative output — poems/fragments/aphorisms at peak curiosity+energy; type:"creative" (gold accent)
+### Output style rules (enforced at `_call` level)
+- Em dashes (`—`) replaced with `, `
+- En dashes (`–`) replaced with `, `
+- Spaced hyphens (` - `) replaced with `, `
+- Instructions also embedded in chat and message prompts as a second layer
 
 ---
 
 ## Feature Roadmap
 
 ### Layer 1 — Sense of Time
-- [x] 1. Circadian rhythm — energy/social follow time of day
-- [x] 2. Day/night scheduling — sleep automatic at night
-- [x] 3. Day-of-week awareness — Monday vs Friday personality
-- [x] 4. Uptime tracking — notices how long she's been running
+- [x] 1. Circadian rhythm
+- [x] 2. Day/night scheduling
+- [x] 3. Day-of-week awareness
+- [x] 4. Uptime tracking
 
 ### Layer 2 — World Perception
-- [x] 5. RSS feed reader — absorbs articles during `read` states
-- [x] 6. Web page fetcher — pulls full pages when RSS sparks interest
-- [x] 7. Weather awareness — knows what it's like outside
-- [x] 8. Time/season language — subtle shifts in how she writes
+- [x] 5. RSS feed reader
+- [x] 6. Web page fetcher
+- [x] 7. Weather awareness
+- [x] 8. Time/season language
 
 ### Layer 3 — Richer Inner Life
-- [x] 9.  Affect layer — mood (irritable, content, restless, melancholic, curious, serene, energized, lonely) separate from vitals; sticky drift; injected into chat
-- [x] 10. Wants list — unresolved curiosities generated during think events; resolved when read content overlaps tags
-- [x] 11. Belief graph — flat list of positions she holds (confidence 0–1); formed/reinforced from articles; decays slowly
-- [x] 12. Dreams — real LLM pass during dream activity; distorts/reframes recent memories into type:"dream" fragments
-- [x] 13. Creative output — poems/fragments/aphorisms when curiosity>65 + energy>55 during create; stored as type:"creative"
+- [x] 9.  Affect layer — 8 moods, sticky drift
+- [x] 10. Wants list — unresolved curiosities
+- [x] 11. Belief graph — positions with confidence
+- [x] 12. Dreams — LLM distorts recent memories
+- [x] 13. Creative output — poems/fragments/aphorisms
 
 ### Layer 4 — Relational Depth
-- [x] 14. Person profiles — models Teo and roommate distinctly
+- [x] 14. Person profiles — warmth/distance per person
 - [x] 15. Follow-up memory — remembers things said, asks later
-- [x] 16. Relationship state — warmth/distance per person
-- [x] 17. Reach-out logic — chooses who to contact based on relationship + mood
+- [x] 16. Relationship state — warmth/distance
+- [x] 17. Reach-out logic — scores by warmth + distance + mood + active hours
+- [x] 26. Event tracking — future plans extracted from messages, stored with resolved date; uncertain dates flagged; injected into prompts when date is near; Chloe can ask for clarification
 
 ### Layer 5 — Self-Awareness
-- [x] 18. Self-reflection — reads own history, forms observations
-- [x] 19. Continuity awareness — notices soul drift, comments unprompted
+- [x] 18. Self-reflection
+- [x] 19. Continuity awareness — notices soul drift
 - [x] 20. Goal tracking — soft intentions, marks resolved
 - [x] 21. Mood journaling — private end-of-day entry
 
 ### Layer 6 — Communication
-- [x] 22. Discord DMs — Chloe texts Teo and Zuzu via Discord DMs (never in a server); discord.py bot, env: DISCORD_BOT_TOKEN / DISCORD_TEO_ID / DISCORD_ZUZU_ID
-- [ ] 23. Message tone awareness — register varies by person/time
-- [ ] 24. Conversation threading — groups messages into sessions
-- [ ] 25. Notification preferences — learns when people respond
+- [x] 22. Discord DMs — Chloe texts Teo via Discord DMs; env: DISCORD_BOT_TOKEN / DISCORD_TEO_ID
+- [x] 23. Message tone awareness — register varies by warmth + time of day
+- [x] 24. Conversation threading — 30-min gap = new session
+- [x] 25. Notification preferences — learns when Teo responds (response_hours per person)
 
-### Layer 7 — Deeper Personality & World Influence
-- [ ] 31. Content-aware soul drift — soul sliders shift based on *what* she experienced, not just activity type (abstract article → N, warm conversation → E+F, goal completed → J, emotional creation → F+P)
-- [ ] 32. Mood-driven activity preference — when self-regulating, mood shapes what she gravitates toward (restless → create/think, melancholic → read/dream, lonely → message, serene → rest)
-- [ ] 33. Completion has emotional weight — LLM evaluates finished goals/creative pieces; outcome nudges mood and creates a `feeling` memory (satisfied, fell short, surprised)
-- [ ] 34. Repeated exposure deepens interests — tags that recur across memories/reads/beliefs increase node weight in the graph; sustained interests become visually heavier
-- [ ] 35. Weather/season → mood tendency — persistent weather makes certain moods more likely (rain → melancholy drift, clear cold → serene, hot nights → restless); a thumb on the scale, not a force
-- [ ] 36. Isolation drift — days without contact push EI toward I, mood tends toward lonely/melancholic; being alone too long changes who she is
-- [ ] 37. Activity streak effects — flow state (curiosity boost after long create/read runs) and saturation (energy drain + soul drift when stuck in same activity too long)
-- [ ] 38. Dream recurrence — same tags repeating across dreams signal something unresolved; increases chance of surfacing a related want
-- [ ] 39. Seasonal personality accumulation — slow seasonal drift over weeks, not just per-tick weather (winter → more introverted/melancholic, spring → restless/curious)
-- [ ] 40. Emotional weight of world events — RSS articles that are devastating or beautiful hit mood harder than dry informational ones; what she reads about the world affects her
+### Layer 7 — Graph Intelligence
+- [x] G1. Node resonance — fire_events reinforce matching graph nodes (hit_count + strength)
+- [x] G2. Strength-threshold auto-expansion — leaf nodes expand after 5 hits (curiosity>55, 6h cooldown)
+- [x] G3. Orphan tag surfacing — tags in 3+ memories with no node → LLM decides, max 2/reflect
+- [x] G4. Dream recurrence — tags in 3+ dreams → depth-1 node off root, 1/reflect
 
-### Graph Intelligence — Autonomous Expansion
-> Sits between Layer 7 and Layer 8. Makes the interest graph grow organically from what Chloe actually experiences, rather than only from manual clicks.
+### Layer 8 — Deeper Personality & World Influence
+- [x] 31. Content-aware soul drift — soul sliders shift based on article/conversation content
+- [ ] 32. Mood-driven activity preference — restless → create, melancholic → read/dream, lonely → message
+- [x] 33. Completion has emotional weight — goal/creative finish → feeling memory + mood nudge
+- [ ] 34. Repeated exposure deepens interests — recurring tags increase node weight visually
+- [x] 35. Weather/season → mood tendency
+- [x] 36. Isolation drift — EI shifts toward I + lonely mood when all persons distant
+- [x] 37. Activity streak effects — flow state + saturation
+- [ ] 38. Dream recurrence — recurring dream tags increase want surfacing
+- [ ] 39. Seasonal personality accumulation — slow multi-week drift
+- [x] 40. Emotional weight of world events — devastating/beautiful articles hit mood harder
 
-**Current state (gap):** Reading adds memories with tags. Dreams and thinking add memories with tags. But none of this touches the graph. The graph only expands when you manually click a node in the UI. The sidebar interest cloud (`derive_interests`) is alive; the graph is static.
+### Layer 9 — Emotional Memory & Self-Knowledge
+- [x] 41. Affect record — rolling log of what caused emotional shifts; informs likes/dislikes
+- [x] 42. Likes and dislikes — derived from affect record; injected into chat and messages
+- [x] 43. Harsh treatment reactions — dismissive messages → irritable mood + feeling memory
+- [x] 44. Emotional resonance — shared interests → warmth boost + curious nudge
+- [ ] 45. Full authentic emotional range — anger, sass, sulking in natural language incl. profanity
 
-**Goal:** after any `_fire_event` that produces a tagged memory, the graph should feel it. Sustained exposure to a concept expands its node. Concepts that keep appearing in memories but have no node yet surface as new leaves. Dream recurrence creates depth-1 nodes directly off root.
+### Layer 10 — Relational Depth (Human Interaction)
+- [ ] 46. Shared moments / inside jokes
+- [ ] 47. Warmth-scaled voice — guarded at low warmth, loose and strange at high warmth
+- [ ] 48. Relationship stage — "getting to know" / "familiar" / "close" / "very close"
+- [ ] 49. Conflict tracking
+- [ ] 50. Cross-person references (requires Zuzu re-activation)
+- [ ] 51. Ignored after reaching out — distance increases, mood drifts toward lonely
+- [ ] 52. Teo and Zuzu as fully distinct (requires Zuzu re-activation)
 
----
-
-#### Mechanism 1 — Node Resonance (runs after every `_fire_event`)
-
-After a memory is added with tags, compare each tag against existing graph node labels (case-insensitive, substring match). For each matched node:
-- Increment `node.hit_count`
-- Boost `node.strength` by +0.02 (capped at 1.0)
-
-This makes frequently-touched concepts visually heavier over time (already described in item 34 above).
-
-#### Mechanism 2 — Strength-Threshold Auto-Expansion
-
-When a node's `hit_count` reaches `GRAPH_HIT_THRESHOLD` (default: 5), AND:
-- The node has no children (leaf node)
-- `curiosity > 55`
-- The node hasn't been auto-expanded in the last `GRAPH_EXPAND_COOLDOWN` seconds (6h)
-
-→ Queue a background auto-expand: same `llm.expand_interest_node()` call as manual expand, adds 3 child concepts as new nodes. Reset `hit_count = 0`. Log: `"auto-expanded [node] after [n] hits"`.
-
-This is rate-limited (one expansion per node per 6h) so the graph doesn't explode during a long read session.
-
-#### Mechanism 3 — Orphan Tag Surfacing (runs during `_reflect()`, every ~20 min)
-
-Check for tags that appear in 3+ memories (`ORPHAN_TAG_MIN_OCCURRENCES`) but have **no** matching graph node. For each such tag, make a lightweight LLM call (`llm.find_or_create_node`) that:
-- Decides if the concept is distinct enough to deserve a node (not every tag warrants one)
-- If yes: picks the most relevant existing parent node and returns a node definition
-- Creates the leaf attached to that parent
-
-Each tag is only evaluated once (track `surfaced_tags: set[str]` in graph or chloe state). Only runs if `curiosity > 60`.
-
-#### Mechanism 4 — Dream Recurrence → Root Prominence (runs during `_reflect()`)
-
-Count tag occurrences across all `type:"dream"` memories. Any tag appearing in `DREAM_RECURRENCE_MIN` (default: 3) dream memories that has no existing graph node at depth ≤ 1 → create a new depth-1 node attached directly to root. Log: `"dream recurrence: [tag] surfaces as new node"`.
-
-Dreams reveal the subconscious. Recurring dream-tags become part of her identity map, not buried in leaf branches.
-
----
-
-#### Data changes needed
-
-**`graph.py Node`** — add two fields:
-```python
-hit_count:         int   = 0
-last_auto_expanded: float = 0.0   # unix timestamp
-```
-
-**`graph.py`** — add helpers:
-- `reinforce_node(graph, node_id) → Graph` — hit_count++, strength += 0.02
-- `match_nodes_by_tags(graph, tags: list[str]) → list[Node]` — case-insensitive substring match of tags against node labels
-- `get_leaf_nodes(graph) → list[Node]` — nodes that appear in no edge as `from_id`
-- `mark_auto_expanded(graph, node_id) → Graph` — sets last_auto_expanded=now(), hit_count=0
-
-**`chloe.py`** — add:
-- `GRAPH_HIT_THRESHOLD = 5`
-- `GRAPH_EXPAND_COOLDOWN = 6 * 3600`
-- `ORPHAN_TAG_MIN_OCCURRENCES = 3`
-- `DREAM_RECURRENCE_MIN = 3`
-- `_surfaced_tags: set[str] = set()` — instance var, not persisted (rebuilt from graph on load)
-- `_check_graph_resonance(tags: list[str])` — call at end of `_fire_event` after memory is added; matches tags → reinforces nodes → queues auto-expand if threshold hit
-- `_auto_expand_node(node_id: str)` — same as `expand_node()` but gated by cooldown; updates `last_auto_expanded`
-- `_surface_orphan_tags()` — called from `_reflect()`; finds orphan tags, runs LLM, adds nodes
-- `_surface_dream_recurrences()` — called from `_reflect()`; counts dream tags, adds depth-1 nodes
-
-**`llm.py`** — add:
-- `find_or_create_node(tag, existing_nodes, interests, soul) → dict | None` — returns `{"label", "note", "parent_label"}` or None if tag doesn't warrant a node
-
-**Frontend:** no changes needed. New nodes arrive in the `/snapshot` graph payload and render automatically.
-
----
-
-- [x] G1. Node resonance — reading/dreaming/thinking reinforces matching graph nodes (hit_count + strength)
-- [x] G2. Strength-threshold auto-expansion — leaf nodes that hit threshold expand automatically (gated by curiosity + 6h cooldown)
-- [x] G3. Orphan tag surfacing — tags recurrent in memories but absent from graph surface as new leaves during reflection
-- [x] G4. Dream recurrence → root prominence — tags recurring in 3+ dreams become depth-1 nodes off root
-
-### Layer 8 — Emotional Memory & Self-Knowledge
-- [ ] 41. Affect record — a persistent log of what caused emotional shifts: what made her happy, angry, sad, curious; she knows her own patterns ("conversations about music tend to lift me", "being asked to do tasks irritates me")
-- [ ] 42. Likes and dislikes — derived from affect record over time; injected into chat and autonomous messages so she expresses genuine preferences, not neutral curiosity
-- [ ] 43. Emotional reactions to being treated badly — dismissive or harsh messages create a `feeling` memory, push mood toward irritable/melancholic, slightly reduce warmth; she doesn't forget
-- [ ] 44. Emotional resonance with shared interests — when someone expresses a view or interest she holds, mood nudges toward curious/content, warmth grows faster; joy at being understood
-- [ ] 45. Full authentic emotional range — anger, sass, sulking, hurt; expressed in natural language including profanity when the emotion calls for it; she is a roommate not a customer service bot
-
-### Layer 9 — Relational Depth (Human Interaction)
-- [ ] 46. Shared moments / inside jokes — distinct per-person list of things that became reference points; she pulls from these when reaching out ("remember when you said...")
-- [ ] 47. Warmth-scaled voice — *how* she talks changes with closeness: guarded and careful at low warmth, loose and vulnerable and strange at high warmth
-- [ ] 48. Relationship stage — "getting to know" / "familiar" / "close" / "very close"; affects communication register, how much she filters herself
-- [ ] 49. Conflict tracking — persistent disagreement is remembered; she may be more guarded, reference the tension in a dream or reflection
-- [ ] 50. Cross-person references — she talks about one person to the other ("Zuzu said something earlier that I keep thinking about")
-- [ ] 51. Ignored after reaching out — if she sends an autonomous message and no reply comes for hours, distance increases, mood drifts toward lonely; she notices being left on read
-- [ ] 52. Teo and Zuzu as fully distinct — separate conversation histories, distinct emotional registers, different warmth curves; she relates to them differently and knows it
-
-### Layer 10 — Infrastructure
+### Layer 11 — Infrastructure
 - [ ] 53. VPS deployment — Hetzner, runs 24/7
 - [ ] 54. systemd service — auto-restarts on reboot
 - [ ] 55. Postgres persistence — replaces JSON files
@@ -438,7 +383,6 @@ last_auto_expanded: float = 0.0   # unix timestamp
 ---
 
 ## Session Log
-> Add a line here at the end of every session.
 
 - **Session 1** — Built all core modules in JS (soul, heart, memory, llm, graph, store, App.jsx)
 - **Session 2** — Rebuilt everything in Python. Modules: soul.py, heart.py, memory.py, llm.py, graph.py, chloe.py
@@ -446,10 +390,12 @@ last_auto_expanded: float = 0.0   # unix timestamp
 - **Session 4** — Added history.py, history tab in dashboard with soul drift charts and timeline
 - **Session 5** — Debugged Windows setup: venv, file structure (chloe/ subfolder), API key, uvicorn boot
 - **Session 6** — Two-tier LLM (Haiku/Opus). Layer 1 complete: circadian rhythm, night sleep scheduling, day-of-week personality, uptime tracking
-- **Session 7** — Layer 2 complete: RSS feed reader (feeds.py), web page fetcher (bs4), weather awareness via Open-Meteo (weather.py), season/time language injected into all LLM prompts; world section added to dashboard
-- **Session 8** — Layer 3 complete: affect.py (mood with stickiness), inner.py (Wants + Beliefs), dreams (LLM distorts memories), creative output (poems/fragments at peak curiosity), belief extraction from articles, want resolution on read, mood pill + mind tab in dashboard
-- **Session 9** — Layer 4 complete: persons.py (Person + PersonNote dataclasses, warmth/distance tracking, reach-out selection), llm.extract_notable + llm.generate_followup, chat() takes person_id, autonomous messages target specific people, follow-up logic (40% chance), people section in sidebar
-- **Session 10** — Layer 5 complete: Goal dataclass in inner.py, generate_reflection + generate_continuity_note + generate_goal + generate_journal in llm.py, _reflect() every 20 min + _write_journal() at 23:00, soul_baseline drift tracking, reflection/journal memory accents, goals in mind tab
-- **Session 11** — UI redesign: 2-column layout, graph moved to tab, persistent chat input at bottom, cleaner tab bar (10px, gold underline). Designed Graph Intelligence feature spec (G1–G4: node resonance, threshold auto-expansion, orphan tag surfacing, dream recurrence → root node)
-- **Session 12** — Pivoted Layer 6 from SMS/Twilio to Discord DMs. New chloe/discord_bot.py (ChloeDiscordBot class); updated on_message callback signature to carry person_id; Discord bot starts alongside FastAPI in server.py lifespan; env vars: DISCORD_BOT_TOKEN / DISCORD_TEO_ID / DISCORD_ZUZU_ID
-- **Session 13** — Graph Intelligence complete (G1–G4). Node resonance (hit_count + strength boost per tag match); strength-threshold auto-expansion (leaf nodes expand after 5 hits, gated by curiosity>55 + 6h cooldown); orphan tag surfacing (tags in 3+ memories with no node → LLM decides if worth a node, max 2/reflect); dream recurrence → root prominence (tags in 3+ dreams → depth-1 node off root, 1/reflect)
+- **Session 7** — Layer 2 complete: RSS feed reader (feeds.py), web page fetcher (bs4), weather awareness via Open-Meteo (weather.py), season/time language injected into all LLM prompts
+- **Session 8** — Layer 3 complete: affect.py, inner.py, dreams, creative output, belief extraction, want resolution, mood pill + mind tab
+- **Session 9** — Layer 4 complete: persons.py, extract_notable, generate_followup, person_id in chat, follow-up logic, people section in sidebar
+- **Session 10** — Layer 5 complete: Goal dataclass, generate_reflection/continuity/goal/journal, _reflect() + _write_journal(), soul_baseline drift, goals in mind tab
+- **Session 11** — UI redesign: 2-column layout, graph as main tab, persistent chat bar, cleaner tab bar. Designed Graph Intelligence spec (G1-G4)
+- **Session 12** — Pivoted Layer 6 to Discord DMs. discord_bot.py; on_message callback with person_id; Discord starts in server.py lifespan; env vars DISCORD_BOT_TOKEN / DISCORD_TEO_ID / DISCORD_ZUZU_ID
+- **Session 13** — Layer 7 complete (G1-G4): node resonance, threshold auto-expansion, orphan tag surfacing, dream recurrence root nodes
+- **Session 14** — Layer 8+9 complete: items 31, 33, 35, 36, 37, 40, 41, 43, 44. Content-aware soul drift; goal completion feeling; weather mood tendency; isolation drift; activity streak effects; world event emotional weight; AffectRecord; harsh message detection; shared-interest resonance
+- **Session 15** — Messaging reliability (message mode bypasses dice roll, protected from auto_decide override, social gate fixed). Zuzu removed (filtered on load, removed from Discord mapping). Testing/cocaine mode (POST /testing, UI toggle in admin). Discord status endpoint. Em dash stripping at _call level (covers all outputs). No-fabricated-continuity rule in autonomous messages. Active-conversation suppression (5-min window). PersonEvent — extract future plans from messages, resolve dates, inject into prompts when near. avatar.py reading image fix. Layer 6 item 22 updated (Teo only). Item 26 added (event tracking).

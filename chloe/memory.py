@@ -11,6 +11,7 @@
 import time
 import math
 import uuid
+import random
 from dataclasses import dataclass, field, asdict
 from typing import Literal, Optional
 
@@ -83,13 +84,48 @@ def get_related(store: list[Memory], topic: str, n: int = 3) -> list[Memory]:
 
 
 def derive_interests(store: list[Memory], top_n: int = 10) -> list[str]:
-    """Tally tags weighted by memory strength. Returns the top interests."""
+    """Return a balanced interest list — dominant interests plus emerging ones.
+
+    The top half of slots go to the strongest tags (deepening).
+    The remaining slots are sampled randomly from the mid-tier (exploration),
+    so that LLM prompts don't become an echo chamber of the same few concepts.
+    """
     tally: dict[str, float] = {}
     for m in store:
         for tag in m.tags:
             tally[tag] = tally.get(tag, 0.0) + m.weight
     ranked = sorted(tally.items(), key=lambda x: x[1], reverse=True)
-    return [tag for tag, _ in ranked[:top_n]]
+
+    if len(ranked) <= top_n:
+        return [tag for tag, _ in ranked]
+
+    # Dominant interests — the top half of requested slots
+    deep_n  = max(1, top_n // 2)
+    deep    = [tag for tag, _ in ranked[:deep_n]]
+
+    # Emerging interests — randomly sampled from the mid-tier (positions deep_n … top_n*4)
+    # Wide window so genuinely novel tags have a chance to surface
+    fringe_pool = [tag for tag, _ in ranked[deep_n : top_n * 4]]
+    fringe = random.sample(fringe_pool, min(top_n - deep_n, len(fringe_pool)))
+
+    return deep + fringe
+
+
+def derive_fringe_interests(store: list[Memory], n: int = 6) -> list[str]:
+    """Return only lower-weight tags — used during exploration reads to send
+    Chloe toward topics she has barely touched rather than her dominant ones."""
+    tally: dict[str, float] = {}
+    for m in store:
+        for tag in m.tags:
+            tally[tag] = tally.get(tag, 0.0) + m.weight
+    ranked = sorted(tally.items(), key=lambda x: x[1], reverse=True)
+
+    # Skip the dominant top third, sample from the rest
+    skip = max(1, len(ranked) // 3)
+    pool = [tag for tag, _ in ranked[skip:]]
+    if not pool:
+        pool = [tag for tag, _ in ranked]
+    return random.sample(pool, min(n, len(pool)))
 
 
 def format_for_prompt(memories: list[Memory]) -> str:

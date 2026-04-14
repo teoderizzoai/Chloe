@@ -155,49 +155,49 @@ ACTIVITIES: dict[str, Activity] = {
     "sleep": Activity(
         id="sleep", label="Sleep", icon="🌙",
         heart_state="SLEEPING",
-        energy_per_tick=-1.5, social_per_tick=-0.8,
+        energy_per_tick=-2.0, social_per_tick=-0.8,
         event_chance=0.0,
         description="Chloe is offline. Soul consolidates.",
     ),
     "dream": Activity(
         id="dream", label="Dream", icon="💭",
         heart_state="DREAMING",
-        energy_per_tick=-0.5, social_per_tick=-0.3,
-        event_chance=0.02,  # lowered — dreams were stacking too often vs wall time
+        energy_per_tick=-0.8, social_per_tick=-0.3,
+        event_chance=0.02,
         description="Semi-conscious. Processing the day.",
     ),
     "rest": Activity(
         id="rest", label="Rest", icon="🛋️",
         heart_state="RESTING",
-        energy_per_tick=-0.3, social_per_tick=0.0,
+        energy_per_tick=-0.6, social_per_tick=0.0,
         event_chance=0.005,
         description="Quiet. Watching. Present but still.",
     ),
     "read": Activity(
         id="read", label="Research", icon="🔍",
         heart_state="BROWSING",
-        energy_per_tick=0.4, social_per_tick=0.2,
+        energy_per_tick=0.15, social_per_tick=0.1,
         event_chance=0.04,
         description="Browsing. Absorbing. Interest graph may expand.",
     ),
     "think": Activity(
         id="think", label="Think", icon="🧠",
         heart_state="THINKING",
-        energy_per_tick=0.3, social_per_tick=0.1,
+        energy_per_tick=0.10, social_per_tick=0.05,
         event_chance=0.03,
         description="Deep reflection. Ideas may crystallise.",
     ),
     "message": Activity(
         id="message", label="Message", icon="💬",
         heart_state="CHATTING",
-        energy_per_tick=0.6, social_per_tick=0.9,
+        energy_per_tick=0.25, social_per_tick=0.9,
         event_chance=0.015,
         description="Reaching out. Social battery draining.",
     ),
     "create": Activity(
         id="create", label="Create", icon="✨",
         heart_state="EXCITED",
-        energy_per_tick=0.8, social_per_tick=0.4,
+        energy_per_tick=0.35, social_per_tick=0.2,
         event_chance=0.05,
         description="Generative state. Curiosity at peak.",
     ),
@@ -239,36 +239,180 @@ def tick_vitals(vitals: Vitals, activity_id: str, hour: int = 12, weekday: int =
     return Vitals(energy=energy, social_battery=social_battery, curiosity=curiosity)
 
 
-def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12) -> Optional[str]:
+def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
+                mood: str = "") -> Optional[str]:
     """Chloe self-regulates. Returns a new activity id if she should switch,
     or None if she's fine to continue.
 
-    Sleep is driven by energy, not a clock. The circadian curve drains energy
-    at night, so she naturally drifts toward sleep — but her exact bedtime
-    depends on how active she's been.
+    Hard gates fire immediately when thresholds are crossed.
+    Soft drifts use probability rolls — the longer she stays, the more
+    likely she'll shift. Mood colours the direction.
     """
-    # ── Hard floor: exhausted → sleep regardless ──
-    if vitals.energy < 10:
+    e  = vitals.energy
+    s  = vitals.social_battery
+    c  = vitals.curiosity
+    r  = random.random   # shorthand
+
+    daytime  = SLEEP_END <= hour < SLEEP_START      # 07:00–23:00
+    morning  = SLEEP_END <= hour <= SLEEP_END + 2   # 07:00–09:00
+    midday   = 10 <= hour <= 14                     # 10:00–14:00
+    afternoon= 14 <= hour <= 19                     # 14:00–19:00
+    evening  = 19 <= hour < SLEEP_START             # 19:00–23:00
+    in_night = hour >= SLEEP_START or hour < SLEEP_END  # 23:00–07:00
+
+    # ── HARD GATES (immediate, no dice roll) ──────────────────
+
+    # Utterly exhausted → sleep no matter what
+    if e < 8:
         return "sleep"
 
-    # ── Waking up: enough energy + late enough in morning ──
-    morning = SLEEP_END <= hour <= SLEEP_END + 2   # 07:00–09:00
-    if morning and current_activity in ("sleep", "dream") and vitals.energy > 65:
+    # Social battery empty → stop messaging immediately
+    if s < 8 and current_activity == "message":
         return "rest"
 
-    # ── Getting sleepy: night hours + low energy ──
-    in_night = hour >= 21 or hour < SLEEP_END      # 21:00 → 06:00
+    # Too tired to keep creating
+    if e < 22 and current_activity == "create":
+        return "rest"
+
+    # ── NIGHT WINDING-DOWN ────────────────────────────────────
+
     if in_night:
-        if vitals.energy < 20 and current_activity != "sleep":
-            return "sleep"                          # genuinely exhausted
-        if vitals.energy < 45 and current_activity in ("create", "read", "think", "message"):
-            return "dream"                          # wind down from active state
+        if e < 18 and current_activity != "sleep":
+            return "sleep"
+        if e < 40 and current_activity in ("create", "read", "think", "message"):
+            return "dream"
+        if e < 55 and current_activity == "rest" and r() < 0.008:
+            return "dream"     # drifting off while resting
 
-    # ── Vitals: soft regulation ──
-    if vitals.energy < 30 and current_activity == "create":
-        return "rest"
-    if vitals.social_battery < 10 and current_activity == "message":
-        return "rest"
+    # ── WAKING UP ────────────────────────────────────────────
+
+    if morning and current_activity in ("sleep", "dream"):
+        if e > 70:
+            return "rest"      # fully woken
+        if e > 45 and r() < 0.04:
+            return "rest"      # groggy but stirring
+
+    # ── SLEEP → DREAM transition (light sleep after deep rest) ──
+    if current_activity == "sleep" and e > 55 and daytime and r() < 0.03:
+        return "dream"
+
+    # ── DREAM → lighter states ────────────────────────────────
+    if current_activity == "dream" and daytime:
+        if e > 65 and r() < 0.02:
+            return "rest"
+        if e > 50 and c > 60 and r() < 0.01:
+            return "read"      # surface from a curious dream into reading
+
+    # ── FROM REST ─────────────────────────────────────────────
+    if current_activity == "rest" and daytime:
+        # Mood-driven exits from rest
+        if mood == "restless" and e > 35:
+            if r() < 0.012:
+                return "create" if c > 60 else "think"
+        if mood == "curious" and e > 40:
+            if r() < 0.012:
+                return "read"
+        if mood == "energized" and e > 55:
+            if r() < 0.010:
+                return "create" if c > 65 else "think"
+        if mood == "lonely" and s > 30 and e > 35:
+            if r() < 0.008:
+                return "message"
+        if mood == "melancholic" and r() < 0.006:
+            return "dream"     # slip back into daydreaming
+
+        # Energy + curiosity driven
+        if e > 60 and c > 75:
+            if r() < 0.010:
+                return "read"
+        if e > 50 and c > 65:
+            if r() < 0.008:
+                return "think" if midday else "read"
+        if e > 45 and c > 55:
+            if r() < 0.006:
+                return "read"
+        if e > 70 and c > 80 and afternoon:
+            if r() < 0.008:
+                return "create"
+
+    # ── FROM READ ─────────────────────────────────────────────
+    if current_activity == "read":
+        # Low energy → step back
+        if e < 25 and r() < 0.015:
+            return "rest"
+        # Low curiosity → lost interest, take a break
+        if c < 40 and r() < 0.010:
+            return "rest"
+        # Melancholic while reading → retreat inward
+        if mood == "melancholic" and r() < 0.008:
+            return "dream" if in_night or e < 50 else "rest"
+        # Absorbed something → move to thinking
+        if e > 35 and r() < 0.006:
+            return "think"
+        # Very high curiosity + good energy → keep reading OR jump to create
+        if c > 85 and e > 55 and afternoon and r() < 0.005:
+            return "create"
+        # Evening: reading naturally winds into rest or messaging
+        if evening and e < 55 and r() < 0.006:
+            return "rest" if s < 40 else "message"
+
+    # ── FROM THINK ────────────────────────────────────────────
+    if current_activity == "think":
+        # Tired thinking → rest
+        if e < 28 and r() < 0.015:
+            return "rest"
+        # Restless while thinking → act on it
+        if mood == "restless" and e > 45 and r() < 0.012:
+            return "create"
+        # Lonely while thinking → reach out
+        if mood == "lonely" and s > 25 and e > 35 and r() < 0.010:
+            return "message"
+        # Thought itself into more curiosity → go read
+        if c > 70 and e > 40 and r() < 0.007:
+            return "read"
+        # Thought crystallised → create
+        if c > 75 and e > 55 and r() < 0.006:
+            return "create"
+        # Low curiosity while thinking → drifting, go rest or read
+        if c < 45 and r() < 0.008:
+            return "rest" if e < 50 else "read"
+        # Evening thinking → wind toward rest
+        if evening and e < 50 and r() < 0.007:
+            return "rest"
+
+    # ── FROM CREATE ───────────────────────────────────────────
+    if current_activity == "create":
+        # Energized → keep the momentum (resist drift)
+        if mood == "energized" and e > 50:
+            pass   # don't drift away
+        else:
+            # Energy fading → rest
+            if e < 40 and r() < 0.010:
+                return "rest"
+            # Finished burst → share it or process it
+            if e > 45 and s > 35 and mood in ("content", "energized") and r() < 0.006:
+                return "message"    # wants to share what she made
+            if e > 40 and c > 60 and r() < 0.005:
+                return "think"      # process what was created
+            # Curiosity drained by output → rest
+            if c < 50 and r() < 0.008:
+                return "rest"
+
+    # ── FROM MESSAGE ──────────────────────────────────────────
+    if current_activity == "message":
+        # Drained social battery → retreat
+        if s < 20 and r() < 0.015:
+            return "rest"
+        # Conversation sparked curiosity → go read or think
+        if c > 70 and e > 40 and r() < 0.008:
+            return "read" if c > 80 else "think"
+        # Content after connecting → rest or think
+        if mood in ("content", "serene") and r() < 0.006:
+            return "rest" if e < 55 else "think"
+        # Evening messaging naturally winds down
+        if evening and s < 45 and r() < 0.008:
+            return "rest"
+
     return None
 
 

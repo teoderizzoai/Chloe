@@ -9,23 +9,24 @@
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ── PALETTE — derived from Chloe's image (pink hair, mint sweater, sage leaf) */
 :root {
   --sw: 260px;
-  --bg:       #07080a;
-  --bg2:      #0d0f12;
-  --bg3:      #121519;
-  --border:   #1c2028;
-  --border2:  #252b35;
-  --text:     #8a9ab0;
-  --text2:    #4a5568;
-  --text3:    #2a3040;
-  --gold:     #c8a96e;
-  --gold2:    #8a6d3e;
-  --blue:     #4a7fa8;
-  --teal:     #3a8a7a;
-  --violet:   #6a5a9a;
-  --rose:     #8a4a5a;
-  --sage:     #4a7a5a;
+  --bg:       #07080c;
+  --bg2:      #0d0e14;
+  --bg3:      #13141e;
+  --border:   #1c1e2c;
+  --border2:  #272a3e;
+  --text:     #c0c8e8;
+  --text2:    #8088b0;
+  --text3:    #505880;
+  --gold:     #d4849a;   /* soft pink — main accent */
+  --gold2:    #8a4a62;   /* deep pink */
+  --blue:     #5aaa88;   /* mint — sweater */
+  --teal:     #4a9870;   /* sage green — leaf */
+  --violet:   #8a5a72;   /* dusty rose */
+  --rose:     #b06080;   /* warm rose */
+  --sage:     #4a8a62;   /* forest green */
   --font-mono:  'DM Mono', monospace;
   --font-serif: 'Cormorant Garamond', serif;
   --r: 6px;
@@ -41,7 +42,7 @@ html, body {
   overflow: hidden;
 }
 
-button, .mtab, .person-pill, .activity-btn, .sidebar-label, .topbar-name, .topbar-stat {
+button, .mtab, .person-pill, .sidebar-label, .topbar-name, .topbar-stat {
   user-select: none;
 }
 
@@ -67,14 +68,14 @@ button, .mtab, .person-pill, .activity-btn, .sidebar-label, .topbar-name, .topba
 .spacer { flex: 1; }
 
 /* ── PROFILE CARD ──────────────────────────────────────────── */
-.profile-card { position: relative; overflow: hidden; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-.profile-img  { width: 100%; height: 220px; object-fit: cover; object-position: center 15%; display: block; filter: saturate(0.60) brightness(0.85); }
-.profile-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 36px 14px 12px; background: linear-gradient(to top, rgba(7,8,10,0.92) 0%, rgba(7,8,10,0.35) 55%, transparent 100%); }
-.profile-name { font-family: var(--font-mono); font-size: 18px; font-weight: 300; color: #ccd6ea; letter-spacing: 4px; text-transform: uppercase; line-height: 1; margin-bottom: 7px; }
+.profile-card { position: relative; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.profile-img  { width: 100%; height: 280px; object-fit: cover; object-position: center 10%; display: block; filter: saturate(0.80) brightness(0.92); }
+.profile-mood-badge { position: absolute; top: 12px; right: 12px; font-size: 7px; letter-spacing: 2px; text-transform: uppercase; border-radius: 10px; padding: 3px 10px; border: 1px solid currentColor; background: rgba(7,8,12,0.55); backdrop-filter: blur(8px); transition: color 2s, background 2s, border-color 2s; }
+.profile-info { padding: 11px 14px 12px; background: var(--bg2); }
+.profile-name { font-family: var(--font-mono); font-size: 15px; font-weight: 300; color: #ccd0ea; letter-spacing: 4px; text-transform: uppercase; line-height: 1; margin-bottom: 7px; }
 .profile-meta { display: flex; align-items: center; gap: 8px; }
-.profile-activity { font-size: 8px; letter-spacing: 2px; text-transform: uppercase; color: var(--text2); margin-top: 4px; }
-.profile-mood-badge { position: absolute; top: 12px; right: 12px; font-size: 7px; letter-spacing: 2px; text-transform: uppercase; border-radius: 10px; padding: 3px 10px; border: 1px solid currentColor; background: rgba(7,8,10,0.6); backdrop-filter: blur(6px); transition: color 2s, background 2s, border-color 2s; }
-.mbti-pill { font-size: 8px; letter-spacing: 3px; color: #7a90aa; border: 1px solid #2a3545; border-radius: 20px; padding: 2px 10px; }
+.profile-activity { font-size: 8px; letter-spacing: 2px; text-transform: uppercase; color: var(--text2); margin-top: 5px; }
+.mbti-pill { font-size: 8px; letter-spacing: 3px; color: #7a80aa; border: 1px solid #2a2a45; border-radius: 20px; padding: 2px 10px; }
 .state-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 6px var(--teal); animation: pulse 2s ease-in-out infinite; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
@@ -99,8 +100,8 @@ button, .mtab, .person-pill, .activity-btn, .sidebar-label, .topbar-name, .topba
 .soul-labels span.active { color: var(--gold2); }
 .soul-val-display { font-size: 9px; color: var(--text3); }
 .slider-track { height: 4px; background: var(--bg3); border-radius: 2px; position: relative; cursor: pointer; }
-.slider-fill  { position: absolute; top: 0; height: 100%; border-radius: 2px; background: linear-gradient(to right, var(--blue), var(--gold)); transition: width 1.2s ease; }
-.slider-thumb { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 8px; height: 8px; border-radius: 50%; background: var(--gold); transition: left 1.2s ease; box-shadow: 0 0 6px var(--gold2); }
+.slider-fill  { position: absolute; top: 0; height: 100%; border-radius: 2px; background: linear-gradient(to right, var(--gold2), var(--gold)); transition: width 1.2s ease; }
+.slider-thumb { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 8px; height: 8px; border-radius: 50%; background: var(--gold); transition: left 1.2s ease; box-shadow: 0 0 8px var(--gold); }
 .soul-desc { font-family: var(--font-serif); font-size: 13px; font-style: italic; color: var(--text2); line-height: 1.7; padding: 8px 0 2px; }
 .world-line { font-size: 11px; color: var(--text2); line-height: 1.8; }
 
@@ -109,29 +110,14 @@ button, .mtab, .person-pill, .activity-btn, .sidebar-label, .topbar-name, .topba
 .interest-tag { font-size: 8px; letter-spacing: 1px; color: var(--text2); border: 1px solid var(--border2); border-radius: 12px; padding: 2px 8px; cursor: default; transition: all 0.2s; }
 .interest-tag:hover { border-color: var(--gold2); color: var(--gold); }
 
-/* Activity */
-.activity-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
-.act-btn { padding: 7px 5px; border-radius: var(--r); border: 1px solid var(--border); background: transparent; color: var(--text2); font-family: var(--font-mono); font-size: 8px; letter-spacing: 1px; text-align: center; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.act-btn:hover  { border-color: var(--border2); color: var(--text); }
-.act-btn.active { border-color: var(--gold2); color: var(--gold); background: #1a150a; }
-.act-icon { font-size: 13px; }
-
-/* People */
-.person-card { display: flex; flex-direction: column; gap: 5px; padding: 10px 0; border-bottom: 1px solid var(--border); }
-.person-card:last-child { border-bottom: none; }
-.person-header { display: flex; justify-content: space-between; align-items: baseline; }
-.person-name { font-size: 11px; color: var(--text); letter-spacing: 0.5px; }
-.person-meta { font-size: 8px; color: var(--text3); letter-spacing: 0.5px; }
-.person-bars { display: flex; flex-direction: column; gap: 4px; }
-.person-bar-row { display: flex; align-items: center; gap: 8px; }
-.person-bar-label { font-size: 8px; letter-spacing: 1px; color: var(--text3); width: 40px; text-transform: uppercase; }
-.person-bar-track { flex: 1; height: 2px; background: var(--border); border-radius: 2px; overflow: hidden; }
-.person-bar-fill  { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
-.warmth-fill  { background: var(--gold2); }
-.contact-fill { background: var(--teal); }
-.person-notes { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; }
-.person-note { font-size: 9px; color: var(--text2); font-style: italic; line-height: 1.5; padding-left: 8px; border-left: 1px solid var(--border2); }
-.person-note.followed-up { color: var(--text3); text-decoration: line-through; }
+/* Activity — display only (no buttons) */
+.activity-display {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: var(--r);
+  background: var(--bg3); border: 1px solid var(--border2);
+}
+.activity-display-icon  { font-size: 16px; }
+.activity-display-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); }
 
 /* ── MAIN TAB BAR ──────────────────────────────────────────── */
 .main-tabs {
@@ -178,26 +164,7 @@ button, .mtab, .person-pill, .activity-btn, .sidebar-label, .topbar-name, .topba
 .page.active              { display: flex; flex-direction: column; }
 #page-graph.active        { display: block; overflow: hidden; }
 #page-panel.active        { display: block; overflow-y: auto; }
-
-/* ── CHAT PAGE ─────────────────────────────────────────────── */
-#page-chat { overflow: hidden; }
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.chat-messages::-webkit-scrollbar { width: 2px; }
-.chat-messages::-webkit-scrollbar-thumb { background: var(--border2); }
-
-.msg { max-width: 65%; padding: 9px 14px; border-radius: 10px; font-size: 11px; line-height: 1.65; }
-.msg-chloe { align-self: flex-start; background: var(--bg3); border: 1px solid var(--border2); border-radius: 10px 10px 10px 2px; color: var(--text); }
-.msg-user  { align-self: flex-end;   background: #0d1a0d;   border: 1px solid #1a2a1a;        border-radius: 10px 10px 2px 10px; color: #5a8a5a; }
-.msg-auto  { border-color: var(--gold2); }
-.msg-meta  { font-size: 7px; color: var(--text3); letter-spacing: 1px; margin-bottom: 4px; text-transform: uppercase; }
-.msg-queued { opacity: 0.45; font-style: italic; }
+#page-people.active       { display: block; overflow-y: auto; }
 
 /* ── PANEL PAGE ────────────────────────────────────────────── */
 .panel-body { padding: 16px 20px; }
@@ -232,6 +199,70 @@ button, .mtab, .person-pill, .activity-btn, .sidebar-label, .topbar-name, .topba
 .log-item { padding: 5px 0; font-size: 9px; color: var(--text3); line-height: 1.5; border-bottom: 1px solid var(--border); }
 .log-item:first-child { color: var(--text2); }
 
+/* ── PEOPLE PAGE ───────────────────────────────────────────── */
+.people-page { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.person-full-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--bg2);
+  transition: border-color 0.2s;
+}
+.person-full-card:hover { border-color: var(--border2); }
+.person-full-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px; cursor: pointer; transition: background 0.15s;
+}
+.person-full-header:hover { background: var(--bg3); }
+.person-full-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--bg3); border: 1px solid var(--border2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; flex-shrink: 0;
+}
+.person-full-info { flex: 1; min-width: 0; }
+.person-full-name { font-size: 13px; color: var(--text); letter-spacing: 1px; margin-bottom: 2px; }
+.person-full-summary { font-size: 8px; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; }
+.person-full-warmth-mini {
+  width: 60px; height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; flex-shrink: 0;
+}
+.person-full-warmth-mini-fill { height: 100%; border-radius: 1px; background: var(--gold2); transition: width 0.6s ease; }
+.person-chevron { font-size: 8px; color: var(--text3); transition: transform 0.2s; flex-shrink: 0; }
+.person-chevron.open { transform: rotate(180deg); }
+
+.person-full-body {
+  max-height: 0; overflow: hidden;
+  transition: max-height 0.35s ease, padding 0.2s ease;
+  border-top: 0px solid transparent;
+}
+.person-full-body.open {
+  max-height: 600px;
+  border-top: 1px solid var(--border);
+}
+.person-full-body-inner { padding: 16px; }
+
+.person-detail-section { margin-bottom: 14px; }
+.person-detail-label { font-size: 8px; letter-spacing: 2px; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
+.person-stat-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.person-stat-key { font-size: 8px; letter-spacing: 1px; text-transform: uppercase; color: var(--text3); width: 52px; }
+.person-stat-bar { flex: 1; height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; }
+.person-stat-fill { height: 100%; border-radius: 1px; transition: width 0.6s ease; }
+.person-warmth-fill  { background: var(--gold); }
+.person-contact-fill { background: var(--blue); }
+.person-stat-num { font-size: 9px; color: var(--text2); width: 28px; text-align: right; }
+
+.person-notes-list { display: flex; flex-direction: column; gap: 6px; }
+.person-note-entry {
+  font-size: 9px; color: var(--text2); font-style: italic;
+  line-height: 1.6; padding: 6px 10px;
+  border-left: 2px solid var(--border2);
+  border-radius: 0 3px 3px 0;
+  background: var(--bg3);
+}
+.person-note-entry.followed-up { color: var(--text3); text-decoration: line-through; border-left-color: var(--border); }
+.person-empty { font-size: 9px; color: var(--text3); font-style: italic; }
+.person-conv-count { font-size: 10px; color: var(--text2); }
+
 /* ── GRAPH PAGE ────────────────────────────────────────────── */
 #graph-canvas { width: 100%; height: 100%; display: block; }
 .graph-overlay { position: absolute; bottom: 12px; left: 14px; font-size: 8px; color: var(--text3); letter-spacing: 2px; pointer-events: none; }
@@ -239,7 +270,7 @@ button, .mtab, .person-pill, .activity-btn, .sidebar-label, .topbar-name, .topba
 .graph-selected-info.visible { display: block; }
 .sel-label { font-size: 11px; color: var(--gold); margin-bottom: 5px; }
 .sel-note  { font-size: 9px; color: var(--text2); line-height: 1.6; margin-bottom: 10px; }
-.sel-expand { font-size: 8px; letter-spacing: 2px; color: var(--gold2); border: 1px solid #2a2010; border-radius: 3px; padding: 4px 10px; cursor: pointer; background: none; font-family: var(--font-mono); }
+.sel-expand { font-size: 8px; letter-spacing: 2px; color: var(--gold2); border: 1px solid #2a1020; border-radius: 3px; padding: 4px 10px; cursor: pointer; background: none; font-family: var(--font-mono); }
 .sel-expand:hover { color: var(--gold); border-color: var(--gold2); }
 
 /* ── ADMIN ─────────────────────────────────────────────────── */
@@ -261,25 +292,125 @@ button, .mtab, .person-pill, .activity-btn, .sidebar-label, .topbar-name, .topba
 .admin-soul-num { font-size: 9px; color: var(--text3); width: 28px; text-align: right; }
 .admin-reset-btn { margin-top: 6px; width: 100%; padding: 7px; border-radius: var(--r); border: 1px solid var(--border2); background: transparent; color: var(--text2); font-family: var(--font-mono); font-size: 8px; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; transition: all 0.2s; }
 .admin-reset-btn:hover { border-color: var(--gold2); color: var(--gold); }
+.admin-cocaine-btn { margin-bottom: 4px; width: 100%; padding: 10px; border-radius: var(--r); border: 1px solid var(--border2); background: transparent; color: var(--text3); font-family: var(--font-mono); font-size: 9px; letter-spacing: 3px; text-transform: uppercase; cursor: pointer; transition: all 0.25s; }
+.admin-cocaine-btn:hover { border-color: #fff; color: #fff; }
+.admin-cocaine-btn.active { border-color: #fff; color: #111; background: #fff; box-shadow: 0 0 18px rgba(255,255,255,0.45); letter-spacing: 4px; }
 .admin-divider { height: 1px; background: var(--border); margin: 4px 0 10px; }
+.admin-act-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.admin-act-btn { padding: 7px 5px; border-radius: var(--r); border: 1px solid var(--border); background: transparent; color: var(--text2); font-family: var(--font-mono); font-size: 8px; letter-spacing: 1px; text-align: center; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.admin-act-btn:hover  { border-color: var(--border2); color: var(--text); }
+.admin-act-btn.active { border-color: var(--gold2); color: var(--gold); background: rgba(212,132,154,0.08); }
+.admin-act-icon { font-size: 13px; }
 
-/* ── CHAT BAR ──────────────────────────────────────────────── */
-.chatbar { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--bg2); }
-.chat-input-row { display: flex; align-items: center; gap: 8px; padding: 9px 16px; }
-.person-pills   { display: flex; gap: 4px; flex-shrink: 0; }
+/* ── FLOATING CHAT BUBBLE ──────────────────────────────────── */
+.chat-bubble-btn {
+  position: fixed; bottom: 24px; right: 24px; z-index: 200;
+  width: 54px; height: 54px; border-radius: 50%;
+  border: 1px solid var(--gold2);
+  background: var(--bg2);
+  cursor: pointer;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.6), 0 0 0 1px var(--border2);
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.2s;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  padding: 0;
+}
+.chat-bubble-btn:hover {
+  transform: scale(1.06);
+  box-shadow: 0 6px 28px rgba(0,0,0,0.7), 0 0 0 1px var(--gold2);
+}
+.chat-bubble-btn img {
+  width: 100%; height: 100%; object-fit: cover; object-position: center 10%;
+  filter: saturate(0.8) brightness(0.9);
+  border-radius: 50%;
+}
+.chat-bubble-btn .bubble-icon {
+  font-size: 20px; color: var(--gold2);
+}
+.chat-bubble-notif {
+  position: absolute; top: 0; right: 0;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--rose); border: 2px solid var(--bg);
+  display: none;
+}
+.chat-bubble-notif.show { display: block; }
+
+.chat-panel {
+  position: fixed; bottom: 88px; right: 24px; z-index: 199;
+  width: 640px;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 12px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.7);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  transform: scale(0.94) translateY(12px);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.22s ease, opacity 0.22s ease;
+  max-height: calc(200vh - 128px);
+}
+.chat-panel.open {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+  pointer-events: all;
+}
+
+.chat-panel-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.chat-panel-name {
+  font-family: var(--font-serif); font-style: italic;
+  font-size: 14px; color: var(--gold); letter-spacing: 1px;
+  flex: 1;
+}
+.person-pills { display: flex; gap: 4px; }
 .person-pill {
-  padding: 5px 12px; border-radius: 14px; border: 1px solid var(--border2);
+  padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border2);
   background: transparent; color: var(--text2); font-family: var(--font-mono);
-  font-size: 9px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+  font-size: 8px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
   transition: all 0.2s; white-space: nowrap;
 }
 .person-pill:hover  { color: var(--text); }
-.person-pill.active { border-color: var(--gold2); color: var(--gold); background: rgba(200,169,110,0.07); }
-.chat-input { flex: 1; background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--r); padding: 8px 12px; color: var(--text); font-family: var(--font-mono); font-size: 11px; outline: none; transition: border-color 0.2s; }
+.person-pill.active { border-color: var(--gold2); color: var(--gold); background: rgba(212,132,154,0.07); }
+.chat-panel-close {
+  background: none; border: none; color: var(--text2); font-size: 14px;
+  cursor: pointer; padding: 2px 4px; line-height: 1;
+  transition: color 0.15s;
+}
+.chat-panel-close:hover { color: var(--text); }
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 320px;
+  max-height: 520px;
+}
+.chat-messages::-webkit-scrollbar { width: 2px; }
+.chat-messages::-webkit-scrollbar-thumb { background: var(--border2); }
+
+.msg { max-width: 82%; padding: 8px 12px; border-radius: 10px; font-size: 11px; line-height: 1.6; }
+.msg-chloe { align-self: flex-start; background: var(--bg3); border: 1px solid var(--border2); border-radius: 10px 10px 10px 2px; color: var(--text); }
+.msg-user  { align-self: flex-end;   background: #0d0f1a;   border: 1px solid #1e2030;  border-radius: 10px 10px 2px 10px; color: #6870a0; }
+.msg-auto  { border-color: var(--gold2); }
+.msg-meta  { font-size: 7px; color: var(--text3); letter-spacing: 1px; margin-bottom: 3px; text-transform: uppercase; }
+.msg-queued { opacity: 0.45; font-style: italic; }
+
+.chat-panel-input {
+  flex-shrink: 0; border-top: 1px solid var(--border);
+  padding: 8px 12px; display: flex; align-items: center; gap: 8px;
+}
+.chat-input { flex: 1; background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--r); padding: 7px 10px; color: var(--text); font-family: var(--font-mono); font-size: 11px; outline: none; transition: border-color 0.2s; }
 .chat-input:focus { border-color: var(--gold2); }
 .chat-input::placeholder { color: var(--text3); }
-.send-btn { padding: 8px 14px; background: #1a150a; border: 1px solid var(--gold2); border-radius: var(--r); color: var(--gold2); font-family: var(--font-mono); font-size: 11px; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
-.send-btn:hover { background: #251e0f; color: var(--gold); }
+.send-btn { padding: 7px 12px; background: rgba(212,132,154,0.08); border: 1px solid var(--gold2); border-radius: var(--r); color: var(--gold2); font-family: var(--font-mono); font-size: 11px; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+.send-btn:hover { background: rgba(212,132,154,0.15); color: var(--gold); }
 
 /* ── NODE CONTEXT MENU ─────────────────────────────────────── */
 .node-menu {
@@ -319,9 +450,9 @@ button, .mtab, .person-pill, .activity-btn, .sidebar-label, .topbar-name, .topba
   <aside class="sidebar">
 
     <div class="profile-card">
-      <img class="profile-img" id="profile-img" src="image.webp" alt="">
+      <img class="profile-img" id="profile-img" src="" alt="Chloe" style="display:none">
       <div class="profile-mood-badge" id="mood-pill">content</div>
-      <div class="profile-overlay">
+      <div class="profile-info">
         <div class="profile-name">Chloe</div>
         <div class="profile-meta">
           <span class="mbti-pill" id="mbti">INFP</span>
@@ -366,12 +497,10 @@ button, .mtab, .person-pill, .activity-btn, .sidebar-label, .topbar-name, .topba
 
     <div class="section">
       <div class="section-title">activity</div>
-      <div class="activity-grid" id="activity-grid"></div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">people</div>
-      <div id="people-list"></div>
+      <div class="activity-display" id="activity-display">
+        <span class="activity-display-icon" id="activity-icon">🛋️</span>
+        <span class="activity-display-label" id="activity-label">Rest</span>
+      </div>
     </div>
 
   </aside>
@@ -381,11 +510,11 @@ button, .mtab, .person-pill, .activity-btn, .sidebar-label, .topbar-name, .topba
 
     <!-- TAB BAR -->
     <nav class="main-tabs">
-      <button class="mtab active" data-tab="chat"   onclick="switchTab('chat')">chat</button>
+      <button class="mtab active" data-tab="graph"  onclick="switchTab('graph')">graph</button>
       <button class="mtab"        data-tab="memory" onclick="switchTab('memory')">memory</button>
       <button class="mtab"        data-tab="mind"   onclick="switchTab('mind')">mind</button>
       <button class="mtab"        data-tab="ideas"  onclick="switchTab('ideas')">ideas</button>
-      <button class="mtab"        data-tab="graph"  onclick="switchTab('graph')">graph</button>
+      <button class="mtab"        data-tab="people" onclick="switchTab('people')">people</button>
       <button class="mtab"        data-tab="log"    onclick="switchTab('log')">log</button>
       <span class="mtab-spacer"></span>
       <button class="mtab mtab-dim" data-tab="admin" onclick="switchTab('admin')">admin</button>
@@ -394,18 +523,18 @@ button, .mtab, .person-pill, .activity-btn, .sidebar-label, .topbar-name, .topba
     <!-- CONTENT AREA -->
     <div class="main-content">
 
-      <!-- Chat page (default) -->
-      <div id="page-chat" class="page active">
-        <div class="chat-messages" id="chat-messages"></div>
-      </div>
-
       <!-- Panel page: memory / mind / ideas / log / admin -->
       <div id="page-panel" class="page">
         <div class="panel-body" id="panel-body"></div>
       </div>
 
+      <!-- People page -->
+      <div id="page-people" class="page">
+        <div class="people-page" id="people-page-body"></div>
+      </div>
+
       <!-- Graph page -->
-      <div id="page-graph" class="page">
+      <div id="page-graph" class="page active">
         <canvas id="graph-canvas"></canvas>
         <div class="graph-overlay">drag · right-click remove · scroll zoom · drag pan</div>
         <div class="graph-selected-info" id="sel-info">
@@ -417,17 +546,28 @@ button, .mtab, .person-pill, .activity-btn, .sidebar-label, .topbar-name, .topba
 
     </div>
 
-    <!-- CHAT INPUT — always visible -->
-    <div class="chatbar">
-      <div class="chat-input-row">
-        <div class="person-pills" id="person-pills"></div>
-        <input class="chat-input" id="chat-input" placeholder="say something…" autocomplete="off" />
-        <button class="send-btn" id="send-btn">→</button>
-      </div>
-    </div>
-
   </main>
 
+</div>
+
+<!-- FLOATING CHAT BUBBLE -->
+<button class="chat-bubble-btn" id="chat-bubble-btn" onclick="toggleChat()">
+  <img id="bubble-avatar" src="" alt="" style="display:none">
+  <span class="bubble-icon" id="bubble-icon">💬</span>
+  <span class="chat-bubble-notif" id="chat-notif"></span>
+</button>
+
+<div class="chat-panel" id="chat-panel">
+  <div class="chat-panel-header">
+    <span class="chat-panel-name">Chloe</span>
+    <div class="person-pills" id="person-pills"></div>
+    <button class="chat-panel-close" onclick="toggleChat()">✕</button>
+  </div>
+  <div class="chat-messages" id="chat-messages"></div>
+  <div class="chat-panel-input">
+    <input class="chat-input" id="chat-input" placeholder="say something…" autocomplete="off" />
+    <button class="send-btn" id="send-btn">→</button>
+  </div>
 </div>
 
 <!-- NODE CONTEXT MENU -->
@@ -442,9 +582,9 @@ const API     = 'http://localhost:8000';
 const POLL_MS = 4000;
 
 const MOOD_COLORS = {
-  content:    '#4a7a5a', restless:   '#8a7a3e', irritable:  '#8a4a4a',
-  melancholic:'#4a5a8a', curious:    '#3a8a7a', serene:     '#5a8a6a',
-  energized:  '#c8a96e', lonely:     '#6a5a8a',
+  content:    '#5a9870', restless:   '#8a7a4a', irritable:  '#8a4a4a',
+  melancholic:'#5a6a8a', curious:    '#4a9870', serene:     '#5aaa88',
+  energized:  '#d4849a', lonely:     '#8a5a72',
 };
 const MOODS = Object.keys(MOOD_COLORS);
 
@@ -465,12 +605,15 @@ const TRAITS = [
   { key:'JP', left:'J', right:'P' },
 ];
 
-const DEPTH_COLORS = ['#c8a96e','#4a7fa8','#6a5a9a','#3a8a7a','#8a4a5a','#8a7a3a'];
+const DEPTH_COLORS = ['#d4849a','#5aaa88','#8a5a72','#4a9870','#b06080','#8a7a6a'];
 
 // ── STATE ────────────────────────────────────────────────────
 let state        = null;
-let activeTab    = 'chat';
+let activeTab    = 'graph';
 let activePerson = 'teo';
+let chatOpen     = false;
+let prevMsgCount = 0;
+let expandedPersons = new Set();
 
 // Graph
 let selectedNodeId  = null;
@@ -490,7 +633,6 @@ let panInitialized  = false;
 // ── INIT ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   buildSoulSliders();
-  buildActivityGrid();
   initGraph();
   poll();
   setInterval(poll, POLL_MS);
@@ -498,7 +640,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('chat-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
   document.getElementById('sel-expand-btn').onclick = expandSelected;
   document.getElementById('node-menu-remove').onclick = removeMenuNode;
-  document.addEventListener('click', () => { document.getElementById('node-menu').style.display = 'none'; });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#node-menu')) document.getElementById('node-menu').style.display = 'none';
+    // Close chat panel when clicking outside of it and outside the bubble button
+    if (chatOpen && !e.target.closest('#chat-panel') && !e.target.closest('#chat-bubble-btn')) {
+      toggleChat();
+    }
+  });
 });
 
 // ── POLLING ───────────────────────────────────────────────────
@@ -508,11 +656,10 @@ async function poll() {
     if (!res.ok) return;
     state = await res.json();
     applyState(state);
-    // Blink blue on successful refresh
     const dot = document.getElementById('poll-dot');
     dot.style.transition = 'none';
-    dot.style.background = '#3a9bdc';
-    dot.style.boxShadow  = '0 0 6px #3a9bdc';
+    dot.style.background = '#5aaa88';
+    dot.style.boxShadow  = '0 0 6px #5aaa88';
     setTimeout(() => {
       dot.style.transition = 'background 0.8s, box-shadow 0.8s';
       dot.style.background = '#444';
@@ -549,30 +696,40 @@ function applyState(s) {
   // Mood
   if (s.affect) {
     const pill  = document.getElementById('mood-pill');
-    const color = MOOD_COLORS[s.affect.mood] || '#4a5568';
+    const color = MOOD_COLORS[s.affect.mood] || '#4a5078';
     pill.textContent        = s.affect.mood;
     pill.style.color        = color;
     pill.style.background   = color + '22';
     pill.style.borderColor  = color + '88';
   }
 
-  // Profile portrait
+  // Activity display (read-only)
+  const act = ACTIVITIES.find(a => a.id === s.activity);
+  if (act) {
+    document.getElementById('activity-icon').textContent  = act.icon;
+    document.getElementById('activity-label').textContent = act.label;
+  }
+
+  // Profile portrait (served via API)
   const profileImg = document.getElementById('profile-img');
+  const bubbleAvatar = document.getElementById('bubble-avatar');
+  const bubbleIcon   = document.getElementById('bubble-icon');
   if (profileImg) {
-    const DEFAULT_AVATAR = 'image.webp';
     const apiBase = API.endsWith('/') ? API : `${API}/`;
     if (s.avatar && s.avatar.path) {
       const nextSrc = new URL(s.avatar.path, apiBase).href;
       if (profileImg.src !== nextSrc) {
         profileImg.src = nextSrc;
         profileImg.alt = s.avatar.key || 'Chloe';
+        profileImg.style.display = 'block';
+        bubbleAvatar.src = nextSrc;
+        bubbleAvatar.style.display = 'block';
+        bubbleIcon.style.display = 'none';
       }
     } else {
-      const fallbackSrc = new URL(DEFAULT_AVATAR, window.location.href).href;
-      if (profileImg.src !== fallbackSrc) {
-        profileImg.src = DEFAULT_AVATAR;
-        profileImg.alt = 'Chloe';
-      }
+      profileImg.style.display = 'none';
+      bubbleAvatar.style.display = 'none';
+      bubbleIcon.style.display = 'block';
     }
   }
 
@@ -584,21 +741,25 @@ function applyState(s) {
   document.getElementById('interests').innerHTML =
     s.interests.map(i => `<span class="interest-tag">${i}</span>`).join('');
 
-  // Activity buttons
-  document.querySelectorAll('.act-btn').forEach(btn =>
-    btn.classList.toggle('active', btn.dataset.id === s.activity));
-
-  // People
-  if (s.persons) { renderPeople(s.persons); renderPersonPills(s.persons); }
+  // People (page + pills)
+  if (s.persons) {
+    renderPersonPills(s.persons);
+    if (activeTab === 'people') renderPeoplePage(s.persons);
+  }
 
   // Graph data
   mergeGraph(s.graph);
 
-  // Panel (skip when on chat or graph — those update themselves)
-  if (activeTab !== 'chat' && activeTab !== 'graph') renderPanel(s);
-
-  // Chat messages
+  // Chat — notification dot
+  const msgs = (s.chat || []).filter(m => !m.person_id || m.person_id === activePerson);
+  if (!chatOpen && msgs.length > prevMsgCount) {
+    document.getElementById('chat-notif').classList.add('show');
+  }
+  prevMsgCount = msgs.length;
   renderChat(s.chat);
+
+  // Panel (skip when on graph or people — those update themselves above)
+  if (activeTab !== 'graph' && activeTab !== 'people') renderPanel(s);
 }
 
 function setVital(key, val) {
@@ -618,7 +779,7 @@ function buildSoulSliders() {
         </div>
         <span class="soul-val-display" id="sval-${t.key}">50</span>
       </div>
-      <div class="slider-track" onclick="onSliderClick(event,'${t.key}')">
+      <div class="slider-track">
         <div class="slider-fill"  id="sf-${t.key}" style="width:50%"></div>
         <div class="slider-thumb" id="st-${t.key}" style="left:50%"></div>
       </div>
@@ -643,50 +804,78 @@ function onSliderClick(e, trait) {
   fetch(`${API}/soul`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ trait, value: val }) });
 }
 
-// ── ACTIVITY GRID ─────────────────────────────────────────────
-function buildActivityGrid() {
-  document.getElementById('activity-grid').innerHTML = ACTIVITIES.map(a => `
-    <button class="act-btn" data-id="${a.id}" onclick="setActivity('${a.id}')">
-      <span class="act-icon">${a.icon}</span>${a.label}
-    </button>
-  `).join('');
-}
+// ── PEOPLE PAGE ───────────────────────────────────────────────
+function renderPeoplePage(persons) {
+  const body = document.getElementById('people-page-body');
+  if (!persons || !persons.length) {
+    body.innerHTML = '<div class="log-item" style="padding:20px">No people yet.</div>';
+    return;
+  }
 
-function setActivity(id) {
-  fetch(`${API}/activity`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ activity_id: id }) });
-}
-
-// ── PEOPLE ───────────────────────────────────────────────────
-function renderPeople(persons) {
-  document.getElementById('people-list').innerHTML = persons.map(p => {
+  body.innerHTML = persons.map(p => {
     const warmth  = Math.round(p.warmth);
     const contact = Math.round(100 - p.distance);
-    const notes   = (p.notes || []).slice(0, 3);
-    const noteHtml = notes.length ? `<div class="person-notes">${
-      notes.map(n => `<div class="person-note${n.followed_up ? ' followed-up':''}">${n.text}</div>`).join('')
-    }</div>` : '';
-    const convStr = p.conversation_count ? `${p.conversation_count} conv` : 'no contact';
+    const notes   = p.notes || [];
+    const convStr = p.conversation_count ? `${p.conversation_count} conversation${p.conversation_count === 1 ? '' : 's'}` : 'no conversations yet';
+    const isOpen  = expandedPersons.has(p.id);
+
+    const notesHtml = notes.length
+      ? notes.map(n => `<div class="person-note-entry${n.followed_up ? ' followed-up' : ''}">${n.text}</div>`).join('')
+      : '<div class="person-empty">no notes yet</div>';
+
     return `
-      <div class="person-card">
-        <div class="person-header">
-          <div class="person-name">${p.name}</div>
-          <div class="person-meta">${convStr}</div>
-        </div>
-        <div class="person-bars">
-          <div class="person-bar-row">
-            <div class="person-bar-label">warmth</div>
-            <div class="person-bar-track"><div class="person-bar-fill warmth-fill" style="width:${warmth}%"></div></div>
-            <div class="person-meta" style="width:24px;text-align:right">${warmth}</div>
+      <div class="person-full-card" id="pcard-${p.id}">
+        <div class="person-full-header" onclick="togglePersonExpand('${p.id}')">
+          <div class="person-full-info">
+            <div class="person-full-name">${p.name}</div>
+            <div class="person-full-summary">${convStr} · warmth ${warmth}</div>
           </div>
-          <div class="person-bar-row">
-            <div class="person-bar-label">contact</div>
-            <div class="person-bar-track"><div class="person-bar-fill contact-fill" style="width:${contact}%"></div></div>
-            <div class="person-meta" style="width:24px;text-align:right">${contact}</div>
+          <div class="person-full-warmth-mini">
+            <div class="person-full-warmth-mini-fill" style="width:${warmth}%"></div>
+          </div>
+          <div class="person-chevron${isOpen ? ' open' : ''}">▼</div>
+        </div>
+        <div class="person-full-body${isOpen ? ' open' : ''}" id="pbody-${p.id}">
+          <div class="person-full-body-inner">
+
+            <div class="person-detail-section">
+              <div class="person-detail-label">relationship</div>
+              <div class="person-stat-row">
+                <div class="person-stat-key">warmth</div>
+                <div class="person-stat-bar"><div class="person-stat-fill person-warmth-fill" style="width:${warmth}%"></div></div>
+                <div class="person-stat-num">${warmth}</div>
+              </div>
+              <div class="person-stat-row">
+                <div class="person-stat-key">contact</div>
+                <div class="person-stat-bar"><div class="person-stat-fill person-contact-fill" style="width:${contact}%"></div></div>
+                <div class="person-stat-num">${contact}</div>
+              </div>
+            </div>
+
+            <div class="person-detail-section">
+              <div class="person-detail-label">conversations</div>
+              <div class="person-conv-count">${convStr}</div>
+            </div>
+
+            <div class="person-detail-section">
+              <div class="person-detail-label">notes</div>
+              <div class="person-notes-list">${notesHtml}</div>
+            </div>
+
           </div>
         </div>
-        ${noteHtml}
       </div>`;
   }).join('');
+}
+
+function togglePersonExpand(id) {
+  if (expandedPersons.has(id)) {
+    expandedPersons.delete(id);
+  } else {
+    expandedPersons.add(id);
+  }
+  // Re-render
+  if (state && state.persons) renderPeoplePage(state.persons);
 }
 
 function renderPersonPills(persons) {
@@ -700,8 +889,22 @@ function selectPerson(id) {
   activePerson = id;
   document.querySelectorAll('.person-pill').forEach(p =>
     p.classList.toggle('active', p.dataset.id === id));
-  // Re-render chat for the newly selected person
   if (state) renderChat(state.chat);
+}
+
+// ── CHAT BUBBLE ───────────────────────────────────────────────
+function toggleChat() {
+  chatOpen = !chatOpen;
+  const panel = document.getElementById('chat-panel');
+  panel.classList.toggle('open', chatOpen);
+  if (chatOpen) {
+    document.getElementById('chat-notif').classList.remove('show');
+    prevMsgCount = (state?.chat || []).filter(m => !m.person_id || m.person_id === activePerson).length;
+    // Scroll to bottom
+    const container = document.getElementById('chat-messages');
+    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
+    document.getElementById('chat-input').focus();
+  }
 }
 
 // ── TAB SWITCHING ─────────────────────────────────────────────
@@ -711,16 +914,15 @@ function switchTab(tab) {
   document.querySelectorAll('.mtab').forEach(t =>
     t.classList.toggle('active', t.dataset.tab === tab));
 
-  const isChat  = tab === 'chat';
-  const isGraph = tab === 'graph';
-  const isPanel = !isChat && !isGraph;
+  const isGraph  = tab === 'graph';
+  const isPeople = tab === 'people';
+  const isPanel  = !isGraph && !isPeople;
 
-  document.getElementById('page-chat').classList.toggle('active',  isChat);
-  document.getElementById('page-graph').classList.toggle('active', isGraph);
-  document.getElementById('page-panel').classList.toggle('active', isPanel);
+  document.getElementById('page-panel').classList.toggle('active',  isPanel);
+  document.getElementById('page-graph').classList.toggle('active',  isGraph);
+  document.getElementById('page-people').classList.toggle('active', isPeople);
 
   if (isGraph) {
-    // Trigger canvas resize after layout paint
     requestAnimationFrame(() => {
       const canvas = document.getElementById('graph-canvas');
       if (canvas.offsetWidth > 0) {
@@ -735,6 +937,7 @@ function switchTab(tab) {
     });
   }
 
+  if (isPeople && state?.persons) renderPeoplePage(state.persons);
   if (isPanel && state) renderPanel(state);
 }
 
@@ -787,7 +990,7 @@ function renderPanel(s) {
     renderAdmin(s, body);
 
   } else {
-    // log — only re-render when content changes so text stays selectable/copyable
+    // log
     const logHtml = (s.log || []).map(l => `<div class="log-item">${l}</div>`).join('');
     if (body.dataset.logFingerprint !== logHtml.slice(0, 80)) {
       body.dataset.logFingerprint = logHtml.slice(0, 80);
@@ -834,7 +1037,20 @@ function renderAdmin(s, body) {
       </div>`;
   }).join('');
 
+  const currentAct = s.activity || 'rest';
+  const actHtml = ACTIVITIES.map(a => `
+    <button class="admin-act-btn ${a.id === currentAct ? 'active' : ''}" onclick="setActivity('${a.id}')">
+      <span class="admin-act-icon">${a.icon}</span>${a.label}
+    </button>`).join('');
+
+  const testingActive = !!s.testing_mode;
   body.innerHTML = `
+    <div class="admin-block">
+      <button class="admin-cocaine-btn ${testingActive ? 'active' : ''}" onclick="toggleTestingMode()">
+        ${testingActive ? '⚡ cocaine mode: ON' : 'cocaine mode'}
+      </button>
+    </div>
+    <div class="admin-divider"></div>
     <div class="admin-block">
       <div class="admin-block-title">vitals</div>
       ${vitalsHtml}
@@ -843,6 +1059,11 @@ function renderAdmin(s, body) {
     <div class="admin-block">
       <div class="admin-block-title">mood</div>
       <div class="admin-mood-grid">${moodHtml}</div>
+    </div>
+    <div class="admin-divider"></div>
+    <div class="admin-block">
+      <div class="admin-block-title">activity</div>
+      <div class="admin-act-grid">${actHtml}</div>
     </div>
     <div class="admin-divider"></div>
     <div class="admin-block">
@@ -864,6 +1085,11 @@ async function setMood(mood) {
   await poll();
 }
 
+async function setActivity(id) {
+  await fetch(`${API}/activity`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ activity_id: id }) });
+  await poll();
+}
+
 function resetSoulBaseline() {
   const defaults = { EI:58, SN:62, TF:56, JP:67 };
   Promise.all(Object.entries(defaults).map(([trait, value]) =>
@@ -871,22 +1097,24 @@ function resetSoulBaseline() {
   )).then(() => poll());
 }
 
+async function toggleTestingMode() {
+  await fetch(`${API}/testing`, { method:'POST' });
+  await poll();
+}
+
 // ── CHAT ─────────────────────────────────────────────────────
 function renderChat(messages) {
   if (!messages) return;
   const container = document.getElementById('chat-messages');
-  // Filter to the active person's conversation
   const filtered = messages.filter(m => !m.person_id || m.person_id === activePerson);
-  // Only re-render when content changed
   const last = filtered[filtered.length - 1];
   const fingerprint = `${activePerson}:${filtered.length}:${last ? last.from + last.time + last.text.slice(0,30) : ''}`;
   if (container.dataset.fingerprint === fingerprint) return;
   container.dataset.fingerprint = fingerprint;
   if (!filtered.length) {
-    container.innerHTML = '<div style="color:var(--text3);padding:16px;font-size:11px">no messages yet</div>';
+    container.innerHTML = '<div style="color:var(--text3);padding:12px;font-size:11px">no messages yet</div>';
     return;
   }
-  // Preserve scroll position — only snap to bottom if already near it
   const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
   container.innerHTML = filtered.map(m => `
     <div class="msg ${m.from === 'chloe' ? 'msg-chloe' + (m.autonomous ? ' msg-auto' : '') : 'msg-user'}">
@@ -902,15 +1130,11 @@ async function sendChat() {
   if (!msg) return;
   input.value = '';
 
-  // Switch to chat tab so user sees the reply
-  if (activeTab !== 'chat') switchTab('chat');
-
-  // Optimistic render — will be replaced by server state on next poll
   const container = document.getElementById('chat-messages');
   const now  = new Date();
   const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
   container.innerHTML += `<div class="msg msg-user"><div class="msg-meta">you (${activePerson}) · ${time}</div>${msg}</div>`;
-  container.dataset.fingerprint = ''; // force re-render on next poll
+  container.dataset.fingerprint = '';
   container.scrollTop = container.scrollHeight;
 
   try {
@@ -929,7 +1153,7 @@ async function sendChat() {
       container.scrollTop = container.scrollHeight;
     }
   } catch (e) {
-    container.innerHTML += `<div class="msg msg-chloe msg-queued"><div class="msg-meta">error</div>can't reach server — is uvicorn running on port 8080?</div>`;
+    container.innerHTML += `<div class="msg msg-chloe msg-queued"><div class="msg-meta">error</div>can't reach server</div>`;
     container.scrollTop = container.scrollHeight;
     return;
   }
@@ -1114,7 +1338,7 @@ function draw(ctx, canvas) {
     const a = nodeMap[e.from], b = nodeMap[e.to];
     if (!a||!b) return;
     const sel = e.from === selectedNodeId || e.to === selectedNodeId;
-    const col = sel ? (DEPTH_COLORS[nodeMap[e.to]?.depth||0]||'#c8a96e') : '#1c2028';
+    const col = sel ? (DEPTH_COLORS[nodeMap[e.to]?.depth||0]||'#d4849a') : '#1c1e2c';
     ctx.beginPath();
     ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
     ctx.strokeStyle = col; ctx.globalAlpha = sel ? 0.6 : 0.35;

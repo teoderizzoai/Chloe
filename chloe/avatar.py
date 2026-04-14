@@ -32,7 +32,7 @@ _ACTIVITY_FILES: Final[dict[str, str]] = {
     "dream":   "Actions/Chloe_Dream.png",
     "rest":    "Actions/Chloe_Rest.png",
     # heart.py calls this id "read" while the UI label is "Research"
-    "read":    "Actions/Chloe_Research.png",
+    "read":    "Actions/Chloe_Reading.png",
     "think":   "Actions/Chloe_Thinking.png",
     "message": "Actions/Chloe_Texting.png",
     "create":  "Actions/Chloe_Create.png",

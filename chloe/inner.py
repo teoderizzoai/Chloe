@@ -19,9 +19,10 @@ import time
 import uuid
 from dataclasses import dataclass, field, asdict
 
-MAX_WANTS   = 8    # max active (unresolved) wants at once
-MAX_BELIEFS = 12   # max beliefs in store
-MAX_GOALS   = 6    # max active goals at once
+MAX_WANTS          = 8    # max active (unresolved) wants at once
+MAX_BELIEFS        = 12   # max beliefs in store
+MAX_GOALS          = 6    # max active goals at once
+MAX_AFFECT_RECORDS = 60   # rolling log of mood-causing events
 
 
 # ── WANTS ─────────────────────────────────────────────────────
@@ -195,3 +196,72 @@ def goals_to_dicts(goals: list[Goal]) -> list[dict]:
 
 def goals_from_dicts(data: list[dict]) -> list[Goal]:
     return [Goal.from_dict(d) for d in data]
+
+
+# ── AFFECT RECORDS ────────────────────────────────────────────
+# Item 41 — a rolling log of what caused mood shifts.
+# Lets Chloe know her own patterns over time.
+
+@dataclass
+class AffectRecord:
+    """One entry in the mood history log — what caused a shift."""
+    mood:      str
+    cause:     str
+    tags:      list[str] = field(default_factory=list)
+    timestamp: float     = field(default_factory=time.time)
+    id:        str       = field(default_factory=lambda: str(uuid.uuid4())[:8])
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "AffectRecord":
+        return cls(
+            mood=d["mood"], cause=d["cause"],
+            tags=d.get("tags", []),
+            timestamp=float(d.get("timestamp", time.time())),
+            id=d.get("id", str(uuid.uuid4())[:8]),
+        )
+
+
+def add_affect_record(
+    records: list[AffectRecord], mood: str, cause: str, tags: list[str]
+) -> list[AffectRecord]:
+    r = AffectRecord(mood=mood, cause=cause, tags=tags)
+    return [r, *records][:MAX_AFFECT_RECORDS]
+
+
+def affect_records_to_dicts(records: list[AffectRecord]) -> list[dict]:
+    return [r.to_dict() for r in records]
+
+
+def affect_records_from_dicts(data: list[dict]) -> list[AffectRecord]:
+    return [AffectRecord.from_dict(d) for d in data]
+
+
+# ── Item 42: likes and dislikes from affect history ───────────
+
+_POSITIVE_MOODS = frozenset({"serene", "curious", "energized", "content"})
+_NEGATIVE_MOODS = frozenset({"melancholic", "irritable", "lonely", "restless"})
+
+
+def derive_preferences(records: list[AffectRecord], n: int = 5) -> dict:
+    """Tally which tags correlate with positive vs negative moods.
+    Returns {"lifts": [...top tags...], "drags": [...top tags...]}"""
+    if not records:
+        return {"lifts": [], "drags": []}
+
+    pos_tally: dict[str, int] = {}
+    neg_tally: dict[str, int] = {}
+
+    for r in records[-40:]:   # recent window — preferences can shift over time
+        if r.mood in _POSITIVE_MOODS:
+            for tag in r.tags:
+                pos_tally[tag] = pos_tally.get(tag, 0) + 1
+        elif r.mood in _NEGATIVE_MOODS:
+            for tag in r.tags:
+                neg_tally[tag] = neg_tally.get(tag, 0) + 1
+
+    lifts = sorted(pos_tally, key=pos_tally.__getitem__, reverse=True)[:n]
+    drags = sorted(neg_tally, key=neg_tally.__getitem__, reverse=True)[:n]
+    return {"lifts": lifts, "drags": drags}
