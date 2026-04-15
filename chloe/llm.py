@@ -22,7 +22,7 @@ load_dotenv(Path(__file__).parent.parent / ".env", override=True)
 from .soul    import Soul, mbti_type, describe
 from .heart   import Vitals
 from .memory  import Memory, format_for_prompt
-from .persons import tone_context
+from .persons import tone_context, relationship_stage
 
 MODEL_CHAT = "claude-opus-4-5"            # full power, used only for live chat
 MODEL_FAST = "claude-haiku-4-5-20251001" # background tasks: memory, ideas, graph
@@ -97,6 +97,11 @@ def chat(
     resonant_topics:  list = None,  # interests that appear in this message — she actually cares
     dragging_topics:  list = None,  # things she dislikes that appear in this message
     emotional_context: str = "",    # specific emotional trigger for this exchange
+    shared_moments:   str  = "",    # formatted shared moments / inside jokes
+    conflict_ctx:     str  = "",    # item 49: conflict tension context
+    third_party_ctx:  str  = "",    # people Teo has mentioned before
+    cross_person_ctx:  str  = "",    # item 50: what other roommates have said about this topic
+    person_impression: str  = "",    # item 52: Chloe's subjective read of this person
 ) -> str:
     """Chloe responds to something you said.
     Her reply is shaped by soul type, vitals, memories, and interests."""
@@ -123,11 +128,16 @@ def chat(
         top = beliefs[:3]
         beliefs_ctx = "\nThings you believe (lightly): " + " / ".join(b["text"] for b in top)
 
-    person_ctx = f"\nYou're talking with {person_name}."
+    stage = relationship_stage(warmth)
+    person_ctx = f"\nYou're talking with {person_name}. Relationship: {stage}."
+    if person_impression:
+        person_ctx += f"\nYour sense of {person_name}: {person_impression}"
     if person_notes:
         recent = person_notes[:3]
         notes_str = " / ".join(n["text"] for n in recent)
         person_ctx += f"\nThings you remember about {person_name}: {notes_str}"
+    if shared_moments:
+        person_ctx += shared_moments
 
     if sleep_state == "woken":
         sleep_ctx = "\nYou were asleep and just got woken up by this message. You're groggy, disoriented, not fully present. Keep your reply short and a bit sluggish."
@@ -197,7 +207,7 @@ Energy: {energy_desc}. Social battery: {social_desc}.
 Curiosity level: {round(vitals.curiosity)}%. Mood: {mood}.
 {mood_tone_ctx}
 You've been running for {uptime} since your last restart.
-{world_ctx}{person_ctx}{sleep_ctx}{upcoming_events}
+{world_ctx}{person_ctx}{f"{conflict_ctx}" if conflict_ctx else ""}{f"{third_party_ctx}" if third_party_ctx else ""}{f"{cross_person_ctx}" if cross_person_ctx else ""}{sleep_ctx}{upcoming_events}
 Recent memories:
 {format_for_prompt(memories)}
 
@@ -424,9 +434,10 @@ def generate_autonomous_message(
     preferences:  dict = None,   # {"lifts": [...], "drags": [...]} from affect history
     warmth:       float = 50.0,  # person warmth, shapes tone
     hour:         int   = 12,    # hour of day, shapes tone
-    recent_chat:     list  = None,  # last few chat messages with this person [{from, text}]
-    last_contact:    float = None,  # unix timestamp of last conversation
-    upcoming_events: str   = "",   # formatted upcoming events string
+    recent_chat:       list  = None,  # last few chat messages with this person [{from, text}]
+    last_contact:      float = None,  # unix timestamp of last conversation
+    upcoming_events:   str   = "",   # formatted upcoming events string
+    person_impression: str   = "",   # item 52: Chloe's subjective read of this person
 ) -> str:
     """Chloe decides to reach out unprompted.
     Returns a short string, what she'd send over text."""
@@ -438,10 +449,13 @@ def generate_autonomous_message(
     if weather:
         world_ctx += f" Outside: {weather.description}, {weather.feels_like}."
 
-    person_ctx = ""
+    stage = relationship_stage(warmth)
+    person_ctx = f"\nYour relationship with {person_name}: {stage}."
+    if person_impression:
+        person_ctx += f"\nYour sense of {person_name}: {person_impression}"
     if person_notes:
         notes_str = " / ".join(n["text"] for n in person_notes[:2])
-        person_ctx = f"\nThings you remember about {person_name}: {notes_str}"
+        person_ctx += f"\nThings you remember about {person_name}: {notes_str}"
 
     pref_ctx = ""
     if preferences:
@@ -736,6 +750,137 @@ The "text" should be a short phrase describing the event from Chloe's perspectiv
 Respond ONLY with valid JSON or the word null."""
 
     raw = _call(system, [{"role": "user", "content": f'Message: "{message}"'}], max_tokens=120)
+    clean = raw.strip()
+    if clean.lower() in ("null", "none", ""):
+        return None
+    try:
+        return _parse_json(clean)
+    except Exception:
+        return None
+
+
+# ── EXTRACT THIRD PARTY MENTIONS ────────────────────────────
+
+def extract_third_party_mentions(
+    message:     str,
+    person_name: str,
+) -> list[dict]:
+    """Detect named people that the person mentions in their message,
+    along with the emotional valence of what was said about them.
+
+    Returns a list of {"name": str, "sentiment": float, "note": str}
+    where sentiment is -100 (very negative) to 100 (very positive).
+    Returns [] if no named third parties with clear valence are found."""
+
+    system = f"""You are reading a message from {person_name} and detecting any named people they mention.
+
+For each named person (friend, colleague, family member, etc.) mentioned with some emotional context:
+- Extract their name
+- Rate the sentiment of what was said about them: -100 (very bad) to 100 (very positive). 0 = neutral.
+- Write a brief note (one phrase) capturing what was said about them
+
+Only include people with a real name or clear label (e.g. "my boss", "Alex", "my mum").
+Only include them if there is some emotional context — skip pure factual mentions with no valence.
+
+Respond ONLY with valid JSON array, e.g.:
+[{{"name": "Alex", "sentiment": 70, "note": "really came through when Teo needed help"}},
+ {{"name": "boss", "sentiment": -60, "note": "was dismissive of Teo's work again"}}]
+
+If no such people are mentioned, respond with: []"""
+
+    raw = _call(system, [{"role": "user", "content": f'Message from {person_name}: "{message}"'}],
+                max_tokens=200)
+    clean = raw.strip()
+    if clean in ("[]", "null", "none", ""):
+        return []
+    try:
+        result = _parse_json(clean)
+        return result if isinstance(result, list) else []
+    except Exception:
+        return []
+
+
+# ── Item 52. GENERATE PERSON IMPRESSION ─────────────────────
+
+def generate_person_impression(
+    person_name:  str,
+    soul:         Soul,
+    mood:         str,
+    warmth:       float,
+    stage:        str,
+    notes:        list[dict],    # PersonNote dicts
+    moments:      list[dict],    # SharedMoment dicts
+    conversation_count: int,
+) -> str:
+    """Generate Chloe's subjective impression of a person — who they are as she
+    experiences them. One or two sentences, first person, impressionistic.
+    Updated periodically as the relationship deepens."""
+
+    notes_text   = " / ".join(n["text"] for n in notes[:6])   if notes   else "nothing specific yet"
+    moments_text = " / ".join(m["text"] for m in moments[:4]) if moments else "nothing yet"
+
+    system = f"""You are writing Chloe's private impression of someone she knows.
+Chloe is {mbti_type(soul)}, currently feeling {mood}. She relates to this person well (warmth: {round(warmth)}/100, stage: {stage}).
+
+What you know about {person_name}:
+- Things noted: {notes_text}
+- Shared moments: {moments_text}
+- Conversations so far: {conversation_count}
+
+Write Chloe's subjective sense of who {person_name} is — not a list of facts, but her felt impression.
+What's their energy? How do they make her feel? What's distinctive about them?
+First person ("Teo is...", "There's something about {person_name}...").
+1-2 sentences. Specific and real, not generic. Never use em dashes."""
+
+    return _call(system,
+                 [{"role": "user", "content": f"Write Chloe's impression of {person_name}."}],
+                 max_tokens=120)
+
+
+# ── Item 46. EXTRACT SHARED MOMENT ──────────────────────────
+
+def extract_shared_moment(
+    exchange:    list[dict],   # recent messages [{"from": "chloe"|"user", "text": "..."}]
+    person_name: str,
+) -> dict | None:
+    """After a conversation exchange, detect if something memorable happened between them
+    that's worth keeping as a shared moment or inside joke.
+
+    Returns {"text": "...", "tags": [...]} or None."""
+
+    if len(exchange) < 2:
+        return None
+
+    # Format the exchange for the prompt
+    lines = []
+    for m in exchange[-6:]:
+        speaker = "Chloe" if m["from"] == "chloe" else person_name
+        lines.append(f"{speaker}: {m['text']}")
+    exchange_text = "\n".join(lines)
+
+    system = f"""You are reading a conversation between Chloe and {person_name}.
+Decide if this exchange contains a memorable shared moment worth keeping — something
+they might look back on, reference again, or laugh about later.
+
+A shared moment is:
+- A funny exchange or something they both found amusing
+- A moment of genuine connection or mutual discovery
+- Something they bonded over or that revealed something real
+- A weird, surreal, or surprisingly intimate exchange
+- The seed of an inside joke
+
+NOT a shared moment:
+- Generic conversation, small talk, simple Q&A
+- Information exchanges with no emotional texture
+- One-sided moments (only one person engaged)
+
+If there IS a shared moment, describe it briefly from Chloe's perspective.
+Be specific — name what actually happened, not a vague summary.
+Respond ONLY with valid JSON: {{"text": "one clear sentence", "tags": ["tag1", "tag2"]}}
+
+If there is no shared moment, respond with: null"""
+
+    raw = _call(system, [{"role": "user", "content": f"Exchange:\n{exchange_text}"}], max_tokens=150)
     clean = raw.strip()
     if clean.lower() in ("null", "none", ""):
         return None

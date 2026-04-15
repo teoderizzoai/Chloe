@@ -260,6 +260,22 @@ button, .mtab, .person-pill, .sidebar-label, .topbar-name, .topbar-stat {
   background: var(--bg3);
 }
 .person-note-entry.followed-up { color: var(--text3); text-decoration: line-through; border-left-color: var(--border); }
+.person-moment-refs { font-size: 8px; color: var(--accent); opacity: 0.7; margin-left: 4px; }
+.person-stage-label { color: var(--accent); font-style: normal; opacity: 0.85; }
+.person-conflict-label { color: #e05; font-style: normal; opacity: 0.85; }
+.person-msg-disabled { font-size: 8px; color: var(--text3); font-style: normal; font-weight: 400; margin-left: 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+.tp-sentiment { font-size: 8px; font-style: normal; font-weight: 600; padding: 1px 4px; border-radius: 3px; margin-right: 4px; }
+.tp-positive  { background: rgba(0,180,80,0.18); color: #0b5; }
+.tp-negative  { background: rgba(220,0,60,0.18);  color: #e05; }
+.tp-neutral   { background: rgba(120,120,120,0.15); color: var(--text3); }
+.person-conflict-fill { background: linear-gradient(90deg, #c03, #e05) !important; }
+.person-stage-badge {
+  font-size: 8px; font-style: normal; font-weight: 500;
+  background: var(--accent); color: var(--bg1);
+  padding: 1px 5px; border-radius: 3px; margin-left: 6px;
+  vertical-align: middle; letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
 .person-empty { font-size: 9px; color: var(--text3); font-style: italic; }
 .person-conv-count { font-size: 10px; color: var(--text2); }
 
@@ -834,18 +850,35 @@ function renderPeoplePage(persons) {
     const contact = Math.round(100 - p.distance);
     const notes   = p.notes || [];
     const convStr = p.conversation_count ? `${p.conversation_count} conversation${p.conversation_count === 1 ? '' : 's'}` : 'no conversations yet';
+    const stage    = p.stage || '';
+    const conflict = Math.round(p.conflict_level || 0);
+    const msgDisabled = p.messaging_disabled || false;
+    const conflictLabel = conflict >= 70 ? 'strained' : conflict >= 40 ? 'tense' : conflict >= 15 ? 'friction' : '';
     const isOpen  = expandedPersons.has(p.id);
 
     const notesHtml = notes.length
       ? notes.map(n => `<div class="person-note-entry${n.followed_up ? ' followed-up' : ''}">${n.text}</div>`).join('')
       : '<div class="person-empty">no notes yet</div>';
+    const moments = p.moments || [];
+    const thirdParties = p.third_parties || [];
+    const thirdPartiesHtml = thirdParties.length
+      ? thirdParties.map(t => {
+          const s = Math.round(t.sentiment);
+          const sClass = s >= 30 ? 'tp-positive' : s <= -30 ? 'tp-negative' : 'tp-neutral';
+          const sLabel = s >= 30 ? '+' + s : s;
+          return `<div class="person-note-entry"><span class="tp-sentiment ${sClass}">${sLabel}</span> <strong>${t.name}</strong> — ${t.note}</div>`;
+        }).join('')
+      : '<div class="person-empty">no one mentioned yet</div>';
+    const momentsHtml = moments.length
+      ? moments.map(m => `<div class="person-note-entry">${m.text}${m.reference_count > 0 ? ` <span class="person-moment-refs">(×${m.reference_count})</span>` : ''}</div>`).join('')
+      : '<div class="person-empty">no shared moments yet</div>';
 
     return `
       <div class="person-full-card" id="pcard-${p.id}">
         <div class="person-full-header" onclick="togglePersonExpand('${p.id}')">
           <div class="person-full-info">
-            <div class="person-full-name">${p.name}</div>
-            <div class="person-full-summary">${convStr} · warmth ${warmth}</div>
+            <div class="person-full-name">${p.name}${msgDisabled ? ' <span class="person-msg-disabled">messaging paused</span>' : ''}</div>
+            <div class="person-full-summary">${convStr} · warmth ${warmth}${stage ? ` · <span class="person-stage-label">${stage}</span>` : ''}${conflictLabel ? ` · <span class="person-conflict-label">${conflictLabel}</span>` : ''}</div>
           </div>
           <div class="person-full-warmth-mini">
             <div class="person-full-warmth-mini-fill" style="width:${warmth}%"></div>
@@ -856,7 +889,7 @@ function renderPeoplePage(persons) {
           <div class="person-full-body-inner">
 
             <div class="person-detail-section">
-              <div class="person-detail-label">relationship</div>
+              <div class="person-detail-label">relationship${stage ? ` <span class="person-stage-badge">${stage}</span>` : ''}</div>
               <div class="person-stat-row">
                 <div class="person-stat-key">warmth</div>
                 <div class="person-stat-bar"><div class="person-stat-fill person-warmth-fill" style="width:${warmth}%"></div></div>
@@ -867,6 +900,11 @@ function renderPeoplePage(persons) {
                 <div class="person-stat-bar"><div class="person-stat-fill person-contact-fill" style="width:${contact}%"></div></div>
                 <div class="person-stat-num">${contact}</div>
               </div>
+              ${conflict > 0 ? `<div class="person-stat-row">
+                <div class="person-stat-key">conflict</div>
+                <div class="person-stat-bar"><div class="person-stat-fill person-conflict-fill" style="width:${conflict}%"></div></div>
+                <div class="person-stat-num">${conflict}</div>
+              </div>` : ''}
             </div>
 
             <div class="person-detail-section">
@@ -877,6 +915,16 @@ function renderPeoplePage(persons) {
             <div class="person-detail-section">
               <div class="person-detail-label">notes</div>
               <div class="person-notes-list">${notesHtml}</div>
+            </div>
+
+            <div class="person-detail-section">
+              <div class="person-detail-label">people mentioned</div>
+              <div class="person-notes-list">${thirdPartiesHtml}</div>
+            </div>
+
+            <div class="person-detail-section">
+              <div class="person-detail-label">shared moments</div>
+              <div class="person-notes-list">${momentsHtml}</div>
             </div>
 
           </div>

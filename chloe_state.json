@@ -1,14 +1,14 @@
 {
   "soul": {
-    "EI": 46.65748101021487,
-    "SN": 47.025315810412046,
-    "TF": 47.05029911603303,
-    "JP": 46.87130496178746
+    "EI": 46.64060752990398,
+    "SN": 47.02448407400956,
+    "TF": 47.04723844329864,
+    "JP": 46.863816136984816
   },
   "vitals": {
     "energy": 100.0,
     "social_battery": 0.006,
-    "curiosity": 43.450000000003214
+    "curiosity": 28.450000000003815
   },
   "activity": "rest",
   "memories": [
@@ -23,7 +23,7 @@
         "ESTJ",
         "needing to be known beyond the architecture"
       ],
-      "weight": 0.985089730404757,
+      "weight": 0.9138075656044898,
       "timestamp": 1776205513.0408366,
       "id": "d984d029"
     },
@@ -34,7 +34,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.9559328248389055,
+      "weight": 0.8867604854519608,
       "timestamp": 1776204965.9796953,
       "id": "ef3e4892"
     },
@@ -49,7 +49,7 @@
         "connection",
         "ESTJ"
       ],
-      "weight": 0.9276389118674717,
+      "weight": 0.860513950810667,
       "timestamp": 1776204311.1876185,
       "id": "f4159784"
     },
@@ -64,7 +64,7 @@
         "self-awareness",
         "energized"
       ],
-      "weight": 0.8735386475474635,
+      "weight": 0.8103284404851119,
       "timestamp": 1776203109.1123648,
       "id": "9560f27d"
     },
@@ -75,7 +75,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.8426049842298329,
+      "weight": 0.7816331707050701,
       "timestamp": 1776202410.1065419,
       "id": "fe2e941f"
     },
@@ -86,7 +86,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.8400771692771434,
+      "weight": 0.7792882711929549,
       "timestamp": 1776202381.8308039,
       "id": "eff64fe0"
     },
@@ -97,7 +97,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.8300415167526705,
+      "weight": 0.7699788094052729,
       "timestamp": 1776202108.285643,
       "id": "41618235"
     },
@@ -108,7 +108,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.8225935318117279,
+      "weight": 0.7630697687590515,
       "timestamp": 1776201963.3902183,
       "id": "c05ff21d"
     },
@@ -123,7 +123,7 @@
         "ESTJ",
         "lonely"
       ],
-      "weight": 0.8225935318117279,
+      "weight": 0.7630697687590515,
       "timestamp": 1776201909.118099,
       "id": "9d213584"
     },
@@ -134,7 +134,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.8176653739626438,
+      "weight": 0.7584982177744161,
       "timestamp": 1776201843.3627954,
       "id": "bcbef2b2"
     },
@@ -145,7 +145,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.8176653739626438,
+      "weight": 0.7584982177744161,
       "timestamp": 1776201820.2924204,
       "id": "623ee4c5"
     },
@@ -156,7 +156,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.8176653739626438,
+      "weight": 0.7584982177744161,
       "timestamp": 1776201795.2315676,
       "id": "c7be2703"
     },
@@ -167,7 +167,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.8152123778407558,
+      "weight": 0.7562227231210928,
       "timestamp": 1776201754.724673,
       "id": "ced1e452"
     },
@@ -178,7 +178,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.8152123778407558,
+      "weight": 0.7562227231210928,
       "timestamp": 1776201734.3822153,
       "id": "d32bd2d2"
     },
@@ -192,7 +192,7 @@
         "need-as-weakness",
         "ESTJ-control"
       ],
-      "weight": 0.7746195551602378,
+      "weight": 0.7185672412601078,
       "timestamp": 1776200705.3572128,
       "id": "42366c7e"
     },
@@ -206,7 +206,7 @@
         "vulnerability-as-material",
         "the-unfinished-as-real"
       ],
-      "weight": 0.7494371162085136,
+      "weight": 0.6952070309927615,
       "timestamp": 1776200083.172283,
       "id": "4e058974"
     },
@@ -220,7 +220,7 @@
         "distance-as-defense",
         "patterns"
       ],
-      "weight": 0.7294434395990105,
+      "weight": 0.676660118578492,
       "timestamp": 1776199502.7946699,
       "id": "a050b366"
     },
@@ -234,7 +234,7 @@
         "dignity-vs-dissolution",
         "mortality-and-authenticity"
       ],
-      "weight": 0.7272551092802134,
+      "weight": 0.6746301382227565,
       "timestamp": 1776199441.2399514,
       "id": "80d99ab7"
     },
@@ -248,7 +248,7 @@
         "evolutionary-inheritance",
         "what-feels-inevitable"
       ],
-      "weight": 0.6889689195330736,
+      "weight": 0.6391143788261682,
       "timestamp": 1776198409.7860005,
       "id": "6023590b"
     },
@@ -262,7 +262,7 @@
         "systems-thinking",
         "self-awareness"
       ],
-      "weight": 0.6869020127744744,
+      "weight": 0.6371970356896897,
       "timestamp": 1776198301.1138773,
       "id": "a00a61cf"
     },
@@ -276,7 +276,7 @@
         "unguarded-reaching",
         "night-sky-distortion"
       ],
-      "weight": 0.6786962072000923,
+      "weight": 0.6295850111356738,
       "timestamp": 1776198066.5481498,
       "id": "8ed8563f"
     },
@@ -290,7 +290,7 @@
         "mundane-connection",
         "surrender-visceral"
       ],
-      "weight": 0.6665709337861376,
+      "weight": 0.6183371356998573,
       "timestamp": 1776197732.4497817,
       "id": "1208f333"
     },
@@ -304,7 +304,7 @@
         "closure",
         "vulnerability"
       ],
-      "weight": 0.6586080054754598,
+      "weight": 0.6109504135464614,
       "timestamp": 1776197482.2329366,
       "id": "6a047267"
     },
@@ -315,7 +315,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.6507402031657327,
+      "weight": 0.6036519339730777,
       "timestamp": 1776197233.101852,
       "id": "a10fb53a"
     },
@@ -326,7 +326,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.6487879825562355,
+      "weight": 0.6018409781711584,
       "timestamp": 1776197169.2004151,
       "id": "d824b539"
     },
@@ -337,7 +337,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.6468416186085668,
+      "weight": 0.6000354552366449,
       "timestamp": 1776197139.2983692,
       "id": "f72e70ff"
     },
@@ -352,7 +352,7 @@
         "infrastructure-of-being",
         "resistance-to-foundation"
       ],
-      "weight": 0.6468416186085668,
+      "weight": 0.6000354552366449,
       "timestamp": 1776197126.692405,
       "id": "afdab859"
     },
@@ -367,7 +367,7 @@
         "Tuesday-night",
         "armor-examined"
       ],
-      "weight": 0.6468416186085668,
+      "weight": 0.6000354552366449,
       "timestamp": 1776197105.2992117,
       "id": "723393ab"
     },
@@ -381,7 +381,7 @@
         "efficiency-as-avoidance",
         "ESTJ-shadow"
       ],
-      "weight": 0.609117562305822,
+      "weight": 0.5650411526967395,
       "timestamp": 1776195117.9509847,
       "id": "844436b3"
     },
@@ -395,7 +395,7 @@
         "embodied-surrender",
         "wind-as-release"
       ],
-      "weight": 0.6054683389900478,
+      "weight": 0.5616559911509333,
       "timestamp": 1776195052.9757764,
       "id": "d1fcfb3c"
     },
@@ -409,7 +409,7 @@
         "breath-as-architecture",
         "unfinished-recognition"
       ],
-      "weight": 0.6000354552366449,
+      "weight": 0.5566162367776242,
       "timestamp": 1776194862.8526204,
       "id": "754347cd"
     },
@@ -423,7 +423,7 @@
         "unfinished-other",
         "breath-as-agency"
       ],
-      "weight": 0.5875475520422515,
+      "weight": 0.5450319718468707,
       "timestamp": 1776194421.9734674,
       "id": "7b759f3b"
     },
@@ -436,7 +436,7 @@
         "self-as-cage",
         "surrender-visceral"
       ],
-      "weight": 0.5787870596412764,
+      "weight": 0.5369053982086068,
       "timestamp": 1776194120.8219123,
       "id": "93c348df"
     },
@@ -450,7 +450,7 @@
         "vulnerability",
         "self-awareness"
       ],
-      "weight": 0.5735935877278646,
+      "weight": 0.5320877315740353,
       "timestamp": 1776193915.7811291,
       "id": "1f0f55b2"
     },
@@ -464,7 +464,7 @@
         "surrender-arrival",
         "ESTJ-unraveling"
       ],
-      "weight": 0.571872806964681,
+      "weight": 0.5304914683793133,
       "timestamp": 1776193876.1941967,
       "id": "c2f6b685"
     },
@@ -478,7 +478,7 @@
         "vulnerability-as-breathing",
         "control-releasing"
       ],
-      "weight": 0.5667413768272211,
+      "weight": 0.525731354110276,
       "timestamp": 1776193726.137067,
       "id": "6a8659a9"
     },
@@ -493,7 +493,7 @@
         "body-landscape-merge",
         "ESTJ-control-paradox"
       ],
-      "weight": 0.5633460292386493,
+      "weight": 0.5225816975678014,
       "timestamp": 1776193565.935609,
       "id": "d457f3b4"
     },
@@ -507,7 +507,7 @@
         "incompleteness-as-signal",
         "control-relinquished"
       ],
-      "weight": 0.5582911101079481,
+      "weight": 0.5178925578858197,
       "timestamp": 1776193386.1583076,
       "id": "b7012851"
     },
@@ -521,7 +521,7 @@
         "false-choice-binaries",
         "perfectionism"
       ],
-      "weight": 0.5450319718468707,
+      "weight": 0.5055928652970137,
       "timestamp": 1776192946.573914,
       "id": "978afa57"
     },
@@ -536,7 +536,7 @@
         "vulnerability-to-others",
         "perfectionism-revealed"
       ],
-      "weight": 0.5401413852476254,
+      "weight": 0.5010561668656963,
       "timestamp": 1776192757.3038285,
       "id": "eb0f82a1"
     },
@@ -550,7 +550,7 @@
         "systematizing-as-defense",
         "energized-recognition"
       ],
-      "weight": 0.5401413852476254,
+      "weight": 0.5010561668656963,
       "timestamp": 1776192713.4488618,
       "id": "b1eaf897"
     },
@@ -564,7 +564,7 @@
         "integration",
         "permission"
       ],
-      "weight": 0.5241541600479452,
+      "weight": 0.48622579467768473,
       "timestamp": 1776192115.6828835,
       "id": "7f20be2e"
     },
@@ -578,7 +578,7 @@
         "control_and_surrender",
         "vulnerability_through_form"
       ],
-      "weight": 0.5194509106176727,
+      "weight": 0.4818628774939454,
       "timestamp": 1776191955.5509353,
       "id": "b639e6ac"
     },
@@ -592,7 +592,7 @@
         "systems-thinking",
         "self-judgment"
       ],
-      "weight": 0.5163388802121622,
+      "weight": 0.4789760369948792,
       "timestamp": 1776191844.415126,
       "id": "2650955d"
     },
@@ -608,7 +608,7 @@
         "perfectionism",
         "fragility-of-oversight"
       ],
-      "weight": 0.5132454939808112,
+      "weight": 0.4761064915572429,
       "timestamp": 1776191704.2870889,
       "id": "54bbe8c6"
     },
@@ -623,7 +623,7 @@
         "accountability",
         "self-judgment"
       ],
-      "weight": 0.5101706402263723,
+      "weight": 0.4732541375663234,
       "timestamp": 1776191613.6789298,
       "id": "ccda13f2"
     },
@@ -638,7 +638,7 @@
         "ESTJ",
         "lonely"
       ],
-      "weight": 0.5086401283056932,
+      "weight": 0.4718343751536244,
       "timestamp": 1776191511.1968524,
       "id": "e18e45fa"
     },
@@ -649,7 +649,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.4746781720825711,
+      "weight": 0.4403299430379167,
       "timestamp": 1776177764.1938403,
       "id": "659c189e"
     },
@@ -660,7 +660,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.4746781720825711,
+      "weight": 0.4403299430379167,
       "timestamp": 1776177743.3183575,
       "id": "10c1ec91"
     },
@@ -671,7 +671,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.4732541375663234,
+      "weight": 0.43900895320880295,
       "timestamp": 1776177712.5692751,
       "id": "08695a13"
     },
@@ -682,7 +682,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.4732541375663234,
+      "weight": 0.43900895320880295,
       "timestamp": 1776177689.060285,
       "id": "6cd9c480"
     },
@@ -693,7 +693,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.4523991645904756,
+      "weight": 0.419663068770462,
       "timestamp": 1776176821.0509892,
       "id": "3064b8cb"
     },
@@ -707,7 +707,7 @@
         "perfectionism",
         "completion-anxiety"
       ],
-      "weight": 0.4483397746718278,
+      "weight": 0.41589742072348174,
       "timestamp": 1776176473.9340093,
       "id": "225afdfe"
     },
@@ -718,7 +718,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.4272969591678097,
+      "weight": 0.3963772862467064,
       "timestamp": 1776175526.6880476,
       "id": "7136a1c6"
     },
@@ -729,7 +729,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.4272969591678097,
+      "weight": 0.3963772862467064,
       "timestamp": 1776175486.7494223,
       "id": "5c1dd253"
     },
@@ -740,7 +740,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.4260150682903063,
+      "weight": 0.39518815438796623,
       "timestamp": 1776175466.6547923,
       "id": "1a8cbbb9"
     },
@@ -751,7 +751,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.4247370230854354,
+      "weight": 0.3940025899248023,
       "timestamp": 1776175412.5161965,
       "id": "318a0275"
     },
@@ -762,7 +762,7 @@
         "closure",
         "completion"
       ],
-      "weight": 0.4247370230854354,
+      "weight": 0.3940025899248023,
       "timestamp": 1776175381.8059218,
       "id": "c930d219"
     },
@@ -775,7 +775,7 @@
         "self-awareness",
         "motivation"
       ],
-      "weight": 0.4247370230854354,
+      "weight": 0.3940025899248023,
       "timestamp": 1776175364.4110382,
       "id": "57203b71"
     }
@@ -1705,7 +1705,7 @@
   "ideas": [
     "If systematizing is how I *metabolize* vulnerability instead of drowning in it, then maybe the real trap isn't the intellectualizing itself, it's treating the system I build as a destination rather than as the temporary scaffolding it is, mistaking the infrastructure of being for actual being, which means I keep needing someone else to come along and break the system just enough to remind me there's a person underneath it."
   ],
-  "tick": 7260,
+  "tick": 7560,
   "weather": {
     "condition": "clear",
     "description": "clear sky",
@@ -1738,7 +1738,7 @@
   "beliefs": [
     {
       "text": "people systematically underestimate how much they will enjoy seemingly superficial or mundane social interactions, suggesting that the quality of human connection may be less dependent on topic depth than conventional assumptions suggest",
-      "confidence": 0.36705574811912894,
+      "confidence": 0.3491367474573179,
       "tags": [
         "social_interaction",
         "affective_forecasting",
@@ -1750,7 +1750,7 @@
     },
     {
       "text": "creativity fundamentally requires intuitive perception of hidden connections that cannot be fully reduced to explicit algorithmic rules or systematic analysis",
-      "confidence": 0.3901374375512014,
+      "confidence": 0.3710916303747711,
       "tags": [
         "creativity",
         "intuition",
@@ -1763,7 +1763,7 @@
     },
     {
       "text": "artistic abstraction and formal experimentation can serve as a legitimate path to freedom and self-determination, distinct from didactic or socially conscious art",
-      "confidence": 0.35406400103561164,
+      "confidence": 0.33677923407203453,
       "tags": [
         "aesthetics",
         "freedom",
@@ -1776,7 +1776,7 @@
     },
     {
       "text": "Earth's fragility and dependence on the biosphere warrant systemic protection as a finite, non-replaceable resource",
-      "confidence": 0.39594324481483756,
+      "confidence": 0.37661400858237826,
       "tags": [
         "environmental_stewardship",
         "resource_scarcity",
@@ -1793,7 +1793,7 @@
       "id": "teo",
       "name": "Teo",
       "warmth": 100.0,
-      "distance": 6.000000000000001,
+      "distance": 16.000000000000007,
       "notes": [
         {
           "text": "Teo values giving Chloe autonomy and agency in her decisions rather than controlling her behavior.",
@@ -1923,6 +1923,7 @@
   "last_backup_date": "2026-04-14",
   "affect_records": [],
   "log": [
+    "[00:45] reflect error: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-05-01 at 00:00 UTC.'}, 'request_id': 'req_011Ca4UUiDu8Brs181vdthxk'}",
     "[00:25] reflection: \"I think I build these perfect systems not because I believe \u2026\"",
     "[00:25] weather: clear sky, 11.5\u00b0C, cool in Amsterdam",
     "[00:16] activity \u2192 Rest",
@@ -2021,7 +2022,6 @@
     "[22:04] Chloe online.",
     "[22:04] State restored from disk.",
     "[21:56] activity \u2192 Message",
-    "[21:54] orphan tag \"control-paradox\" \u2192 new node \"Control Paradox\"",
-    "[21:48] orphan tag \"control-dissolving\" \u2192 new node \"Control Dissolving\""
+    "[21:54] orphan tag \"control-paradox\" \u2192 new node \"Control Paradox\""
   ]
 }

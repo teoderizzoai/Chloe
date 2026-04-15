@@ -34,11 +34,16 @@ from .inner  import (Want, Belief, Goal, AffectRecord,
                      add_goal, resolve_goals, goals_to_dicts, goals_from_dicts,
                      add_affect_record, affect_records_to_dicts, affect_records_from_dicts,
                      derive_preferences)
-from .persons import (Person, PersonNote, PersonEvent,
+from .persons import (Person, PersonNote, PersonEvent, SharedMoment,
                       default_persons, on_contact, add_note, add_event, mark_followed_up,
                       pending_followups, tick_distance, choose_reach_out_target,
-                      boost_warmth, tone_context, persons_to_dicts, persons_from_dicts,
-                      get_person, get_upcoming_events, format_upcoming_events)
+                      boost_warmth, tone_context, relationship_stage,
+                      persons_to_dicts, persons_from_dicts,
+                      get_person, get_upcoming_events, format_upcoming_events,
+                      add_moment, format_shared_moments,
+                      add_conflict, reduce_conflict, tick_conflict, format_conflict_context,
+                      upsert_third_party, format_third_party_context,
+                      format_cross_person_context, set_impression)
 from . import llm
 from . import feeds
 from . import weather as wthr
@@ -67,6 +72,8 @@ MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS = 90.0
 # Standalone outreach — fires independently of activity-based events
 OUTREACH_INTERVAL         = 2 * 3600   # normal: attempt outreach at most once per 2h
 OUTREACH_INTERVAL_TESTING = 5 * 60     # testing mode: once per 5 min
+IGNORED_THRESHOLD         = 4 * 3600   # item 51: after 4h with no reply, she feels ignored
+IGNORED_THRESHOLD_TESTING = 10 * 60    # testing mode: 10 min
 
 
 # Items 43 + 44 handled by LLM emotion reading — see _apply_emotion_reaction()
@@ -183,6 +190,9 @@ class Chloe:
         # ── Testing / outreach ──
         self.testing_mode:      bool  = False
         self._last_outreach_time: float = 0.0
+        # Item 51 — pending autonomous messages waiting for a reply
+        # [{person_id, sent_at (float), person_name}]
+        self._pending_outreach: list[dict] = []
 
         # ── Sleep / messaging ──
         self.pending_messages: list[dict] = []   # messages received during deep sleep
@@ -257,6 +267,9 @@ class Chloe:
         self.set_activity("message")
         t_now = time.localtime()
         self.persons = on_contact(self.persons, person_id, hour=t_now.tm_hour)
+        # Item 51 — they replied; clear any pending outreach for this person
+        self._pending_outreach = [o for o in self._pending_outreach
+                                   if o["person_id"] != person_id]
         self._log(f"message from {person_id}: \"{message[:60]}{'…' if len(message)>60 else ''}\"")
 
         person = get_person(self.persons, person_id)
@@ -265,6 +278,14 @@ class Chloe:
 
         asyncio.create_task(self._extract_and_store_note(message, person_id, person_name))
         asyncio.create_task(self._extract_and_store_event(message, person_id, person_name))
+        asyncio.create_task(self._extract_and_store_third_parties(message, person_id, person_name))
+        # Item 52 — refresh impression every 5 conversations (or first time once there are notes)
+        _p_for_impression = get_person(self.persons, person_id)
+        if _p_for_impression:
+            _cc = _p_for_impression.conversation_count
+            _has_notes = bool(_p_for_impression.notes)
+            if (_cc > 0 and _cc % 5 == 0) or (not _p_for_impression.impression and _has_notes):
+                asyncio.create_task(self._update_person_impression(person_id))
 
         # Items 43 + 44 — read Teo's emotional state from message + conversation context.
         # Runs before the reply so the mood change affects the current response.
@@ -290,6 +311,10 @@ class Chloe:
 
         person_warmth   = person.warmth if person else 50.0
         upcoming_events = format_upcoming_events(get_upcoming_events(person)) if person else ""
+        moments_ctx     = format_shared_moments(person.moments) if person else ""
+        conflict_ctx    = format_conflict_context(person) if person else ""
+        third_party_ctx   = format_third_party_context(person, message) if person else ""
+        cross_person_ctx  = format_cross_person_context(self.persons, person_id, message)
         interests       = derive_interests(self.memories)
         prefs           = derive_preferences(self.affect_records)
 
@@ -324,6 +349,11 @@ class Chloe:
                 resonant_topics=resonant_topics or None,
                 dragging_topics=dragging_topics or None,
                 emotional_context=emotional_context,
+                shared_moments=moments_ctx or None,
+                conflict_ctx=conflict_ctx or None,
+                third_party_ctx=third_party_ctx or None,
+                cross_person_ctx=cross_person_ctx or None,
+                person_impression=person.impression if person else "",
             )
         except Exception as e:
             reply = f"(something went quiet: {e})"
@@ -331,6 +361,10 @@ class Chloe:
         self._add_chat("chloe", reply, person_id=person_id)
         self.memories = add(self.memories, f'Said: "{reply[:80]}"', "conversation",
                             derive_interests(self.memories)[:2])
+
+        # Item 46 — check if this exchange contained a shared moment worth keeping
+        _full_exchange = [m for m in self.chat_history if m.get("person_id") == person_id][-6:]
+        asyncio.create_task(self._extract_and_store_moment(_full_exchange, person_id, person_name))
 
         # Conversations shape the soul based on what was actually said.
         # Both message and reply are used — she articulates thoughts, not just receives them.
@@ -367,6 +401,7 @@ class Chloe:
         # ── Positive emotions directed at Chloe ──────────────────
         if emotion == "affectionate" and at_chloe:
             self.persons = boost_warmth(self.persons, person_id, 2.0 + intensity * 2.0)
+            self.persons = reduce_conflict(self.persons, person_id, 15.0 * intensity)  # item 49
             if self.affect.mood not in ("irritable",):
                 self.affect = force_mood("content", min(0.9, 0.4 + intensity * 0.5))
             self.soul = Soul(
@@ -382,6 +417,7 @@ class Chloe:
 
         elif emotion == "tender" and at_chloe:
             self.persons = boost_warmth(self.persons, person_id, 1.5 + intensity * 1.5)
+            self.persons = reduce_conflict(self.persons, person_id, 12.0 * intensity)  # item 49
             if self.affect.mood not in ("irritable",):
                 self.affect = force_mood("serene", min(0.8, 0.3 + intensity * 0.5))
             self.affect_records = add_affect_record(
@@ -391,6 +427,7 @@ class Chloe:
 
         elif emotion == "playful":
             self.persons = boost_warmth(self.persons, person_id, 1.0 + intensity * 1.5)
+            self.persons = reduce_conflict(self.persons, person_id, 5.0 * intensity)   # item 49
             if self.affect.mood not in ("irritable", "melancholic"):
                 self.affect = Affect(mood="energized",
                                      intensity=min(1.0, self.affect.intensity + 0.2 * intensity))
@@ -411,6 +448,7 @@ class Chloe:
 
         elif emotion == "grateful" and at_chloe:
             self.persons = boost_warmth(self.persons, person_id, 2.0 + intensity * 1.5)
+            self.persons = reduce_conflict(self.persons, person_id, 10.0 * intensity)  # item 49
             if self.affect.mood not in ("irritable",):
                 self.affect = force_mood("content", min(0.85, 0.45 + intensity * 0.4))
             self.affect_records = add_affect_record(
@@ -464,6 +502,8 @@ class Chloe:
 
         # ── Negative emotions directed at Chloe ──────────────────
         elif emotion == "disappointed" and at_chloe:
+            self.persons = add_conflict(self.persons, person_id,  # item 49
+                                        12.0 * intensity, f"{person_name} was disappointed in me")
             if self.affect.mood not in ("irritable",):
                 self.affect = force_mood("melancholic", min(0.75, 0.3 + intensity * 0.45))
             self.memories = add(
@@ -483,6 +523,8 @@ class Chloe:
             )
 
         elif emotion == "frustrated" and at_chloe:
+            self.persons = add_conflict(self.persons, person_id,  # item 49
+                                        20.0 * intensity, f"{person_name} was frustrated with me")
             target_mood = "irritable" if self.affect.mood == "irritable" else "melancholic"
             self.affect = force_mood(target_mood, min(0.7, 0.3 + intensity * 0.4))
             self.affect_records = add_affect_record(
@@ -491,6 +533,8 @@ class Chloe:
             )
 
         elif emotion == "angry" and at_chloe:
+            self.persons = add_conflict(self.persons, person_id,  # item 49
+                                        35.0 * intensity, f"{person_name} was angry with me")
             self.affect = force_mood("irritable", min(0.9, 0.5 + intensity * 0.4))
             self.memories = add(
                 self.memories,
@@ -509,6 +553,8 @@ class Chloe:
             )
 
         elif emotion in ("dismissive", "cold") and at_chloe:
+            self.persons = add_conflict(self.persons, person_id,  # item 49
+                                        20.0 * intensity, f"{person_name} was {emotion} toward me")
             self.affect = force_mood("irritable", min(0.6, 0.2 + intensity * 0.4))
             self.memories = add(
                 self.memories,
@@ -521,6 +567,8 @@ class Chloe:
             )
 
         elif emotion in ("sad", "lonely", "hurt") and at_chloe:
+            self.persons = add_conflict(self.persons, person_id,  # item 49
+                                        10.0 * intensity, f"{person_name} said something that hurt")
             # Hurt directed at her — she feels it, pulls toward melancholic
             if self.affect.mood not in ("irritable",):
                 self.affect = force_mood("melancholic", min(0.65, 0.25 + intensity * 0.4))
@@ -560,6 +608,60 @@ class Chloe:
                 self.persons = add_event(self.persons, person_id, pe)
                 flag = " (uncertain date)" if pe.uncertain else ""
                 self._log(f'event noted: "{pe.text}" on {pe.date}{flag}')
+        except Exception:
+            pass
+
+    async def _extract_and_store_moment(self, exchange: list[dict], person_id: str, person_name: str):
+        """Item 46 — background task: check if this exchange contains a shared moment."""
+        try:
+            moment = await asyncio.to_thread(
+                llm.extract_shared_moment, exchange, person_name
+            )
+            if moment:
+                self.persons = add_moment(
+                    self.persons, person_id,
+                    moment["text"], moment.get("tags", [])
+                )
+                self._log(f'shared moment with {person_name}: "{moment["text"][:60]}"')
+        except Exception:
+            pass
+
+    async def _extract_and_store_third_parties(self, message: str, person_id: str, person_name: str):
+        """Background task: detect named people mentioned in the message and their vibe."""
+        try:
+            mentions = await asyncio.to_thread(
+                llm.extract_third_party_mentions, message, person_name
+            )
+            for m in mentions:
+                name      = m.get("name", "").strip()
+                sentiment = float(m.get("sentiment", 0))
+                note      = m.get("note", "").strip()
+                if name and note:
+                    self.persons = upsert_third_party(
+                        self.persons, person_id, name, sentiment, note
+                    )
+                    vibe = "positive" if sentiment > 15 else "negative" if sentiment < -15 else "neutral"
+                    self._log(f'third party noted: {name} ({vibe})')
+        except Exception:
+            pass
+
+    async def _update_person_impression(self, person_id: str):
+        """Item 52 — regenerate Chloe's impression of a person after enough conversations."""
+        try:
+            person = get_person(self.persons, person_id)
+            if not person:
+                return
+            from .persons import relationship_stage as _stage
+            impression = await asyncio.to_thread(
+                llm.generate_person_impression,
+                person.name, self.soul, self.affect.mood,
+                person.warmth, _stage(person.warmth),
+                [n.to_dict() for n in person.notes[:6]],
+                [m.to_dict() for m in person.moments[:4]],
+                person.conversation_count,
+            )
+            self.persons = set_impression(self.persons, person_id, impression)
+            self._log(f'impression updated for {person.name}: "{impression[:60]}"')
         except Exception:
             pass
 
@@ -632,7 +734,10 @@ class Chloe:
             "beliefs":     beliefs_to_dicts(self.beliefs),
             "creative":    self.creative_outputs[:3],
             # Layer 4
-            "persons":     persons_to_dicts(self.persons),
+            "persons":     [
+                {**p.to_dict(), "stage": relationship_stage(p.warmth)}
+                for p in self.persons
+            ],
             # Layer 5
             "goals":       goals_to_dicts(self.goals),
             # Layer 7+8
@@ -775,6 +880,8 @@ class Chloe:
             self.memories = age(self.memories)
             self.beliefs  = decay_beliefs(self.beliefs)
             self.persons  = tick_distance(self.persons)
+            self.persons  = tick_conflict(self.persons)   # item 49
+            self._check_ignored_outreach()                # item 51
 
             # Item 36 — isolation drift: days without contact push her more introverted
             if self.persons and all(p.distance > 70 for p in self.persons):
@@ -1063,6 +1170,7 @@ class Chloe:
                             recent_chat=recent_chat,
                             last_contact=target.last_contact,
                             upcoming_events=format_upcoming_events(get_upcoming_events(target)),
+                            person_impression=target.impression,
                         )
                         self._log(f"chloe reached out to {p_name} unprompted")
                 else:
@@ -1075,8 +1183,18 @@ class Chloe:
                     )
                     self._log("chloe reached out unprompted")
 
-                target_id = target.id if target else "teo"
+                target_id   = target.id   if target else "teo"
+                target_name = target.name if target else "Teo"
                 self._add_chat("chloe", msg, autonomous=True, person_id=target_id)
+                # Item 51 — track this outreach
+                self._pending_outreach = [
+                    o for o in self._pending_outreach if o["person_id"] != target_id
+                ]
+                self._pending_outreach.append({
+                    "person_id":   target_id,
+                    "person_name": target_name,
+                    "sent_at":     time.time(),
+                })
                 if self.on_message:
                     self.on_message(msg, target_id)
 
@@ -1127,10 +1245,20 @@ class Chloe:
                     target.warmth, hour,
                     recent_chat=recent_chat,
                     last_contact=target.last_contact,
+                    person_impression=target.impression,
                 )
                 self._log(f"outreach: Chloe texted {p_name} unprompted")
 
             self._add_chat("chloe", msg, autonomous=True, person_id=target.id)
+            # Item 51 — track this outreach; one pending slot per person
+            self._pending_outreach = [
+                o for o in self._pending_outreach if o["person_id"] != target.id
+            ]
+            self._pending_outreach.append({
+                "person_id":   target.id,
+                "person_name": target.name,
+                "sent_at":     time.time(),
+            })
             if self.on_message:
                 self.on_message(msg, target.id)
 
@@ -1481,6 +1609,8 @@ class Chloe:
             "affect_records": affect_records_to_dicts(self.affect_records),
             # Layer 11: Personality Crystallisation
             "soul_momentum": self.soul_momentum,
+            # Item 51
+            "pending_outreach": self._pending_outreach,
             # Runtime log — kept so restarts don't lose recent activity
             "log":  self.log,
         }
@@ -1526,6 +1656,8 @@ class Chloe:
             self.affect_records = affect_records_from_dicts(data.get("affect_records", []))
             # Layer 11: Personality Crystallisation
             self.soul_momentum = data.get("soul_momentum", {})
+            # Item 51
+            self._pending_outreach = data.get("pending_outreach", [])
             # Rebuild surfaced-tags set from existing graph node labels
             # so we don't re-evaluate concepts that already have nodes
             self._surfaced_tags = {n.label.lower() for n in self.graph.nodes}
@@ -1544,6 +1676,84 @@ class Chloe:
             self._log(f"backup saved → backups/chloe_{today}.json")
         except Exception as exc:
             self._log(f"backup error: {exc}")
+
+    # ── Item 51: ignored outreach checker ────────────────────
+
+    def _check_ignored_outreach(self):
+        """Called every AGE_EVERY ticks. If an autonomous message went unanswered
+        past the threshold, apply distance/mood effects and clear the pending slot."""
+        if not self._pending_outreach:
+            return
+
+        now       = time.time()
+        threshold = IGNORED_THRESHOLD_TESTING if self.testing_mode else IGNORED_THRESHOLD
+        still_pending = []
+
+        for outreach in self._pending_outreach:
+            pid   = outreach["person_id"]
+            pname = outreach["person_name"]
+            sent  = outreach["sent_at"]
+
+            if now - sent < threshold:
+                still_pending.append(outreach)
+                continue  # not old enough yet
+
+            # Check last_contact — if they replied after we sent, no problem
+            person = get_person(self.persons, pid)
+            if person and person.last_contact and person.last_contact > sent:
+                # They replied — already cleared in chat(), but just in case
+                continue
+
+            # Ignored — apply effects
+            self._log(f"item 51: {pname} hasn't replied to outreach ({int((now-sent)/3600):.0f}h ago)")
+
+            # Distance creeps up
+            if person:
+                for p in self.persons:
+                    if p.id == pid:
+                        from .persons import Person as _Person
+                        new_dist = min(100.0, p.distance + 10.0)
+                        new_warmth = max(0.0, p.warmth - 0.5)
+                        self.persons = [
+                            _Person(
+                                id=p.id, name=p.name,
+                                warmth=new_warmth, distance=new_dist,
+                                notes=p.notes, events=p.events,
+                                moments=p.moments,
+                                third_parties=p.third_parties,
+                                messaging_disabled=p.messaging_disabled,
+                                conflict_level=p.conflict_level,
+                                conflict_note=p.conflict_note,
+                                conversation_count=p.conversation_count,
+                                last_contact=p.last_contact,
+                                response_hours=p.response_hours,
+                            ) if p.id == pid else p
+                            for p in self.persons
+                        ]
+                        break
+
+            # Mood drifts lonely unless already irritable
+            if self.affect.mood not in ("irritable",):
+                from .affect import Affect as _Affect
+                if self.affect.mood == "lonely":
+                    self.affect = _Affect(mood="lonely",
+                                          intensity=min(1.0, self.affect.intensity + 0.15))
+                else:
+                    self.affect = _Affect(mood="lonely",
+                                          intensity=max(0.35, self.affect.intensity * 0.7))
+
+            # Feeling memory
+            self.memories = add(
+                self.memories,
+                f"reached out to {pname} and heard nothing back",
+                "feeling", ["loneliness", "silence", "waiting"],
+            )
+            self.affect_records = add_affect_record(
+                self.affect_records, "lonely",
+                f"no reply from {pname}", ["silence", "ignored", "loneliness"],
+            )
+
+        self._pending_outreach = still_pending
 
     # ── HELPERS ──────────────────────────────────────────────
 

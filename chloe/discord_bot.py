@@ -167,9 +167,11 @@ class ChloeDiscordBot:
             self._ready = False
 
     def _load_mappings(self):
-        """Read Discord user IDs from environment variables."""
+        """Read Discord user IDs from environment variables.
+        Item 50: Zuzu is mapped for incoming messages but send_dm checks messaging_disabled."""
         mapping = {
-            "teo": os.environ.get("DISCORD_TEO_ID", "").strip(),
+            "teo":  os.environ.get("DISCORD_TEO_ID",  "").strip(),
+            "zuzu": os.environ.get("DISCORD_ZUZU_ID", "").strip(),
         }
         for person_id, raw_id in mapping.items():
             if raw_id:
@@ -181,9 +183,17 @@ class ChloeDiscordBot:
                     print(f"[discord] invalid ID for {person_id}: {raw_id!r}")
 
     def _on_chloe_message(self, message: str, person_id: Optional[str]):
-        """Called by chloe.py when she fires an autonomous message."""
-        if person_id and self._person_to_discord.get(person_id):
-            asyncio.ensure_future(self.send_dm(person_id, message))
+        """Called by chloe.py when she fires an autonomous message.
+        Item 50: skip persons with messaging_disabled — Chloe won't initiate."""
+        if not person_id or not self._person_to_discord.get(person_id):
+            return
+        # Check messaging_disabled on the person object
+        if self._chloe:
+            from .persons import get_person
+            p = get_person(self._chloe.persons, person_id)
+            if p and p.messaging_disabled:
+                return
+        asyncio.ensure_future(self.send_dm(person_id, message))
 
     def _on_chloe_tick(self, snapshot: dict):
         """Called every heartbeat tick with the full snapshot.
