@@ -554,7 +554,10 @@ button, .mtab, .person-pill, .sidebar-label, .topbar-name, .topbar-stat {
         <canvas id="graph-canvas"></canvas>
         <div class="graph-overlay">drag · right-click remove · scroll zoom · drag pan</div>
         <div class="graph-selected-info" id="sel-info">
-          <div class="sel-label" id="sel-label"></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+            <div class="sel-label" id="sel-label"></div>
+            <div id="sel-type-badge" style="font-size:7px;letter-spacing:1px;padding:1px 5px;border-radius:3px;background:var(--border2);color:var(--text3);display:none"></div>
+          </div>
           <div class="sel-note"  id="sel-note"></div>
           <div class="sel-hits"  id="sel-hits" style="font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;display:none"></div>
           <button class="sel-expand" id="sel-expand-btn">expand</button>
@@ -1362,6 +1365,13 @@ function handleNodeClick(n) {
     } else {
       hitsEl.style.display = 'none';
     }
+    const typeEl = document.getElementById('sel-type-badge');
+    if (n.node_type && n.node_type !== 'root') {
+      typeEl.textContent = n.node_type;
+      typeEl.style.display = 'block';
+    } else {
+      typeEl.style.display = 'none';
+    }
     info.classList.add('visible');
   }
 }
@@ -1432,12 +1442,18 @@ function draw(ctx, canvas) {
   graph.edges.forEach(e => {
     const a = nodeMap[e.from], b = nodeMap[e.to];
     if (!a||!b) return;
-    const sel = e.from === selectedNodeId || e.to === selectedNodeId;
-    const col = sel ? (DEPTH_COLORS[nodeMap[e.to]?.depth||0]||'#d4849a') : '#1c1e2c';
+    const sel        = e.from === selectedNodeId || e.to === selectedNodeId;
+    const isCross    = e.edge_type === 'connection';
+    const col        = sel ? (DEPTH_COLORS[nodeMap[e.to]?.depth||0]||'#d4849a') : (isCross ? '#5aaa88' : '#1c1e2c');
     ctx.beginPath();
     ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
-    ctx.strokeStyle = col; ctx.globalAlpha = sel ? 0.6 : 0.35;
-    ctx.lineWidth = sel ? 1.2 : 0.6; ctx.stroke(); ctx.globalAlpha = 1;
+    if (isCross) { ctx.setLineDash([3, 5]); }
+    ctx.strokeStyle = col;
+    ctx.globalAlpha = sel ? 0.7 : (isCross ? 0.28 : 0.35);
+    ctx.lineWidth   = sel ? 1.2 : (isCross ? 0.8 : 0.6);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
   });
 
   physicsNodes.forEach(n => {
