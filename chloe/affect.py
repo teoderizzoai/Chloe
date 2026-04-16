@@ -65,12 +65,11 @@ def _target_mood(vitals, weather, hour: int, activity: str, season: str = "") ->
     is_morn  = 7 <= hour <= 10
 
     # Hard rules first (override everything)
-    if s < 20 and activity not in ("message", "create"):
-        return "lonely"
     if e < 25:
         return "melancholic" if (is_night or rainy or overcast) else "irritable"
-    if s < 30 and activity == "message":
-        return "irritable"
+    # Social battery being low no longer forces mood — the wind-down prompt in
+    # llm.chat() handles graceful conversation closing when battery < 30.
+    # Mood stays authentic to whatever was actually happening.
 
     # Positive peaks
     if e > 72 and s > 65:
@@ -107,14 +106,28 @@ def _target_mood(vitals, weather, hour: int, activity: str, season: str = "") ->
     return "content"
 
 
+_ARC_TO_MOOD: dict[str, str] = {
+    "melancholic_stretch": "melancholic",
+    "restless_phase":      "restless",
+    "curious_spell":       "curious",
+    "withdrawn_period":    "lonely",
+}
+
+
 def update_mood(affect: Affect, vitals, weather, hour: int, activity: str,
-                season: str = "") -> Affect:
+                season: str = "", arc=None) -> Affect:
     """Mood is sticky — only re-evaluates ~10% of ticks.
-    When it shifts, it eases in at low intensity."""
+    Item 74: when an arc is active, it pulls mood toward its canonical state."""
     if random.random() > 0.10:
         return affect
 
     target = _target_mood(vitals, weather, hour, activity, season)
+
+    # Item 74: arc exerts a gravitational pull on mood — 35% chance to override target
+    if arc is not None and arc.active and random.random() < 0.35:
+        arc_mood = _ARC_TO_MOOD.get(arc.type)
+        if arc_mood:
+            target = arc_mood
 
     if target == affect.mood:
         return Affect(mood=affect.mood, intensity=min(1.0, affect.intensity + 0.04))

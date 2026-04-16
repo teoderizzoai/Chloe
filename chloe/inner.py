@@ -25,6 +25,7 @@ MAX_AVERSIONS      = 8    # max aversions at once
 MAX_BELIEFS        = 12   # max beliefs in store
 MAX_GOALS          = 6    # max active goals at once
 MAX_AFFECT_RECORDS = 60   # rolling log of mood-causing events
+MAX_TENSIONS       = 5    # max active internal conflicts at once
 
 
 # ── WANTS ─────────────────────────────────────────────────────
@@ -221,14 +222,22 @@ def beliefs_from_dicts(data: list[dict]) -> list[Belief]:
 
 # ── GOALS ─────────────────────────────────────────────────────
 
+_GOAL_DEFAULT_THRESHOLD = 5   # interactions needed to complete a goal
+
+
 @dataclass
 class Goal:
-    """A soft intention about her own behaviour — something she means to do."""
-    text:       str
-    tags:       list[str] = field(default_factory=list)
-    created_at: float     = field(default_factory=time.time)
-    resolved:   bool      = False
-    id:         str       = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    """A longer-term ambition — something she works toward over days or a week.
+    Not an immediate task: a genuine understanding she wants to reach,
+    something she wants to develop or figure out over time.
+    Resolves gradually through accumulated related activity (progress → threshold)."""
+    text:      str
+    tags:      list[str] = field(default_factory=list)
+    created_at: float    = field(default_factory=time.time)
+    resolved:  bool      = False
+    progress:  int       = 0                          # times related content was encountered
+    threshold: int       = _GOAL_DEFAULT_THRESHOLD   # progress needed to resolve
+    id:        str       = field(default_factory=lambda: str(uuid.uuid4())[:8])
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -239,6 +248,8 @@ class Goal:
             text=d["text"], tags=d.get("tags", []),
             created_at=float(d.get("created_at", time.time())),
             resolved=bool(d.get("resolved", False)),
+            progress=int(d.get("progress", 0)),
+            threshold=int(d.get("threshold", _GOAL_DEFAULT_THRESHOLD)),
             id=d.get("id", str(uuid.uuid4())[:8]),
         )
 
@@ -251,23 +262,27 @@ def add_goal(goals: list[Goal], text: str, tags: list[str]) -> list[Goal]:
     return [Goal(text=text, tags=tags), *goals]
 
 
-def resolve_goals(goals: list[Goal], activity_id: str, new_tags: list[str]) -> list[Goal]:
-    """Mark goals as resolved when the activity or tags match."""
+def advance_goals(goals: list[Goal], new_tags: list[str]) -> list[Goal]:
+    """Advance progress on goals whose tags overlap with new content.
+    Goals resolve only when progress reaches their threshold — they take time."""
     tag_set = {t.lower() for t in new_tags}
     result = []
     for g in goals:
         if g.resolved:
             result.append(g)
             continue
-        goal_tags = {t.lower() for t in g.tags}
-        # Resolve if activity matches any tag, or tag overlap ≥ 1
-        activity_match = activity_id in goal_tags
-        tag_match = bool(goal_tags & tag_set)
-        if activity_match or tag_match:
-            result.append(Goal(**{**g.to_dict(), "resolved": True}))
+        if {t.lower() for t in g.tags} & tag_set:
+            new_progress = g.progress + 1
+            resolved = new_progress >= g.threshold
+            result.append(Goal(**{**g.to_dict(), "progress": new_progress, "resolved": resolved}))
         else:
             result.append(g)
     return result
+
+
+# Keep backward compat alias — old call sites pass activity_id which we ignore
+def resolve_goals(goals: list[Goal], activity_id: str, new_tags: list[str]) -> list[Goal]:
+    return advance_goals(goals, new_tags)
 
 
 def goals_to_dicts(goals: list[Goal]) -> list[dict]:
@@ -345,3 +360,138 @@ def derive_preferences(records: list[AffectRecord], n: int = 5) -> dict:
     lifts = sorted(pos_tally, key=pos_tally.__getitem__, reverse=True)[:n]
     drags = sorted(neg_tally, key=neg_tally.__getitem__, reverse=True)[:n]
     return {"lifts": lifts, "drags": drags}
+
+
+# ── TENSIONS (Item 68) ────────────────────────────────────────
+# Internal conflicts — two beliefs or wants that pull in opposite directions.
+# Detected during _reflect(). Max 5 active. Decay if neither side fires.
+# Injected into prompts as "you feel torn between X and Y".
+
+@dataclass
+class Tension:
+    """An unresolved internal conflict — two things that don't sit well together."""
+    text:       str
+    tags:       list[str] = field(default_factory=list)
+    intensity:  float     = 0.5       # 0-1, how sharply it sits with her
+    belief_ids: list[str] = field(default_factory=list)
+    want_ids:   list[str] = field(default_factory=list)
+    created_at: float     = field(default_factory=time.time)
+    last_fired: float     = field(default_factory=time.time)  # last time either side was active
+    id:         str       = field(default_factory=lambda: str(uuid.uuid4())[:8])
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Tension":
+        return cls(
+            text=d["text"], tags=d.get("tags", []),
+            intensity=float(d.get("intensity", 0.5)),
+            belief_ids=d.get("belief_ids", []),
+            want_ids=d.get("want_ids", []),
+            created_at=float(d.get("created_at", time.time())),
+            last_fired=float(d.get("last_fired", time.time())),
+            id=d.get("id", str(uuid.uuid4())[:8]),
+        )
+
+
+def add_tension(tensions: list["Tension"], text: str, tags: list[str],
+                belief_ids: list[str] = None, want_ids: list[str] = None,
+                intensity: float = 0.5) -> list["Tension"]:
+    """Add a tension unless a similar one exists (by tag overlap) or at limit."""
+    tag_set = {t.lower() for t in tags}
+    for t in tensions:
+        if len({t2.lower() for t2 in t.tags} & tag_set) >= 2:
+            return tensions  # similar tension already tracked
+    if len(tensions) >= MAX_TENSIONS:
+        # Evict the weakest
+        tensions = sorted(tensions, key=lambda t: t.intensity, reverse=True)[:MAX_TENSIONS - 1]
+    return [Tension(text=text, tags=tags, intensity=intensity,
+                    belief_ids=belief_ids or [], want_ids=want_ids or []), *tensions]
+
+
+def decay_tensions(tensions: list["Tension"]) -> list["Tension"]:
+    """Tensions that haven't fired recently lose intensity and eventually dissolve."""
+    now = time.time()
+    result = []
+    for t in tensions:
+        hours_silent = (now - t.last_fired) / 3600
+        if hours_silent > 24:
+            new_intensity = t.intensity * 0.985
+            if new_intensity > 0.08:
+                result.append(Tension(**{**t.to_dict(), "intensity": new_intensity}))
+            # else: tension resolved itself quietly — drop it
+        else:
+            result.append(t)
+    return result
+
+
+def tensions_to_dicts(tensions: list["Tension"]) -> list[dict]:
+    return [t.to_dict() for t in tensions]
+
+
+def tensions_from_dicts(data: list[dict]) -> list["Tension"]:
+    return [Tension.from_dict(d) for d in data]
+
+
+# ── ARC (Item 74) ─────────────────────────────────────────────
+# A sustained mood pattern — not a single feeling but a stretch of them.
+# Set during _reflect() when the same mood appears 3+ consecutive times.
+# Influences mood drift weights and activity preference for its duration.
+
+ARC_TYPES = frozenset({"melancholic_stretch", "restless_phase", "curious_spell", "withdrawn_period"})
+
+MOOD_TO_ARC: dict[str, str] = {
+    "melancholic": "melancholic_stretch",
+    "restless":    "restless_phase",
+    "curious":     "curious_spell",
+    "lonely":      "withdrawn_period",
+}
+
+ARC_DURATION_HOURS: dict[str, float] = {
+    "melancholic_stretch": 36.0,
+    "restless_phase":      24.0,
+    "curious_spell":       20.0,
+    "withdrawn_period":    48.0,
+}
+
+_ARC_DESCRIPTIONS: dict[str, str] = {
+    "melancholic_stretch": "a stretch of heaviness",
+    "restless_phase":      "a restless phase",
+    "curious_spell":       "a curious spell",
+    "withdrawn_period":    "a withdrawn period",
+}
+
+
+@dataclass
+class Arc:
+    """A sustained mood pattern lasting hours to days."""
+    type:           str
+    start_time:     float = field(default_factory=time.time)
+    duration_hours: float = 24.0
+    intensity:      float = 0.5
+    id:             str   = field(default_factory=lambda: str(uuid.uuid4())[:8])
+
+    @property
+    def active(self) -> bool:
+        return (time.time() - self.start_time) < (self.duration_hours * 3600)
+
+    @property
+    def desc(self) -> str:
+        return _ARC_DESCRIPTIONS.get(self.type, self.type.replace("_", " "))
+
+    def to_dict(self) -> dict:
+        d = asdict(self)
+        d["active"] = self.active
+        d["desc"]   = self.desc
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Arc":
+        return cls(
+            type=d.get("type", "melancholic_stretch"),
+            start_time=float(d.get("start_time", time.time())),
+            duration_hours=float(d.get("duration_hours", 24.0)),
+            intensity=float(d.get("intensity", 0.5)),
+            id=d.get("id", str(uuid.uuid4())[:8]),
+        )

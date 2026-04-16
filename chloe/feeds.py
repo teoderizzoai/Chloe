@@ -129,6 +129,32 @@ async def fetch_random_article(interests: list[str],
     return chosen
 
 
+async def web_search(query: str, n: int = 4) -> list[Article]:
+    """Search the web for a specific query using DuckDuckGo.
+    Returns a list of Article objects (title, url, snippet as summary, source="search").
+    Falls back to empty list if the search library is unavailable or fails."""
+    try:
+        from ddgs import DDGS
+        raw = await asyncio.to_thread(
+            lambda: list(DDGS().text(query, max_results=n))
+        )
+        results = []
+        for r in raw:
+            url  = r.get("href", "") or r.get("url", "")
+            title = r.get("title", "")
+            body  = r.get("body", "") or r.get("description", "")
+            if url and title:
+                results.append(Article(
+                    title=_strip_html(title),
+                    url=url,
+                    summary=_strip_html(body)[:500],
+                    source="web search",
+                ))
+        return results
+    except Exception:
+        return []
+
+
 async def fetch_article_text(url: str, max_chars: int = 2500) -> str:
     """Fetch a full web page and return clean readable text (up to max_chars).
     Uses BeautifulSoup to strip navigation/boilerplate."""

@@ -31,6 +31,7 @@ class Node:
     # Graph Intelligence (G1/G2) — organic growth tracking
     hit_count:          int   = 0    # times a memory tag matched this node
     last_auto_expanded: float = 0.0  # unix timestamp of last auto-expand
+    last_reinforced:    float = 0.0  # item 72: unix timestamp of last hit_count increment
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -209,13 +210,15 @@ def node_exists(graph: Graph, label: str) -> bool:
 # ── GRAPH INTELLIGENCE HELPERS ───────────────────────────────
 
 def reinforce_node(graph: Graph, node_id: str) -> Graph:
-    """G1: A memory tag matched this node — increment hit count, boost strength."""
+    """G1: A memory tag matched this node — increment hit count, boost strength.
+    Item 72: record when this reinforcement happened for attention bias."""
     new_nodes = []
     for n in graph.nodes:
         if n.id == node_id:
             n = Node(**{**n.to_dict(),
-                        "hit_count": n.hit_count + 1,
-                        "strength":  min(1.0, n.strength + 0.02)})
+                        "hit_count":      n.hit_count + 1,
+                        "strength":       min(1.0, n.strength + 0.02),
+                        "last_reinforced": time.time()})
         new_nodes.append(n)
     return Graph(nodes=new_nodes, edges=graph.edges)
 

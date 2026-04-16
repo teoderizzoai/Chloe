@@ -26,7 +26,13 @@
       "Bash(python -c \"from chloe.soul import seasonal_drift, Soul; s = Soul\\(\\); print\\(seasonal_drift\\(s, 1\\)\\)\")",
       "Bash(python -c \"from chloe import llm; print\\(hasattr\\(llm, 'generate_dream_want'\\)\\)\")",
       "Bash(python:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(.venv/Scripts/python.exe -m pip install pyinstaller)",
+      "Bash(.venv/Scripts/pyinstaller.exe --onefile --windowed --name Chloe launcher.pyw)",
+      "Bash(.venv/Scripts/pyinstaller.exe Chloe.spec)",
+      "Bash(clear:*)",
+      "Bash(py -c ':*)",
+      "Bash(py:*)"
     ]
   }
 }

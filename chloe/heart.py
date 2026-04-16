@@ -169,35 +169,35 @@ ACTIVITIES: dict[str, Activity] = {
     "rest": Activity(
         id="rest", label="Rest", icon="🛋️",
         heart_state="RESTING",
-        energy_per_tick=-0.6, social_per_tick=0.0,
+        energy_per_tick=-0.6, social_per_tick=-0.20,   # rest recovers social battery
         event_chance=0.005,
         description="Quiet. Watching. Present but still.",
     ),
     "read": Activity(
         id="read", label="Research", icon="🔍",
         heart_state="BROWSING",
-        energy_per_tick=0.15, social_per_tick=0.1,
+        energy_per_tick=0.15, social_per_tick=0.05,
         event_chance=0.04,
         description="Browsing. Absorbing. Interest graph may expand.",
     ),
     "think": Activity(
         id="think", label="Think", icon="🧠",
         heart_state="THINKING",
-        energy_per_tick=0.10, social_per_tick=0.05,
+        energy_per_tick=0.10, social_per_tick=0.0,
         event_chance=0.03,
         description="Deep reflection. Ideas may crystallise.",
     ),
     "message": Activity(
         id="message", label="Message", icon="💬",
         heart_state="CHATTING",
-        energy_per_tick=0.25, social_per_tick=0.9,
+        energy_per_tick=0.25, social_per_tick=0.18,    # base; mood + personality adjust further
         event_chance=0.015,
         description="Reaching out. Social battery draining.",
     ),
     "create": Activity(
         id="create", label="Create", icon="✨",
         heart_state="EXCITED",
-        energy_per_tick=0.35, social_per_tick=0.2,
+        energy_per_tick=0.35, social_per_tick=0.10,
         event_chance=0.05,
         description="Generative state. Curiosity at peak.",
     ),
@@ -269,20 +269,68 @@ def soul_activity_affinity(soul, activity_id: str) -> float:
 
 @dataclass
 class Vitals:
-    energy:         float = 72.0   # 0–100
-    social_battery: float = 58.0   # 0–100
-    curiosity:      float = 80.0   # 0–100
+    energy:         float = 72.0   # 0–100: general capacity, recovers with sleep/rest
+    social_battery: float = 65.0   # 0–100: desire for interaction; introverts drain faster, extroverts slower
+    curiosity:      float = 80.0   # 0–100: drive to explore and learn
+    focus:          float = 70.0   # 0–100: mental clarity; drains from multitasking, builds during quiet
+    inspiration:    float = 55.0   # 0–100: creative charge; builds from reading/dreaming, discharges during create
 
     def to_dict(self) -> dict:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, d: dict) -> "Vitals":
-        return cls(**{k: float(v) for k, v in d.items()})
+        # Graceful upgrade: old saves won't have focus/inspiration
+        known = {k for k in cls.__dataclass_fields__}
+        filtered = {k: float(v) for k, v in d.items() if k in known}
+        return cls(**filtered)
 
 
-def tick_vitals(vitals: Vitals, activity_id: str, hour: int = 12, weekday: int = 2) -> Vitals:
-    """Advance vitals one tick based on current activity, time of day, and day of week."""
+# ── Per-activity focus and inspiration deltas (base, before personality) ──
+#
+# focus:       mental clarity — drains from demanding activities, recovers during quiet
+# inspiration: creative charge — builds passively, discharges into create events
+#
+# Format: {activity_id: (focus_per_tick, inspiration_per_tick)}
+# Positive = costs that vital; negative = recovers it.
+_ACTIVITY_FOCUS_INSPIRATION: dict[str, tuple[float, float]] = {
+    "sleep":   (-0.50, +0.10),   # deep restoration — focus fully rebuilds, slow inspiration seep
+    "dream":   (-0.25, -0.45),   # dreaming is primary inspiration source; moderate focus recovery
+    "rest":    (-0.30, -0.18),   # quiet rest rebuilds both; inspiration trickles in from observation
+    "read":    (+0.06, -0.22),   # reading costs a little focus but charges inspiration strongly
+    "think":   (+0.10, -0.08),   # thinking uses focus; can spark small inspiration
+    "message": (+0.30, +0.05),   # context-switching drains focus hard; barely adds inspiration
+    "create":  (+0.20, +1.40),   # create discharges inspiration; also costs focus (but less than message)
+}
+
+
+_MOOD_SOCIAL_MODIFIER: dict[str, float] = {
+    "curious":     0.45,   # engaged — conversation barely costs anything
+    "energized":   0.50,   # charged up — barely draining
+    "serene":      0.70,   # calm and present
+    "content":     0.80,   # comfortable
+    "lonely":      0.60,   # talking actually helps when lonely
+    "restless":    1.00,   # neutral
+    "melancholic": 1.25,   # talking when heavy is tiring
+    "irritable":   1.50,   # very draining when already on edge
+}
+
+
+def tick_vitals(vitals: Vitals, activity_id: str, hour: int = 12,
+                weekday: int = 2, soul=None, mood: str = "") -> Vitals:
+    """Advance vitals one tick based on activity, time of day, day of week, and personality.
+
+    Soul traits shape drain/recovery rates:
+    - EI (0=E, 100=I):
+        Introverts: messaging drains social more, rest/sleep recovers social more
+        Extroverts: messaging barely drains social, but alone-time gives less recovery
+    - SN (0=S, 100=N):
+        Intuitive (high): curiosity and inspiration build faster from reading/dreaming
+        Sensing (low):    more stable curiosity; less jump from abstract content
+    - JP (0=J, 100=P):
+        Perceiving (high): focus is spiky — drains faster but inspiration spikes higher
+        Judging (low):     focus is disciplined — drains slower, rebuilds reliably
+    """
     act = ACTIVITIES.get(activity_id)
     if not act:
         return vitals
@@ -290,14 +338,69 @@ def tick_vitals(vitals: Vitals, activity_id: str, hour: int = 12, weekday: int =
     circ_e, circ_s = circadian_delta(hour)
     day_e,  day_s  = day_delta(weekday)
 
-    energy         = _clamp(vitals.energy         - act.energy_per_tick  + circ_e + day_e)
-    social_battery = _clamp(vitals.social_battery - act.social_per_tick  + circ_s + day_s)
+    # ── Extract personality scalars ───────────────────────────
+    ei  = (soul.EI  / 100.0) if soul else 0.5   # 0=full E, 1=full I
+    sn  = (soul.SN  / 100.0) if soul else 0.5   # 0=full S, 1=full N
+    jp  = (soul.JP  / 100.0) if soul else 0.5   # 0=full J, 1=full P
 
-    # Curiosity decays gently unless Chloe is actively exploring
-    curiosity_delta = 0.2 if activity_id in ("read", "create") else -0.05
+    # ── Social battery — personality is the main differentiator ──
+    base_social = act.social_per_tick
+    if activity_id == "message":
+        # Introverts drain much faster talking; extroverts barely feel it
+        personality_mult = 0.4 + ei * 1.1
+        # Mood modifier: engaged/curious conversations barely drain; irritable ones drain hard
+        mood_mult = _MOOD_SOCIAL_MODIFIER.get(mood, 1.0) if mood else 1.0
+        act_social = base_social * personality_mult * mood_mult
+    elif activity_id in ("rest", "dream", "sleep"):
+        # Introverts recharge faster alone; extroverts get slightly less benefit
+        # EI=1.0 (full I): extra recovery = -0.18   EI=0.0 (full E): slight drain +0.06
+        personality_recovery = -0.18 * ei + 0.06 * (1.0 - ei)
+        act_social = base_social + personality_recovery
+    else:
+        act_social = base_social
+
+    # ── Energy ───────────────────────────────────────────────
+    energy = _clamp(vitals.energy - act.energy_per_tick + circ_e + day_e)
+    social_battery = _clamp(vitals.social_battery - act_social + circ_s + day_s)
+
+    # ── Curiosity — N types build faster; S types are more stable ──
+    if activity_id in ("read", "create"):
+        curiosity_delta = 0.18 + sn * 0.14    # N: +0.32/tick, S: +0.18/tick
+    elif activity_id == "think":
+        curiosity_delta = 0.05 + sn * 0.06
+    else:
+        curiosity_delta = -0.05 - sn * 0.02   # N types decay slightly faster at rest (restless minds)
     curiosity = _clamp(vitals.curiosity + curiosity_delta)
 
-    return Vitals(energy=energy, social_battery=social_battery, curiosity=curiosity)
+    # ── Focus — J types are disciplined; P types spiky ─────────
+    base_focus_cost, base_insp_delta = _ACTIVITY_FOCUS_INSPIRATION.get(activity_id, (0.0, 0.0))
+
+    if base_focus_cost > 0:
+        # Drain: P types focus drains faster (scattered), J types slower (disciplined)
+        focus_drain = base_focus_cost * (0.7 + jp * 0.7)    # J: 0.7×, P: 1.4×
+    else:
+        # Recovery: J types rebuild focus faster during rest
+        focus_drain = base_focus_cost * (1.3 - jp * 0.5)    # J: 1.3×, P: 0.8×
+    focus = _clamp(vitals.focus - focus_drain)
+
+    # ── Inspiration — N types charge faster; P types spike higher ──
+    # Convention matches energy: positive cost = drains, negative cost = recovers.
+    # Applied as: new = old - cost  (same as energy and focus)
+    if base_insp_delta < 0:
+        # Recovery (negative base = inspiration builds): N and P get bigger boosts
+        insp_cost = base_insp_delta * (0.8 + sn * 0.5) * (0.85 + jp * 0.35)
+    else:
+        # Discharge (positive base = inspiration spent): P types spend more freely
+        insp_cost = base_insp_delta * (1.0 + jp * 0.3)
+    inspiration = _clamp(vitals.inspiration - insp_cost)
+
+    return Vitals(
+        energy=energy,
+        social_battery=social_battery,
+        curiosity=curiosity,
+        focus=focus,
+        inspiration=inspiration,
+    )
 
 
 def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
@@ -311,10 +414,12 @@ def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
     Soul affinity (item 58) multiplies soft-drift thresholds so that
     the personality increasingly reinforces its own natural pulls.
     """
-    e  = vitals.energy
-    s  = vitals.social_battery
-    c  = vitals.curiosity
-    r  = random.random   # shorthand
+    e   = vitals.energy
+    s   = vitals.social_battery
+    c   = vitals.curiosity
+    f   = vitals.focus
+    ins = vitals.inspiration
+    r   = random.random   # shorthand
 
     # Soul affinity multiplier — applied to soft-drift probability thresholds only.
     # Hard gates and safety-valve exits are never modulated.
@@ -339,6 +444,14 @@ def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
 
     # Too tired to keep creating
     if e < 22 and current_activity == "create":
+        return "rest"
+
+    # Inspiration fully spent → can't create anymore
+    if ins < 5 and current_activity == "create":
+        return "rest"
+
+    # Completely scattered → can't read or think
+    if f < 10 and current_activity in ("read", "think"):
         return "rest"
 
     # ── NIGHT WINDING-DOWN ────────────────────────────────────
@@ -427,6 +540,13 @@ def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
         if e > 70 and c > 80 and afternoon:
             if r() < 0.008 * _aff("create"):
                 return "create"
+        # High inspiration pulls toward creating even outside peak hours
+        if ins > 80 and e > 45 and f > 40:
+            if r() < 0.012 * _aff("create"):
+                return "create"
+        # Low focus → prefer passive rest or dream over active reading
+        if f < 35 and r() < 0.006:
+            return "dream" if (e < 55 or not daytime) else "rest"
 
     # ── FROM READ ─────────────────────────────────────────────
     if current_activity == "read":

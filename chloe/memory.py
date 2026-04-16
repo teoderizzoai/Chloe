@@ -20,12 +20,13 @@ MemoryType = Literal["observation", "conversation", "idea", "feeling", "interest
 
 @dataclass
 class Memory:
-    text:      str
-    type:      MemoryType       = "observation"
-    tags:      list[str]        = field(default_factory=list)
-    weight:    float            = 1.0       # 0.0–1.0, decays over time
-    timestamp: float            = field(default_factory=time.time)
-    id:        str              = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    text:       str
+    type:       MemoryType       = "observation"
+    tags:       list[str]        = field(default_factory=list)
+    weight:     float            = 1.0       # 0.0–1.0, decays over time
+    confidence: float            = 1.0       # item 69: how sure she is of this memory
+    timestamp:  float            = field(default_factory=time.time)
+    id:         str              = field(default_factory=lambda: str(uuid.uuid4())[:8])
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -35,6 +36,7 @@ class Memory:
         return cls(
             text=d["text"], type=d["type"], tags=d.get("tags", []),
             weight=float(d.get("weight", 1.0)),
+            confidence=float(d.get("confidence", 1.0)),  # default 1.0 for old records
             timestamp=float(d.get("timestamp", time.time())),
             id=d.get("id", str(uuid.uuid4())[:8]),
         )
@@ -59,10 +61,12 @@ def add(store: list[Memory], text: str,
 
 
 def age(store: list[Memory]) -> list[Memory]:
-    """Decay every memory's weight slightly.
+    """Decay every memory's weight and confidence slightly.
     Call this periodically (e.g. every few minutes or on sleep)."""
     return [
-        Memory(**{**m.to_dict(), "weight": max(0.05, m.weight * 0.997)})
+        Memory(**{**m.to_dict(),
+                  "weight":     max(0.05, m.weight     * 0.997),
+                  "confidence": max(0.10, m.confidence * 0.998)})
         for m in store
     ]
 
@@ -128,9 +132,19 @@ def derive_fringe_interests(store: list[Memory], n: int = 6) -> list[str]:
     return random.sample(pool, min(n, len(pool)))
 
 
+_UNCERTAIN_PREFIXES = ["I think ", "I'm not sure but ", "Something like, ", "Maybe, "]
+
 def format_for_prompt(memories: list[Memory]) -> str:
-    """Compact string for injecting memories into an LLM prompt."""
-    return "\n".join(f"[{m.type}] {m.text}" for m in memories)
+    """Compact string for injecting memories into an LLM prompt.
+    Item 69: low-confidence memories are prefixed with uncertainty phrasing."""
+    lines = []
+    for m in memories:
+        if m.confidence < 0.5:
+            prefix = random.choice(_UNCERTAIN_PREFIXES)
+            lines.append(f"[{m.type}] {prefix}{m.text}")
+        else:
+            lines.append(f"[{m.type}] {m.text}")
+    return "\n".join(lines)
 
 
 def to_dicts(store: list[Memory]) -> list[dict]:

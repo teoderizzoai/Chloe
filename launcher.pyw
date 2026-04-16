@@ -2,13 +2,56 @@
 Chloe Launcher — start/stop the server with a GUI.
 Run with: python launcher.pyw  (or double-click if .pyw is associated with pythonw)
 """
+
+# ── Crash logger — runs before any other import ───────────────
+# Writes a log next to the exe and shows a native message box so
+# errors are never silently swallowed in windowless mode.
+import sys, os, traceback as _tb
+
+def _crash_log(exc: BaseException) -> None:
+    """Write full traceback to Chloe_error.log and show a message box."""
+    if getattr(sys, "frozen", False):
+        log_dir = os.path.dirname(sys.executable)
+    else:
+        log_dir = os.path.dirname(os.path.abspath(__file__))
+    log_path = os.path.join(log_dir, "Chloe_error.log")
+    msg = _tb.format_exc()
+    try:
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write(msg)
+    except OSError:
+        pass
+    # Show native Windows dialog (no tkinter needed)
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(
+            0,
+            f"{type(exc).__name__}: {exc}\n\nSee {log_path} for full details.",
+            "Chloe — boot error",
+            0x10,  # MB_ICONERROR
+        )
+    except Exception:
+        pass
+
 import tkinter as tk
 from tkinter import font as tkfont
 import subprocess
 import threading
-import sys, os, time, queue, urllib.request, json
+import time, queue, urllib.request, json
 
-BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
+# When frozen by PyInstaller, __file__ is a temp dir and sys.executable is
+# the .exe itself. Walk up from the exe's location to find the project root
+# (the folder that contains server.py), so the exe works from dist\ or anywhere.
+if getattr(sys, 'frozen', False):
+    _start = os.path.dirname(sys.executable)
+    BASE_DIR = _start
+    for _ in range(4):
+        if os.path.exists(os.path.join(_start, 'server.py')):
+            BASE_DIR = _start
+            break
+        _start = os.path.dirname(_start)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PORT      = 8000
 API       = f"http://localhost:{PORT}"
 IMG_DIR   = os.path.join(BASE_DIR, "chloe", "images")
@@ -16,6 +59,11 @@ IMG_DIR   = os.path.join(BASE_DIR, "chloe", "images")
 # Prefer venv python so all deps are present
 VENV_PY = os.path.join(BASE_DIR, ".venv", "Scripts", "python.exe")
 PYTHON  = VENV_PY if os.path.exists(VENV_PY) else sys.executable
+
+# Voice uses Python 3.11 venv (Coqui TTS doesn't support 3.12+)
+# Create with: py -3.11 -m venv .venv11 && .venv11\Scripts\pip install -r requirements_voice.txt
+VENV11_PY   = os.path.join(BASE_DIR, ".venv11", "Scripts", "python.exe")
+VOICE_SCRIPT = os.path.join(BASE_DIR, "run_voice.py")
 
 # ── palette (matches dashboard) ──────────────────────────────
 BG      = "#07080a"
@@ -64,8 +112,10 @@ class Launcher(tk.Tk):
         self.configure(bg=BG)
 
         self._proc      = None        # uvicorn subprocess
+        self._voice_proc = None       # run_voice.py subprocess
         self._log_q     = queue.Queue()
         self._running   = False
+        self._voice_running = False
         self._img_cache = {}          # path → PhotoImage
         self._current_img_path = None
 
@@ -94,7 +144,7 @@ class Launcher(tk.Tk):
         name_bar.pack(fill="x")
 
         tk.Label(name_bar, text="CHLOE", bg=BG2, fg=GOLD,
-                 font=("Courier New", 15, "bold"), lettersp=4).pack(side="left", padx=16)
+                 font=("Courier New", 15, "bold")).pack(side="left", padx=16)
 
         self._mood_var = tk.StringVar(value="offline")
         self._mood_lbl = tk.Label(name_bar, textvariable=self._mood_var,
@@ -122,7 +172,16 @@ class Launcher(tk.Tk):
                               padx=14, pady=4, cursor="hand2",
                               bd=1, highlightthickness=1,
                               highlightbackground=GOLD2)
-        self._btn.pack(side="right", padx=16)
+        self._btn.pack(side="right", padx=(4, 16))
+
+        self._voice_btn = tk.Button(ctrl, text="VOICE", command=self._toggle_voice,
+                                    bg=BG3, fg=TEXT2, activebackground=BG3,
+                                    activeforeground=TEAL, relief="flat",
+                                    font=("Courier New", 9, "bold"),
+                                    padx=10, pady=4, cursor="hand2",
+                                    bd=1, highlightthickness=1,
+                                    highlightbackground=TEXT3)
+        self._voice_btn.pack(side="right", padx=(4, 0))
 
         # separator
         tk.Frame(self, bg=BORDER, height=1).pack(fill="x")
@@ -276,6 +335,56 @@ class Launcher(tk.Tk):
     def _enable_btn(self):
         self._btn.configure(state="normal")
 
+    # ── voice start / stop ────────────────────────────────────
+    def _toggle_voice(self):
+        if self._voice_running:
+            self._stop_voice()
+        else:
+            self._start_voice()
+
+    def _start_voice(self):
+        py = VENV11_PY if os.path.exists(VENV11_PY) else PYTHON
+        if not os.path.exists(VOICE_SCRIPT):
+            self._log("run_voice.py not found.", "rose")
+            return
+        self._log(f"starting voice ({os.path.basename(py)})…", "gold")
+        self._voice_btn.configure(state="disabled")
+        self._voice_proc = subprocess.Popen(
+            [py, VOICE_SCRIPT],
+            cwd=BASE_DIR,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+        self._voice_running = True
+        self._set_voice_status(True)
+        threading.Thread(target=self._watch_voice, daemon=True).start()
+
+    def _stop_voice(self):
+        self._log("stopping voice…", "rose")
+        if self._voice_proc and self._voice_proc.poll() is None:
+            self._voice_proc.terminate()
+        self._voice_running = False
+        self._set_voice_status(False)
+
+    def _watch_voice(self):
+        """Wait for voice process to exit, then update button state."""
+        if self._voice_proc:
+            self._voice_proc.wait()
+        self.after(0, lambda: (
+            setattr(self, "_voice_running", False),
+            self._set_voice_status(False),
+            self._log("voice closed.", "dim"),
+        ))
+
+    def _set_voice_status(self, active: bool):
+        if active:
+            self._voice_btn.configure(
+                fg=TEAL, highlightbackground=TEAL, state="normal", text="VOICE ●"
+            )
+        else:
+            self._voice_btn.configure(
+                fg=TEXT2, highlightbackground=TEXT3, state="normal", text="VOICE"
+            )
+
     # ── subprocess output reader (runs in thread) ─────────────
     def _read_proc(self):
         for line in self._proc.stdout:
@@ -339,9 +448,15 @@ class Launcher(tk.Tk):
     def destroy(self):
         if self._proc and self._proc.poll() is None:
             self._proc.terminate()
+        if self._voice_proc and self._voice_proc.poll() is None:
+            self._voice_proc.terminate()
         super().destroy()
 
 
 if __name__ == "__main__":
-    app = Launcher()
-    app.mainloop()
+    try:
+        app = Launcher()
+        app.mainloop()
+    except BaseException as _e:
+        _crash_log(_e)
+        raise

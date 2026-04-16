@@ -68,9 +68,11 @@ class SoulRequest(BaseModel):
     value: float # 0.0–100.0
 
 class VitalsRequest(BaseModel):
-    energy:    Optional[float] = None
-    social:    Optional[float] = None
-    curiosity: Optional[float] = None
+    energy:      Optional[float] = None
+    social:      Optional[float] = None
+    curiosity:   Optional[float] = None
+    focus:       Optional[float] = None
+    inspiration: Optional[float] = None
 
 class AffectRequest(BaseModel):
     mood: str
@@ -131,9 +133,11 @@ def set_vitals(req: VitalsRequest):
     v = chloe.vitals
     from chloe.heart import Vitals
     chloe.vitals = Vitals(
-        energy        = max(0.0, min(100.0, req.energy    if req.energy    is not None else v.energy)),
-        social_battery= max(0.0, min(100.0, req.social    if req.social    is not None else v.social_battery)),
-        curiosity     = max(0.0, min(100.0, req.curiosity if req.curiosity is not None else v.curiosity)),
+        energy        = max(0.0, min(100.0, req.energy      if req.energy      is not None else v.energy)),
+        social_battery= max(0.0, min(100.0, req.social      if req.social      is not None else v.social_battery)),
+        curiosity     = max(0.0, min(100.0, req.curiosity   if req.curiosity   is not None else v.curiosity)),
+        focus         = max(0.0, min(100.0, req.focus       if req.focus       is not None else v.focus)),
+        inspiration   = max(0.0, min(100.0, req.inspiration if req.inspiration is not None else v.inspiration)),
     )
     return {"ok": True, "vitals": chloe.vitals.to_dict()}
 
