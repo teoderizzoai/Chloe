@@ -33,7 +33,10 @@
       "Bash(clear:*)",
       "Bash(py -c ':*)",
       "Bash(py:*)",
-      "Bash(.venv/Scripts/python.exe:*)"
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(ls:*)",
+      "Bash(.venv/Scripts/pip show:*)",
+      "WebFetch(domain:speech.fish.audio)"
     ]
   }
 }
