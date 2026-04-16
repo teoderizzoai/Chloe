@@ -28,13 +28,11 @@ from .graph  import (Graph, seed_graph, expand, clear_new_flags, get_labels,
                      mark_auto_expanded, find_node_by_label)
 from .affect import Affect, update_mood, force_mood
 from .avatar import portrait_meta
-<<<<<<< HEAD
 from .inner  import (Want, Belief, Goal, AffectRecord, Fear, Aversion,
                      Tension, Arc, MOOD_TO_ARC, ARC_DURATION_HOURS,
-=======
-from .inner  import (Want, Belief, Goal, AffectRecord,
->>>>>>> cefd2f8bf88c6e346c1723441208399aff869c75
                      add_want, resolve_wants, wants_to_dicts, wants_from_dicts,
+                     add_fear, fears_to_dicts, fears_from_dicts,
+                     add_aversion, aversions_to_dicts, aversions_from_dicts,
                      add_or_reinforce_belief, decay_beliefs, beliefs_to_dicts, beliefs_from_dicts,
                      add_goal, resolve_goals, goals_to_dicts, goals_from_dicts,
                      add_affect_record, affect_records_to_dicts, affect_records_from_dicts,
@@ -162,9 +160,11 @@ class Chloe:
 
         # ── Layer 3: inner life ──
         self.affect:           Affect        = Affect()
-        self.wants:            list[Want]    = []
-        self.beliefs:          list[Belief]  = []
-        self.creative_outputs: list[dict]    = []   # last 5 creative pieces
+        self.wants:            list[Want]      = []
+        self.fears:            list[Fear]      = []
+        self.aversions:        list[Aversion]  = []
+        self.beliefs:          list[Belief]    = []
+        self.creative_outputs: list[dict]      = []   # last 5 creative pieces
 
         # ── Layer 4: relational depth ──
         self.persons: list[Person] = default_persons()
@@ -518,15 +518,12 @@ class Chloe:
                 third_party_ctx=third_party_ctx or None,
                 cross_person_ctx=cross_person_ctx or None,
                 person_impression=person.impression if person else "",
-<<<<<<< HEAD
                 fears=fears_to_dicts(self.fears),
                 aversions=aversions_to_dicts(self.aversions),
                 tensions=tensions_to_dicts(self.tensions),
                 vitals_sensation=self._vitals_sensation_text(self.vitals),
                 risk_tolerance=_risk_tol,
                 winding_down=_winding_down,
-=======
->>>>>>> cefd2f8bf88c6e346c1723441208399aff869c75
             )
         except Exception as e:
             err = str(e).lower()
@@ -863,7 +860,6 @@ class Chloe:
         except Exception:
             pass
 
-<<<<<<< HEAD
     async def _extract_and_store_expressed_want(self, chloe_reply: str):
         """Background task: check if Chloe expressed a genuine want in her reply
         and surface it in her wants list."""
@@ -907,8 +903,7 @@ class Chloe:
         except Exception:
             pass
 
-=======
->>>>>>> cefd2f8bf88c6e346c1723441208399aff869c75
+
     async def _extract_and_store_third_parties(self, message: str, person_id: str, person_name: str):
         """Background task: detect named people mentioned in the message and their vibe."""
         try:

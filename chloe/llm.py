@@ -119,15 +119,12 @@ def chat(
     third_party_ctx:  str  = "",    # people Teo has mentioned before
     cross_person_ctx:  str  = "",    # item 50: what other roommates have said about this topic
     person_impression: str  = "",    # item 52: Chloe's subjective read of this person
-<<<<<<< HEAD
     fears:           list = None,   # list of Fear dicts — what she dreads
     aversions:       list = None,   # list of Aversion dicts — what she can't stand
     tensions:        list = None,   # item 68: active internal conflicts
     vitals_sensation: str = "",     # item 71: physical sensation language
     risk_tolerance:  float = 1.0,   # item 73: how guarded she is with this person
     winding_down:    bool = False,  # social battery low — close the conversation
-=======
->>>>>>> cefd2f8bf88c6e346c1723441208399aff869c75
 ) -> str:
     """Chloe responds to something you said.
     Her reply is shaped by soul type, vitals, memories, and interests."""
@@ -182,7 +179,6 @@ def chat(
         if drags:
             pref_ctx += f"\nThings that tend to drag your mood: {', '.join(drags[:4])}"
 
-<<<<<<< HEAD
     inner_life_ctx = ""
     if fears:
         active_fears = [f for f in fears if not f.get("resolved")][:3]
@@ -206,8 +202,7 @@ def chat(
     if risk_tolerance < 0.75:
         guard_ctx = f"\nYou've been a bit more guarded with {person_name} lately. Something made you careful."
 
-=======
->>>>>>> cefd2f8bf88c6e346c1723441208399aff869c75
+
     tone_ctx = tone_context(warmth, hour, mood)
 
     _mood_tone = {
@@ -282,11 +277,7 @@ Recent memories:
 {format_for_prompt(memories)}
 
 Current interests: {", ".join(interests)}
-<<<<<<< HEAD
 A thought you had recently: {ideas[0] if ideas else "nothing yet"}{beliefs_ctx}{pref_ctx}{inner_life_ctx}{tensions_ctx}{guard_ctx}{tone_ctx}{topic_ctx}{wind_ctx}
-=======
-A thought you had recently: {ideas[0] if ideas else "nothing yet"}{beliefs_ctx}{pref_ctx}{tone_ctx}{topic_ctx}
->>>>>>> cefd2f8bf88c6e346c1723441208399aff869c75
 
 {f"Right now: {emotional_context}" if emotional_context else ""}
 Speak like someone genuinely alive: brief, sometimes strange, never performative.
@@ -451,7 +442,6 @@ Respond with ONLY the idea, one sentence, no preamble, no quotes."""
 
 # ── 4. EXPAND INTEREST NODE ──────────────────────────────────
 
-<<<<<<< HEAD
 # Depth-aware expansion heuristics — each level has a different kind of question
 _EXPAND_HEURISTICS = {
     "pillar": (
@@ -503,8 +493,6 @@ _PILLAR_LABELS = {
 }
 
 
-=======
->>>>>>> cefd2f8bf88c6e346c1723441208399aff869c75
 def expand_interest_node(
     concept:        str,
     existing_nodes: list[str],   # list of existing node labels
@@ -513,32 +501,25 @@ def expand_interest_node(
     """For the interest graph. Given a concept, return 3 related child nodes.
     Returns [{"id": "...", "label": "...", "note": "..."}]"""
 
-    existing = ", ".join(existing_nodes)
-
-    system = f"""You are mapping the interest web of Chloe, a curious being with a poetic soul.
-Her known interests: {", ".join(interests)}.
-Existing graph nodes (do NOT repeat any of these): {existing}
-
-<<<<<<< HEAD
+    existing = ", ".join(existing_nodes[:60])
+    connectable = [n for n in existing_nodes if n not in _PILLAR_LABELS][:30]
+    connectable_str = ", ".join(connectable) if connectable else "none yet"
     interest_hint = ", ".join(interests[:8]) if interests else "everyday beauty, living things, quiet moments"
 
     system = f"""You are mapping the growing interest web of Chloe — a young woman, curious and poetic, with a warm inner life.
 Her current interests lean toward: {interest_hint}.
 Existing graph nodes (do NOT repeat any of these labels): {existing}
 
-Your task: {instruction}
+Generate exactly 3 new concepts related to the given topic.
+Think: unexpected, specific, not generic. The kind of thing that stops you mid-thought.
 
 {_LABEL_FORMAT_RULES}
 
 After generating the 3 nodes, also check: do any of them connect meaningfully to an existing node?
-Return 0 to 2 cross-connections — only when the link is real and non-obvious (e.g. a painter and a pigment that appears in a different branch, or a musician and a flower they wrote about).
+Return 0 to 2 cross-connections — only when the link is real and non-obvious.
 Do not force connections. An empty array is fine.
 
 Connectable existing nodes: {connectable_str}
-=======
-Generate exactly 3 new concepts related to the given topic.
-Think: unexpected, specific, not generic. The kind of thing that stops you mid-thought.
->>>>>>> cefd2f8bf88c6e346c1723441208399aff869c75
 
 Respond ONLY with valid JSON, no markdown:
 {{"nodes": [
@@ -1229,7 +1210,6 @@ If there is no shared moment, respond with: null"""
         return None
 
 
-<<<<<<< HEAD
 def extract_expressed_want(
     chloe_reply: str,
     existing_wants: list,   # list of Want dicts — to avoid surfacing duplicates
@@ -1367,8 +1347,6 @@ If no genuine aversion was expressed, respond with: null"""
         return None
 
 
-=======
->>>>>>> cefd2f8bf88c6e346c1723441208399aff869c75
 # ── 12. GENERATE FOLLOW-UP ───────────────────────────────────
 
 def generate_followup(

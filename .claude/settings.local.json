@@ -32,7 +32,8 @@
       "Bash(.venv/Scripts/pyinstaller.exe Chloe.spec)",
       "Bash(clear:*)",
       "Bash(py -c ':*)",
-      "Bash(py:*)"
+      "Bash(py:*)",
+      "Bash(.venv/Scripts/python.exe:*)"
     ]
   }
 }
