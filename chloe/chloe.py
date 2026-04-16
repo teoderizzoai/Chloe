@@ -25,14 +25,16 @@ from .heart  import (Vitals, ACTIVITIES, tick_vitals, auto_decide,
 from .memory import Memory, seed_memories, add, age, get_vivid, derive_interests, derive_fringe_interests, to_dicts, from_dicts
 from .graph  import (Graph, seed_graph, expand, clear_new_flags, get_labels,
                      reinforce_node, match_nodes_by_tags, get_leaf_nodes,
-                     mark_auto_expanded, find_node_by_label, add_cross_link)
+                     mark_auto_expanded, find_node_by_label)
 from .affect import Affect, update_mood, force_mood
 from .avatar import portrait_meta
+<<<<<<< HEAD
 from .inner  import (Want, Belief, Goal, AffectRecord, Fear, Aversion,
                      Tension, Arc, MOOD_TO_ARC, ARC_DURATION_HOURS,
+=======
+from .inner  import (Want, Belief, Goal, AffectRecord,
+>>>>>>> cefd2f8bf88c6e346c1723441208399aff869c75
                      add_want, resolve_wants, wants_to_dicts, wants_from_dicts,
-                     add_fear, fears_to_dicts, fears_from_dicts,
-                     add_aversion, aversions_to_dicts, aversions_from_dicts,
                      add_or_reinforce_belief, decay_beliefs, beliefs_to_dicts, beliefs_from_dicts,
                      add_goal, resolve_goals, goals_to_dicts, goals_from_dicts,
                      add_affect_record, affect_records_to_dicts, affect_records_from_dicts,
@@ -161,8 +163,6 @@ class Chloe:
         # ── Layer 3: inner life ──
         self.affect:           Affect        = Affect()
         self.wants:            list[Want]    = []
-        self.fears:            list[Fear]    = []
-        self.aversions:        list[Aversion] = []
         self.beliefs:          list[Belief]  = []
         self.creative_outputs: list[dict]    = []   # last 5 creative pieces
 
@@ -518,12 +518,15 @@ class Chloe:
                 third_party_ctx=third_party_ctx or None,
                 cross_person_ctx=cross_person_ctx or None,
                 person_impression=person.impression if person else "",
+<<<<<<< HEAD
                 fears=fears_to_dicts(self.fears),
                 aversions=aversions_to_dicts(self.aversions),
                 tensions=tensions_to_dicts(self.tensions),
                 vitals_sensation=self._vitals_sensation_text(self.vitals),
                 risk_tolerance=_risk_tol,
                 winding_down=_winding_down,
+=======
+>>>>>>> cefd2f8bf88c6e346c1723441208399aff869c75
             )
         except Exception as e:
             err = str(e).lower()
@@ -579,11 +582,6 @@ class Chloe:
         # Item 46 — check if this exchange contained a shared moment worth keeping
         _full_exchange = [m for m in self.chat_history if m.get("person_id") == person_id][-6:]
         asyncio.create_task(self._extract_and_store_moment(_full_exchange, person_id, person_name))
-
-        # Extract wants, fears, aversions Chloe just expressed in her reply
-        asyncio.create_task(self._extract_and_store_expressed_want(reply))
-        asyncio.create_task(self._extract_and_store_expressed_fear(reply))
-        asyncio.create_task(self._extract_and_store_expressed_aversion(reply))
 
         # Conversations shape the soul based on what was actually said.
         # Both message and reply are used — she articulates thoughts, not just receives them.
@@ -865,6 +863,7 @@ class Chloe:
         except Exception:
             pass
 
+<<<<<<< HEAD
     async def _extract_and_store_expressed_want(self, chloe_reply: str):
         """Background task: check if Chloe expressed a genuine want in her reply
         and surface it in her wants list."""
@@ -908,6 +907,8 @@ class Chloe:
         except Exception:
             pass
 
+=======
+>>>>>>> cefd2f8bf88c6e346c1723441208399aff869c75
     async def _extract_and_store_third_parties(self, message: str, person_id: str, person_name: str):
         """Background task: detect named people mentioned in the message and their vibe."""
         try:
@@ -963,30 +964,15 @@ class Chloe:
         self._log(f'exploring "{node.label}"…')
 
         try:
-            result = await asyncio.to_thread(
+            defs = await asyncio.to_thread(
                 llm.expand_interest_node,
                 concept=node.label,
-                node_type=node.node_type,
                 existing_nodes=get_labels(self.graph),
                 interests=derive_interests(self.memories),
             )
-            defs        = result.get("nodes", [])
-            connections = result.get("connections", [])
-
             self.graph = expand(self.graph, node_id, defs)
-
-            # Apply cross-links between new children and existing nodes
-            for conn in connections:
-                self.graph = add_cross_link(
-                    self.graph,
-                    conn.get("from_label", ""),
-                    conn.get("to_label", ""),
-                )
-
             labels = [d["label"] for d in defs]
             self._log(f'"{node.label}" → {", ".join(labels)}')
-            if connections:
-                self._log(f'  + {len(connections)} cross-link(s)')
 
             for d in defs:
                 self.memories = add(self.memories, d.get("note", d["label"]),
@@ -1028,8 +1014,6 @@ class Chloe:
             # Layer 3
             "affect":      self.affect.to_dict(),
             "wants":       wants_to_dicts(self.wants),
-            "fears":       fears_to_dicts(self.fears),
-            "aversions":   aversions_to_dicts(self.aversions),
             "beliefs":     beliefs_to_dicts(self.beliefs),
             "creative":    self.creative_outputs,
             # Layer 4
@@ -1773,29 +1757,15 @@ class Chloe:
         self.graph = mark_auto_expanded(self.graph, node_id)
 
         try:
-            result = await asyncio.to_thread(
+            defs = await asyncio.to_thread(
                 llm.expand_interest_node,
                 concept=node.label,
-                node_type=node.node_type,
                 existing_nodes=get_labels(self.graph),
                 interests=derive_interests(self.memories),
             )
-            defs        = result.get("nodes", [])
-            connections = result.get("connections", [])
-
             self.graph = expand(self.graph, node_id, defs)
-
-            for conn in connections:
-                self.graph = add_cross_link(
-                    self.graph,
-                    conn.get("from_label", ""),
-                    conn.get("to_label", ""),
-                )
-
             labels = [d["label"] for d in defs]
             self._log(f'auto-expanded "{node.label}" → {", ".join(labels)}')
-            if connections:
-                self._log(f'  + {len(connections)} cross-link(s)')
             for d in defs:
                 self.memories = add(self.memories, d.get("note", d["label"]),
                                     "interest", [d["label"]])

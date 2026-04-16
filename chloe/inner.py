@@ -20,8 +20,6 @@ import uuid
 from dataclasses import dataclass, field, asdict
 
 MAX_WANTS          = 8    # max active (unresolved) wants at once
-MAX_FEARS          = 8    # max active fears at once
-MAX_AVERSIONS      = 8    # max aversions at once
 MAX_BELIEFS        = 12   # max beliefs in store
 MAX_GOALS          = 6    # max active goals at once
 MAX_AFFECT_RECORDS = 60   # rolling log of mood-causing events
@@ -76,84 +74,6 @@ def wants_to_dicts(wants: list[Want]) -> list[dict]:
 
 def wants_from_dicts(data: list[dict]) -> list[Want]:
     return [Want.from_dict(d) for d in data]
-
-
-# ── FEARS ─────────────────────────────────────────────────────
-# Things she dreads, is anxious about, or finds threatening.
-# Formed when she articulates fear/dread in conversation or thought.
-
-@dataclass
-class Fear:
-    text:       str
-    tags:       list[str] = field(default_factory=list)
-    created_at: float     = field(default_factory=time.time)
-    resolved:   bool      = False   # resolved when she faces or works through it
-    id:         str       = field(default_factory=lambda: str(uuid.uuid4())[:8])
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, d: dict) -> "Fear":
-        return cls(
-            text=d["text"], tags=d.get("tags", []),
-            created_at=float(d.get("created_at", time.time())),
-            resolved=bool(d.get("resolved", False)),
-            id=d.get("id", str(uuid.uuid4())[:8]),
-        )
-
-
-def add_fear(fears: list[Fear], text: str, tags: list[str]) -> list[Fear]:
-    """Add a fear unless already at the active limit."""
-    active = sum(1 for f in fears if not f.resolved)
-    if active >= MAX_FEARS:
-        return fears
-    return [Fear(text=text, tags=tags), *fears]
-
-
-def fears_to_dicts(fears: list[Fear]) -> list[dict]:
-    return [f.to_dict() for f in fears]
-
-
-def fears_from_dicts(data: list[dict]) -> list[Fear]:
-    return [Fear.from_dict(d) for d in data]
-
-
-# ── AVERSIONS ─────────────────────────────────────────────────
-# Things she dislikes, hates, or finds repellent.
-# Formed when she expresses strong dislike in conversation.
-
-@dataclass
-class Aversion:
-    text:       str
-    tags:       list[str] = field(default_factory=list)
-    created_at: float     = field(default_factory=time.time)
-    id:         str       = field(default_factory=lambda: str(uuid.uuid4())[:8])
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, d: dict) -> "Aversion":
-        return cls(
-            text=d["text"], tags=d.get("tags", []),
-            created_at=float(d.get("created_at", time.time())),
-            id=d.get("id", str(uuid.uuid4())[:8]),
-        )
-
-
-def add_aversion(aversions: list[Aversion], text: str, tags: list[str]) -> list[Aversion]:
-    """Add an aversion unless already at the limit (oldest dropped)."""
-    new = [Aversion(text=text, tags=tags), *aversions]
-    return new[:MAX_AVERSIONS]
-
-
-def aversions_to_dicts(aversions: list[Aversion]) -> list[dict]:
-    return [a.to_dict() for a in aversions]
-
-
-def aversions_from_dicts(data: list[dict]) -> list[Aversion]:
-    return [Aversion.from_dict(d) for d in data]
 
 
 # ── BELIEFS ───────────────────────────────────────────────────
