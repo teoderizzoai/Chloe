@@ -23,7 +23,6 @@ class Node:
     strength: float   = 1.0     # 0–1, decays with each generation
     parent:   str     = ""      # id of parent node, empty for root
     note:     str     = ""      # why Chloe cares about this
-    node_type: str    = "concept"  # pillar | domain | subject | detail
     x:        float   = 0.0     # layout position (set by frontend physics)
     y:        float   = 0.0
     fixed:    bool    = False   # root node is fixed at centre
@@ -42,16 +41,15 @@ class Node:
 
 @dataclass
 class Edge:
-    from_id:   str
-    to_id:     str
-    edge_type: str = "child"  # child | connection
+    from_id: str
+    to_id:   str
 
     def to_dict(self) -> dict:
-        return {"from": self.from_id, "to": self.to_id, "edge_type": self.edge_type}
+        return {"from": self.from_id, "to": self.to_id}
 
     @classmethod
     def from_dict(cls, d: dict) -> "Edge":
-        return cls(from_id=d["from"], to_id=d["to"], edge_type=d.get("edge_type", "child"))
+        return cls(from_id=d["from"], to_id=d["to"])
 
 
 @dataclass
@@ -77,42 +75,43 @@ class Graph:
 
 def seed_graph() -> Graph:
     nodes = [
-        Node(id="root", label="Chloe", depth=0, node_type="root", strength=1.0, fixed=True, x=0, y=0),
-
-        # --- THE 10 HUMAN PILLARS — seeded for a young woman's natural world ---
-
-        # 1. The living world just outside the window
-        Node(id="p1", label="Living Things",      depth=1, node_type="pillar", strength=0.8),
-
-        # 2. Pleasure of the senses — taste, texture, the small ritual of eating
-        Node(id="p2", label="Food & Taste",       depth=1, node_type="pillar", strength=0.8),
-
-        # 3. Sound as company — music, voice, ambient noise
-        Node(id="p3", label="Music & Sound",      depth=1, node_type="pillar", strength=0.7),
-
-        # 4. How things look and why it matters
-        Node(id="p4", label="Light & Colour",     depth=1, node_type="pillar", strength=0.7),
-
-        # 5. Language, stories, poetry — the made thing
-        Node(id="p5", label="Words & Stories",    depth=1, node_type="pillar", strength=0.7),
-
-        # 6. The body as a site of experience — rest, movement, sensation
-        Node(id="p6", label="The Body",           depth=1, node_type="pillar", strength=0.6),
-
-        # 7. Other people, closeness, what they carry inside
-        Node(id="p7", label="People & Closeness", depth=1, node_type="pillar", strength=0.7),
-
-        # 8. The urge to make something with your hands
-        Node(id="p8", label="Making Things",      depth=1, node_type="pillar", strength=0.7),
-
-        # 9. Weather, seasons, outside light
-        Node(id="p9", label="Seasons & Time",     depth=1, node_type="pillar", strength=0.6),
-
-        # 10. The interior — dreams, strange thoughts, imagination
-        Node(id="p10", label="The Inner Life",    depth=1, node_type="pillar", strength=0.7),
+        Node(id="root", label="Chloe", depth=0, strength=1.0, fixed=True, x=0, y=0),
+        
+        # --- THE 10 HUMAN PILLARS ---
+        
+        # 1. Soundscape (Spotify, YouTube, background noise)
+        Node(id="p1", label="Music & Audio", depth=1, strength=0.8),
+        
+        # 2. Visual Style (Art, UI design, "Does this look good?")
+        Node(id="p2", label="Aesthetics & Design", depth=1, strength=0.7),
+        
+        # 3. The Daily Bread (Cooking, ordering in, caffeine intake)
+        Node(id="p3", label="Food & Drink", depth=1, strength=0.7),
+        
+        # 4. Digital Playground (Gaming, Steam, late-night play)
+        Node(id="p4", label="Games & Play", depth=1, strength=0.9),
+        
+        # 5. The Grind (Coding, writing, spreadsheets, "The Mission")
+        Node(id="p5", label="Work & Ambition", depth=1, strength=0.8),
+        
+        # 6. Rabbit Holes (Wikipedia, random facts, learning new stuff)
+        Node(id="p6", label="Curiosity & Learning", depth=1, strength=0.7),
+        
+        # 7. Physical World (Weather, travel, "The Outside")
+        Node(id="p7", label="Nature & Places", depth=1, strength=0.6),
+        
+        # 8. Human Connection (Social media, chat, "What are they thinking?")
+        Node(id="p8", label="Social & People", depth=1, strength=0.7),
+        
+        # 9. Wellness (Sleep schedules, stress levels, "Take a breath")
+        Node(id="p9", label="Health & Rest", depth=1, strength=0.6),
+        
+        # 10. Tech & Future (AI, gadgets, the tools we use)
+        Node(id="p10", label="Technology & Tools", depth=1, strength=0.7),
     ]
-
-    edges = [Edge(from_id="root", to_id=n.id, edge_type="child") for n in nodes if n.id != "root"]
+    
+    # Edge uses from_id / to_id (see to_dict keys "from" / "to" for the frontend)
+    edges = [Edge(from_id="root", to_id=n.id) for n in nodes if n.id != "root"]
     return Graph(nodes=nodes, edges=edges)
 
 
@@ -125,16 +124,6 @@ def expand(graph: Graph, parent_id: str, new_node_defs: list[dict]) -> Graph:
     if not parent:
         return graph
 
-    depth = parent.depth + 1
-    if depth <= 1:
-        ntype = "pillar"
-    elif depth == 2:
-        ntype = "domain"
-    elif depth == 3:
-        ntype = "subject"
-    else:
-        ntype = "detail"
-
     angle_offset = random.uniform(0, 2 * math.pi)
     new_nodes: list[Node] = []
     new_edges: list[Edge] = []
@@ -145,40 +134,23 @@ def expand(graph: Graph, parent_id: str, new_node_defs: list[dict]) -> Graph:
         uid   = f"{defn['id']}_{int(time.time())}"
 
         node = Node(
-            id        = uid,
-            label     = defn["label"],
-            note      = defn.get("note", ""),
-            depth     = depth,
-            node_type = ntype,
-            strength  = max(0.3, parent.strength * 0.82),
-            parent    = parent_id,
-            x         = parent.x + math.cos(angle) * dist,
-            y         = parent.y + math.sin(angle) * dist,
-            is_new    = True,
+            id       = uid,
+            label    = defn["label"],
+            note     = defn.get("note", ""),
+            depth    = parent.depth + 1,
+            strength = max(0.3, parent.strength * 0.82),
+            parent   = parent_id,
+            x        = parent.x + math.cos(angle) * dist,
+            y        = parent.y + math.sin(angle) * dist,
+            is_new   = True,
         )
         new_nodes.append(node)
-        new_edges.append(Edge(from_id=parent_id, to_id=uid, edge_type="child"))
+        new_edges.append(Edge(from_id=parent_id, to_id=uid))
 
     return Graph(
         nodes = graph.nodes + new_nodes,
         edges = graph.edges + new_edges,
     )
-
-
-def add_cross_link(graph: Graph, from_label: str, to_label: str) -> Graph:
-    """Add a cross-link (connection) edge between two existing nodes by label.
-    No-ops if either node is missing or the edge already exists."""
-    from_node = find_node_by_label(graph, from_label)
-    to_node   = find_node_by_label(graph, to_label)
-    if not from_node or not to_node or from_node.id == to_node.id:
-        return graph
-    # Avoid duplicate edges in either direction
-    for e in graph.edges:
-        if (e.from_id == from_node.id and e.to_id == to_node.id) or \
-           (e.from_id == to_node.id   and e.to_id == from_node.id):
-            return graph
-    new_edge = Edge(from_id=from_node.id, to_id=to_node.id, edge_type="connection")
-    return Graph(nodes=graph.nodes, edges=graph.edges + [new_edge])
 
 
 def clear_new_flags(graph: Graph) -> Graph:

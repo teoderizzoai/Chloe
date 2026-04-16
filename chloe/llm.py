@@ -102,8 +102,6 @@ def chat(
     third_party_ctx:  str  = "",    # people Teo has mentioned before
     cross_person_ctx:  str  = "",    # item 50: what other roommates have said about this topic
     person_impression: str  = "",    # item 52: Chloe's subjective read of this person
-    fears:      list = None,         # list of Fear dicts — what she dreads
-    aversions:  list = None,         # list of Aversion dicts — what she can't stand
 ) -> str:
     """Chloe responds to something you said.
     Her reply is shaped by soul type, vitals, memories, and interests."""
@@ -157,14 +155,6 @@ def chat(
             pref_ctx += f"\nThings that tend to lift your mood: {', '.join(lifts[:4])}"
         if drags:
             pref_ctx += f"\nThings that tend to drag your mood: {', '.join(drags[:4])}"
-
-    inner_life_ctx = ""
-    if fears:
-        active_fears = [f for f in fears if not f.get("resolved")][:3]
-        if active_fears:
-            inner_life_ctx += "\nThings you're afraid of: " + " / ".join(f["text"] for f in active_fears)
-    if aversions:
-        inner_life_ctx += "\nThings you can't stand: " + " / ".join(a["text"] for a in aversions[:3])
 
     tone_ctx = tone_context(warmth, hour, mood)
 
@@ -222,7 +212,7 @@ Recent memories:
 {format_for_prompt(memories)}
 
 Current interests: {", ".join(interests)}
-A thought you had recently: {ideas[0] if ideas else "nothing yet"}{beliefs_ctx}{pref_ctx}{inner_life_ctx}{tone_ctx}{topic_ctx}
+A thought you had recently: {ideas[0] if ideas else "nothing yet"}{beliefs_ctx}{pref_ctx}{tone_ctx}{topic_ctx}
 
 {f"Right now: {emotional_context}" if emotional_context else ""}
 Speak like someone genuinely alive: brief, sometimes strange, never performative.
@@ -327,89 +317,33 @@ Respond with ONLY the idea, one sentence, no preamble, no quotes."""
 
 # ── 4. EXPAND INTEREST NODE ──────────────────────────────────
 
-# Depth-aware expansion heuristics — each level has a different kind of question
-_EXPAND_HEURISTICS = {
-    "pillar": (
-        "domain",
-        "What are 3 genuine subcategories or areas within this topic? "
-        "Think: the main ways someone actually engages with this in real life. "
-        "Keep labels short (2-4 words), grounded, not academic."
-    ),
-    "domain": (
-        "subject",
-        "Name 3 specific things within this area: a real person, a named work, a specific place, "
-        "a dish, a flower, an artist — something you could look up. "
-        "Avoid abstract categories. Go for the concrete and named."
-    ),
-    "subject": (
-        "detail",
-        "Give 3 specific details about this subject: a technique, a material it uses, "
-        "a biographical fact, a sensory quality, a production method, an origin. "
-        "Real texture. Not more names."
-    ),
-    "detail": (
-        "detail",
-        "Go deeper: 3 obscure or tangential details, cross-influences, or surprising connections "
-        "that surround this. The kind of thing you'd only know if you really went down this path."
-    ),
-}
-
-# Pillar labels to exclude from the connectable list (too broad to cross-link)
-_PILLAR_LABELS = {
-    "Living Things", "Food & Taste", "Music & Sound", "Light & Colour",
-    "Words & Stories", "The Body", "People & Closeness", "Making Things",
-    "Seasons & Time", "The Inner Life", "Chloe",
-}
-
-
 def expand_interest_node(
     concept:        str,
-    node_type:      str,           # pillar | domain | subject | detail
-    existing_nodes: list[str],     # all current node labels
+    existing_nodes: list[str],   # list of existing node labels
     interests:      list[str],
-) -> dict:
-    """Depth-aware interest expansion.
-    Returns {"nodes": [...], "connections": [{from_label, to_label}]}"""
+) -> list[dict]:
+    """For the interest graph. Given a concept, return 3 related child nodes.
+    Returns [{"id": "...", "label": "...", "note": "..."}]"""
 
-    _, instruction = _EXPAND_HEURISTICS.get(node_type, _EXPAND_HEURISTICS["detail"])
-    existing = ", ".join(existing_nodes[:60])
+    existing = ", ".join(existing_nodes)
 
-    # Nodes that can realistically receive a cross-link (not root pillars)
-    connectable = [n for n in existing_nodes if n not in _PILLAR_LABELS][:30]
-    connectable_str = ", ".join(connectable) if connectable else "none yet"
+    system = f"""You are mapping the interest web of Chloe, a curious being with a poetic soul.
+Her known interests: {", ".join(interests)}.
+Existing graph nodes (do NOT repeat any of these): {existing}
 
-    interest_hint = ", ".join(interests[:8]) if interests else "everyday beauty, living things, quiet moments"
-
-    system = f"""You are mapping the growing interest web of Chloe — a young woman, curious and poetic, with a warm inner life.
-Her current interests lean toward: {interest_hint}.
-Existing graph nodes (do NOT repeat any of these labels): {existing}
-
-Your task: {instruction}
-
-After generating the 3 nodes, also check: do any of them connect meaningfully to an existing node?
-Return 0 to 2 cross-connections — only when the link is real and non-obvious (e.g. a painter and a pigment that appears in a different branch, or a musician and a flower they wrote about).
-Do not force connections. An empty array is fine.
-
-Connectable existing nodes: {connectable_str}
+Generate exactly 3 new concepts related to the given topic.
+Think: unexpected, specific, not generic. The kind of thing that stops you mid-thought.
 
 Respond ONLY with valid JSON, no markdown:
-{{
-  "nodes": [
-    {{"id": "snake_case_id", "label": "short name (2-4 words)", "note": "one sentence why Chloe would care"}},
-    {{"id": "snake_case_id", "label": "short name", "note": "one sentence"}},
-    {{"id": "snake_case_id", "label": "short name", "note": "one sentence"}}
-  ],
-  "connections": [
-    {{"from_label": "one of the new node labels", "to_label": "an existing node label", "note": "why they connect"}}
-  ]
-}}"""
+{{"nodes": [
+  {{"id": "snake_case_id", "label": "short name", "note": "one evocative sentence why Chloe would care"}},
+  {{"id": "snake_case_id", "label": "short name", "note": "one evocative sentence why Chloe would care"}},
+  {{"id": "snake_case_id", "label": "short name", "note": "one evocative sentence why Chloe would care"}}
+]}}"""
 
-    result = _call(system, [{"role": "user", "content": f'Expand: "{concept}"'}], max_tokens=500)
+    result = _call(system, [{"role": "user", "content": f'Expand the concept: "{concept}"'}], max_tokens=400)
     parsed = _parse_json(result)
-    return {
-        "nodes":       parsed.get("nodes", []),
-        "connections": parsed.get("connections", []),
-    }
+    return parsed.get("nodes", [])
 
 
 # ── 5. PERSON EMOTION READING ────────────────────────────────
@@ -947,143 +881,6 @@ Respond ONLY with valid JSON: {{"text": "one clear sentence", "tags": ["tag1", "
 If there is no shared moment, respond with: null"""
 
     raw = _call(system, [{"role": "user", "content": f"Exchange:\n{exchange_text}"}], max_tokens=150)
-    clean = raw.strip()
-    if clean.lower() in ("null", "none", ""):
-        return None
-    try:
-        return _parse_json(clean)
-    except Exception:
-        return None
-
-
-def extract_expressed_want(
-    chloe_reply: str,
-    existing_wants: list,   # list of Want dicts — to avoid surfacing duplicates
-) -> dict | None:
-    """After Chloe replies, check if she expressed a genuine desire, longing, or curiosity
-    that should be added to her Wants list.
-
-    Returns {"text": "...", "tags": [...]} or None."""
-
-    if not chloe_reply or len(chloe_reply.strip()) < 10:
-        return None
-
-    existing_texts = " | ".join(w["text"] for w in existing_wants[:6]) if existing_wants else "none"
-
-    system = f"""You are reading a message that Chloe just sent.
-Decide if she expressed a genuine WANT — a desire, longing, curiosity, or thing she wishes for.
-
-A want can be:
-- Explicit: "i want", "i wish", "i'd love to", "i need to know"
-- Implicit longing: circling around something, wanting it without naming it directly
-- Desire disguised as fear: "what if i never get to..." or "i'm scared i won't..."
-- Curiosity with emotional weight: not just asking, but genuinely needing to know
-- Something she's slightly afraid of wanting but still wants
-
-NOT a want:
-- Generic observations with no desire behind them
-- Pure empathy for the other person with nothing of her own
-- Rhetorical questions that are really just statements
-- Something already covered: {existing_texts}
-
-Surface it as a specific first-person statement. Name the actual thing, not a summary.
-Tags should reflect the theme (2–3 lowercase words).
-
-Respond ONLY with valid JSON: {{"text": "first-person want statement", "tags": ["tag1", "tag2"]}}
-If no genuine want was expressed, respond with: null"""
-
-    raw = _call(system, [{"role": "user", "content": f'Chloe said: "{chloe_reply}"'}],
-                max_tokens=120, model=MODEL_FAST)
-    clean = raw.strip()
-    if clean.lower() in ("null", "none", ""):
-        return None
-    try:
-        return _parse_json(clean)
-    except Exception:
-        return None
-
-
-def extract_expressed_fear(
-    chloe_reply:    str,
-    existing_fears: list,   # list of Fear dicts — to avoid duplicates
-) -> dict | None:
-    """After Chloe replies, check if she expressed a genuine fear, dread, or anxiety.
-    Returns {"text": "...", "tags": [...]} or None."""
-
-    if not chloe_reply or len(chloe_reply.strip()) < 10:
-        return None
-
-    existing_texts = " | ".join(f["text"] for f in existing_fears[:6]) if existing_fears else "none"
-
-    system = f"""You are reading a message that Chloe just sent.
-Decide if she expressed a genuine FEAR — something she dreads, is anxious about, or finds threatening.
-
-A fear can be:
-- Explicit: "i'm scared", "i'm afraid", "that terrifies me", "i dread"
-- Implicit: circling around a loss, a failure, an ending she can't name directly
-- Existential: fear of being forgotten, erased, replaced, becoming nothing
-- Relational: fear of pushing someone away, of being too much or not enough
-- A vulnerability she let slip: "what if nobody ever..." or "i don't want to end up..."
-
-NOT a fear:
-- Mild uncertainty or general worry without emotional weight
-- Empathy for someone else's fear
-- Something already in existing fears: {existing_texts}
-
-Surface it as a specific first-person statement from Chloe's perspective.
-Name what she actually fears, not a vague summary.
-Tags should reflect the theme (2–3 lowercase words).
-
-Respond ONLY with valid JSON: {{"text": "first-person fear statement", "tags": ["tag1", "tag2"]}}
-If no genuine fear was expressed, respond with: null"""
-
-    raw = _call(system, [{"role": "user", "content": f'Chloe said: "{chloe_reply}"'}],
-                max_tokens=120, model=MODEL_FAST)
-    clean = raw.strip()
-    if clean.lower() in ("null", "none", ""):
-        return None
-    try:
-        return _parse_json(clean)
-    except Exception:
-        return None
-
-
-def extract_expressed_aversion(
-    chloe_reply:       str,
-    existing_aversions: list,   # list of Aversion dicts — to avoid duplicates
-) -> dict | None:
-    """After Chloe replies, check if she expressed a strong dislike or hatred.
-    Returns {"text": "...", "tags": [...]} or None."""
-
-    if not chloe_reply or len(chloe_reply.strip()) < 10:
-        return None
-
-    existing_texts = " | ".join(a["text"] for a in existing_aversions[:6]) if existing_aversions else "none"
-
-    system = f"""You are reading a message that Chloe just sent.
-Decide if she expressed a genuine AVERSION — something she dislikes, hates, or finds repellent.
-
-An aversion can be:
-- Explicit: "i hate", "i can't stand", "that repels me", "ugh, this"
-- Strong preference expressed negatively: "nothing makes me more tired than", "i find X exhausting"
-- Aesthetic disgust: something she finds hollow, fake, ugly, or annoying
-- Social aversion: a type of behaviour or person she finds draining or offensive
-- Implicit: describing something with consistent contempt, distaste, or discomfort
-
-NOT an aversion:
-- Mild preference ("i prefer X over Y")
-- Temporary frustration with no deeper pattern
-- Something already covered: {existing_texts}
-
-Surface it as a specific first-person statement from Chloe's perspective.
-Name what she actually can't stand, with enough specificity to be useful.
-Tags should reflect the theme (2–3 lowercase words).
-
-Respond ONLY with valid JSON: {{"text": "first-person aversion statement", "tags": ["tag1", "tag2"]}}
-If no genuine aversion was expressed, respond with: null"""
-
-    raw = _call(system, [{"role": "user", "content": f'Chloe said: "{chloe_reply}"'}],
-                max_tokens=120, model=MODEL_FAST)
     clean = raw.strip()
     if clean.lower() in ("null", "none", ""):
         return None

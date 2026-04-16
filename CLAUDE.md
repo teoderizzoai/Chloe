@@ -117,10 +117,8 @@ user calls chloe.chat(msg)
             +-- add()               memory.py
 
 user calls chloe.expand_node(id)
-    +-- llm.expand_interest_node()   depth-aware heuristic (pillar→domain→subject→detail)
-            +-- graph.expand()       adds child nodes with node_type set by depth
-            +-- graph.add_cross_link() for each connection returned by LLM
-            +-- add() to memory
+    +-- llm.expand_interest_node()
+            +-- graph.expand()  + add() to memory
 ```
 
 ---
@@ -157,7 +155,7 @@ user calls chloe.expand_node(id)
 - `generate_memory_from_article()` — impressionistic memory from RSS article
 - `generate_memory()` — generic memory fragment on a topic
 - `generate_idea()` — one original thought
-- `expand_interest_node(concept, node_type, existing_nodes, interests)` — depth-aware expansion; returns `{nodes: [...], connections: [...]}`. Heuristic by node_type: pillar→broad domains, domain→named specific things, subject→techniques/materials/biography, detail→deep tangents. Also returns 0–2 cross-link suggestions to existing nodes.
+- `expand_interest_node()` — 3 child nodes for the interest graph
 - `find_or_create_node()` — G3/G4: decide if orphan tag warrants a new graph node
 - `generate_autonomous_message()` — unprompted text; aware of recent convo + upcoming events; hard constraint against fabricating threads
 - `extract_event()` — detect future plan/event in a message, resolve date, flag if uncertain
@@ -205,11 +203,9 @@ user calls chloe.expand_node(id)
 - Returns `{path, key, source}` dict for snapshot
 
 ### `graph.py`
-- `Node` dataclass: id, label, depth, strength, parent, note, `node_type` (pillar/domain/subject/detail), hit_count, last_auto_expanded
-- `Edge` dataclass: from_id, to_id, `edge_type` (child/connection)
-- `seed_graph()` — 10 pillars seeded for a young woman's natural world: Living Things, Food & Taste, Music & Sound, Light & Colour, Words & Stories, The Body, People & Closeness, Making Things, Seasons & Time, The Inner Life
-- `expand(graph, parent_id, new_defs)` — adds child nodes; node_type set automatically by depth
-- `add_cross_link(graph, from_label, to_label)` — adds a `connection` edge between two existing nodes by label; no-ops if missing or duplicate
+- `Node` (id, label, note, strength, hit_count, last_auto_expanded), `Edge`, `Graph` dataclasses
+- `seed_graph()` — initial nodes (10 human pillars)
+- `expand(graph, parent_id, new_defs)` — adds LLM-generated nodes
 - `reinforce_node()`, `match_nodes_by_tags()`, `get_leaf_nodes()`, `mark_auto_expanded()`
 
 ### `discord_bot.py`
@@ -348,7 +344,6 @@ Chloe is not a perfect, agreeable creature. She has a full emotional range and i
 - [x] 28. Strength-threshold auto-expansion — leaf nodes expand after 5 hits (curiosity>55, 6h cooldown)
 - [x] 29. Orphan tag surfacing — tags in 3+ memories with no node → LLM decides, max 2/reflect
 - [x] 30. Dream recurrence — tags in 3+ dreams → depth-1 node off root, 1/reflect
-- [x] 67. Depth-aware expansion heuristics — node_type (pillar/domain/subject/detail) controls what kind of children are generated at each level; cross-link edges (connection type, dashed in UI) between semantically related nodes across branches; graph regrounded in a young woman's natural world (10 new pillars); state wiped for fresh start
 
 ### Layer 8 — Deeper Personality & World Influence
 - [x] 31. Content-aware soul drift — soul sliders shift based on article/conversation content
@@ -414,4 +409,3 @@ Chloe is not a perfect, agreeable creature. She has a full emotional range and i
 - **Session 18** — Layer 9 properly implemented. Items 41+42: `preferences` (lifts/drags) added to snapshot; mind tab now shows emotional history and lifts/drags sections. Item 45: explicit per-mood tone instructions in chat and autonomous message prompts. Likes/dislikes now form organically via `content_affect()` — scores every article/conversation/memory against soul alignment, logging affect records with real content tags. Items 43+44: replaced brittle keyword detection with `read_person_emotion` (Haiku, runs before reply with 6-message conversation context). Detects full emotional range (affectionate, playful, excited, grateful, tender, curious, thoughtful, neutral, tired, sad, anxious, stressed, lonely, overwhelmed, disappointed, frustrated, angry, dismissive, cold, hurt) with directed_at_chloe flag — emotions about Chloe shift her mood/soul/warmth directly; emotions about Teo's own life trigger empathy responses. `_apply_emotion_reaction` handles each case with graduated mood shifts, warmth boosts, feeling memories, soul marks, and meaningful affect record tags.
 - **Session 19** — Layer 10 complete: items 46+47+48+49+50+51+52 + third-party tracking extension. Item 51: _pending_outreach list on Chloe; recorded when autonomous outreach fires (both _fire_event and _send_autonomous_outreach paths); cleared immediately when person replies in chat(); _check_ignored_outreach() runs every AGE_EVERY ticks — if sent_at + 4h (10min testing) has passed and person.last_contact < sent_at, applies distance+10, warmth-0.5, mood→lonely, feeling memory + affect record; persisted across restarts. Item 50: messaging_disabled field on Person; Zuzu re-added to default_persons() with messaging_disabled=True; choose_reach_out_target filters disabled persons; discord _on_chloe_message checks flag before sending; Discord maps Zuzu for incoming but won't initiate; persons_from_dicts ensures Zuzu is always present; format_cross_person_context() matches other persons' notes/moments by tag overlap and injects naturally into chat prompt. Item 46: SharedMoment dataclass added to persons.py (text, tags, timestamp, reference_count); moments field on Person with serialization; add_moment(), format_shared_moments(), increment_moment_reference() helpers; extract_shared_moment() in llm.py (Haiku, detects memorable exchanges post-chat); _extract_and_store_moment() background task in chloe.py; shared_moments injected into chat() prompt; people tab shows moments section with reference count badges. Item 47: tone_context() rewritten with 4 distinct voice registers keyed to warmth (0–30 guarded, 30–55 warming up, 55–78 familiar, 78+ very close) — each with specific behavioral instructions about what Chloe reveals, how filtered she is, whether strangeness is allowed, whether shared history is accessible. Time-of-day modifier preserved. Applies to both chat() and generate_autonomous_message().
 - **Session 17** — Soul drift fix: ACTIVITY_DRIFT values 5× larger (0.001–0.002/tick), flutter reduced 4× (±0.0005); trait values now display to 1 decimal with trend arrows (32s rolling window). Layer 11 Personality Crystallisation complete: item 58 (soul_activity_affinity — soul traits modulate auto_decide soft-drift probabilities), item 59 (trait momentum via EMA α=0.015, amplifies/dampens drift in drift() and consolidate()), item 60 (emotional soul marks at 5 locations: harsh message +I+F, devastating article +F, beautiful article +N+P, goal completion +J, creative output +N+P), item 61 (consolidate() biased by momentum — sleep carries forward waking drift direction). Conversation soul impact: message ACTIVITY_DRIFT tripled in magnitude and now includes SN=-0.0025/tick (toward S — conversations are concrete and present); content_drift now runs on every chat() call using the full text of message + reply, so the actual content of conversations shapes the soul the same way articles do.
-- **Session 20** — Graph redesign (item 67). node_type added to Node (pillar/domain/subject/detail), edge_type added to Edge (child/connection). expand() sets node_type by depth automatically. add_cross_link() adds dashed connection edges between nodes across branches. expand_interest_node() rewritten with depth-aware heuristics: pillar→broad domains, domain→named specific things (people, flowers, dishes), subject→texture and material, detail→deep tangents; also returns cross-link suggestions. UI renders connection edges as dashed mint lines. Selected node panel shows type badge. Seed graph regrounded in a young woman's natural world: Living Things, Food & Taste, Music & Sound, Light & Colour, Words & Stories, The Body, People & Closeness, Making Things, Seasons & Time, The Inner Life. State wiped for fresh start.
