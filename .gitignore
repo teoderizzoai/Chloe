@@ -1,20 +1,11 @@
-# Environment
-.env
-
-# State files (runtime data, not source)
-chloe_state.json
-chloe_history.jsonl
-
-# Python
-.venv/
 __pycache__/
 *.pyc
 *.pyo
-*.pyd
-*.egg-info/
-dist/
-build/
-
-# OS
-.DS_Store
-Thumbs.db
+*.db
+chloe_state.json
+backups/
+memory_index/
+*.wav
+desktop.ini
+.env
+.fuse_hidden*

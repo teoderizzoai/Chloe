@@ -60,11 +60,6 @@ _REST_MOOD_OVERRIDE: Final[frozenset[str]] = frozenset(
 _REST_MOOD_INTENSITY_MIN: Final[float] = 0.45
 
 
-def _images_root() -> Path:
-    """Absolute path to chloe/images — useful for tooling / one-off checks."""
-    return Path(__file__).resolve().parent / "images"
-
-
 def portrait_meta(activity: str, mood: str, mood_intensity: float) -> dict[str, Any]:
     """
     Decide which PNG the dashboard should show.

@@ -323,7 +323,7 @@ def add_affect_record(
     records: list[AffectRecord], mood: str, cause: str, tags: list[str]
 ) -> list[AffectRecord]:
     r = AffectRecord(mood=mood, cause=cause, tags=tags)
-    return [r, *records][:MAX_AFFECT_RECORDS]
+    return [r, *records]  # no cap — SQLite is unbounded
 
 
 def affect_records_to_dicts(records: list[AffectRecord]) -> list[dict]:

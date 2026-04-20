@@ -9,45 +9,60 @@ Controls:
     Q / Esc     — quit
 
 Setup:
-    1. pip install -r requirements_voice.txt
-    2. Record a clean 5-15s WAV of the voice you want (no background noise)
-    3. Set REF_AUDIO and REF_TEXT below (or as env vars)
-    4. Run — F5-TTS downloads its model (~3 GB) on first use
+    1. Install Fish Speech S2 from source:
+          git clone https://github.com/fishaudio/fish-speech
+          cd fish-speech
+          pip install -e ".[cu129]"    # or [cpu] / [cu126] / [cu128]
+          huggingface-cli download fishaudio/fish-speech-1.5 --local-dir checkpoints/fish-speech-1.5
+
+    2. Start the Fish Speech inference server (separate terminal):
+          python -m tools.api_server --listen 0.0.0.0:8080 \\
+              --checkpoint-path checkpoints/fish-speech-1.5
+
+    3. Record a clean 5-15s WAV of the voice you want (no background noise)
+       and set REF_AUDIO + REF_TEXT below (or as env vars).
+
+    4. Install this script's deps:
+          pip install -r requirements_voice.txt
+
+    5. Run: python voice.py
 
 CUDA:
-    Both Whisper and F5-TTS use CUDA automatically if available.
-    Force CPU: set WHISPER_DEVICE=cpu and F5_DEVICE=cpu
+    Whisper uses CUDA automatically if available.
+    Force CPU: set WHISPER_DEVICE=cpu
 """
 
 import os
 import sys
 import time
 import queue
+import base64
 import threading
+import io
 import numpy as np
 import sounddevice as sd
 import httpx
 
 # ── Config ────────────────────────────────────────────────────
-CHLOE_URL       = os.getenv("CHLOE_URL",       "http://localhost:8000")
-PERSON_ID       = os.getenv("CHLOE_PERSON_ID", "teo")
+CHLOE_URL       = os.getenv("CHLOE_URL",        "http://localhost:8000")
+PERSON_ID       = os.getenv("CHLOE_PERSON_ID",  "teo")
 
-WHISPER_MODEL   = os.getenv("WHISPER_MODEL",   "large-v3")
-WHISPER_DEVICE  = os.getenv("WHISPER_DEVICE",  "cuda")    # "cuda" | "cpu"
-WHISPER_COMPUTE = os.getenv("WHISPER_COMPUTE", "float16") # "float16" | "int8"
+WHISPER_MODEL   = os.getenv("WHISPER_MODEL",    "large-v3")
+WHISPER_DEVICE  = os.getenv("WHISPER_DEVICE",   "cuda")    # "cuda" | "cpu"
+WHISPER_COMPUTE = os.getenv("WHISPER_COMPUTE",  "float16") # "float16" | "int8"
 
 # Path to your reference voice clip + exact transcript of what's said in it
 REF_AUDIO       = os.getenv("REF_AUDIO", "voice_sample.wav")
-REF_TEXT        = os.getenv("REF_TEXT",  "")   # transcript of voice_sample.wav
+REF_TEXT        = os.getenv("REF_TEXT",  "")
 
-F5_DEVICE       = os.getenv("F5_DEVICE", "cuda")
+# Fish Speech inference server
+FISH_URL        = os.getenv("FISH_URL",  "http://localhost:8080")
 
 SAMPLE_RATE     = 16000   # whisper input
-PLAY_RATE       = 24000   # f5-tts output
+PLAY_RATE       = 44100   # fish-speech output
 
 # ── Model handles ─────────────────────────────────────────────
 _whisper = None
-_f5      = None
 
 
 def _load_whisper():
@@ -62,17 +77,6 @@ def _load_whisper():
         )
         print("[STT] ready")
     return _whisper
-
-
-def _load_f5():
-    global _f5
-    if _f5 is None:
-        from f5_tts.api import F5TTS
-        print(f"[TTS] loading F5-TTS on {F5_DEVICE}…")
-        print("[TTS] (first run downloads ~3 GB — subsequent runs are instant)")
-        _f5 = F5TTS(device=F5_DEVICE)
-        print("[TTS] ready")
-    return _f5
 
 
 # ── Transcription ─────────────────────────────────────────────
@@ -104,32 +108,41 @@ def send_to_chloe(text: str) -> str:
         return f"(error reaching Chloe: {e})"
 
 
-# ── TTS ───────────────────────────────────────────────────────
+# ── TTS via Fish Speech server ────────────────────────────────
 
 def speak(text: str):
-    if not text or not REF_AUDIO:
+    if not text:
         return
 
-    if not os.path.exists(REF_AUDIO):
-        print(f"[TTS] reference audio not found: {REF_AUDIO}")
-        print("[TTS] set REF_AUDIO env var to your voice sample path")
-        return
+    payload: dict = {"text": text, "format": "wav", "streaming": False}
 
-    tts = _load_f5()
+    if os.path.exists(REF_AUDIO):
+        with open(REF_AUDIO, "rb") as f:
+            audio_b64 = base64.b64encode(f.read()).decode()
+        payload["references"] = [{"audio": audio_b64, "text": REF_TEXT}]
+    else:
+        if REF_AUDIO:
+            print(f"[TTS] reference audio not found: {REF_AUDIO} — using default voice")
+
     try:
-        wav, sr, _ = tts.infer(
-            ref_file=REF_AUDIO,
-            ref_text=REF_TEXT,
-            gen_text=text,
-        )
-        # wav may be a torch tensor or numpy array
-        if hasattr(wav, "numpy"):
-            wav = wav.numpy()
-        wav = np.array(wav, dtype="float32")
+        r = httpx.post(f"{FISH_URL}/v1/tts", json=payload, timeout=60)
+        r.raise_for_status()
+    except httpx.ConnectError:
+        print(f"[TTS] cannot reach Fish Speech server at {FISH_URL}")
+        print("[TTS] start it with: python -m tools.api_server --listen 0.0.0.0:8080")
+        return
+    except Exception as e:
+        print(f"[TTS] error: {e}")
+        return
+
+    try:
+        import soundfile as sf
+        wav_io = io.BytesIO(r.content)
+        wav, sr = sf.read(wav_io, dtype="float32")
         sd.play(wav, samplerate=sr)
         sd.wait()
     except Exception as e:
-        print(f"[TTS] error: {e}")
+        print(f"[TTS] playback error: {e}")
 
 
 # ── Recorder ─────────────────────────────────────────────────
@@ -173,8 +186,10 @@ def run(recorder: Recorder):
 
     print("\nChloe voice interface ready.")
     if not os.path.exists(REF_AUDIO):
-        print(f"[!] REF_AUDIO not set — TTS disabled until you add a voice sample.")
+        print(f"[!] REF_AUDIO not found — Fish Speech will use its default voice.")
         print(f"    Set REF_AUDIO=path/to/clip.wav and REF_TEXT='transcript'\n")
+    elif not REF_TEXT:
+        print(f"[!] REF_TEXT is empty — voice cloning works best with a transcript.\n")
     print("Hold SPACE to speak, release to send.  Q / Esc to quit.\n")
 
     stop_event = threading.Event()
@@ -225,14 +240,7 @@ def run(recorder: Recorder):
 
 
 def main():
-    if not REF_TEXT and os.path.exists(REF_AUDIO):
-        print("[!] REF_TEXT is empty — F5-TTS works best when you provide the")
-        print("    transcript of your reference clip. Set REF_TEXT env var.")
-
     _load_whisper()
-    if os.path.exists(REF_AUDIO):
-        _load_f5()
-
     recorder = Recorder()
     run(recorder)
 

@@ -1,18 +1,22 @@
-# Voice interface — Python 3.13 compatible
+# Voice interface deps
 # pip install -r requirements_voice.txt
+#
+# Fish Speech S2 must be installed separately from source:
+#   git clone https://github.com/fishaudio/fish-speech
+#   cd fish-speech && pip install -e ".[cu129]"   # or [cpu] / [cu126] / [cu128]
+# Then start the server before running voice.py:
+#   python -m tools.api_server --listen 0.0.0.0:8080 --checkpoint-path checkpoints/fish-speech-1.5
 
 # STT
 faster-whisper>=1.0.3
 
-# TTS
-f5-tts>=0.9.0
-
 # Audio I/O
 sounddevice>=0.4.6
+soundfile>=0.12.1
 numpy>=1.26.0
 
 # Keyboard (hold-to-talk)
 pynput>=1.7.6
 
-# HTTP (calls Chloe server)
+# HTTP (calls Chloe server + Fish Speech server)
 httpx>=0.27.0

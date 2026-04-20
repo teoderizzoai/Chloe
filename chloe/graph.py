@@ -175,10 +175,6 @@ def get_labels(graph: Graph) -> list[str]:
     return [n.label for n in graph.nodes]
 
 
-def node_exists(graph: Graph, label: str) -> bool:
-    return any(n.label.lower() == label.lower() for n in graph.nodes)
-
-
 # ── GRAPH INTELLIGENCE HELPERS ───────────────────────────────
 
 def reinforce_node(graph: Graph, node_id: str) -> Graph:
@@ -209,6 +205,21 @@ def match_nodes_by_tags(graph: Graph, tags: list[str]) -> list[Node]:
     return matches
 
 
+def match_deep_nodes_for_message(graph: Graph, message: str, min_depth: int = 2) -> list[Node]:
+    """Return depth >= min_depth nodes with notes whose label matches words in the message.
+    Used to surface specific knowledge Chloe has genuinely traced during chat."""
+    msg_lower = message.lower()
+    matches = []
+    for node in graph.nodes:
+        if node.id == "root" or node.depth < min_depth or not node.note:
+            continue
+        label_lower = node.label.lower()
+        if label_lower in msg_lower or any(w in label_lower for w in msg_lower.split() if len(w) > 3):
+            matches.append(node)
+    matches.sort(key=lambda n: n.hit_count, reverse=True)
+    return matches[:3]
+
+
 def get_leaf_nodes(graph: Graph) -> list[Node]:
     """G2: Nodes that have no outgoing edges (no children)."""
     parents = {e.from_id for e in graph.edges}
@@ -231,6 +242,49 @@ def find_node_by_label(graph: Graph, label: str) -> Node | None:
     """Find a node by exact or case-insensitive label match."""
     label_lower = label.lower()
     return next((n for n in graph.nodes if n.label.lower() == label_lower), None)
+
+
+# ── THINK EXPANSION ──────────────────────────────────────────
+
+def pick_think_expansion_target(graph: Graph) -> "Node | None":
+    """Return the best leaf node for deliberate think-time expansion.
+    Scores by hit_count × recency of last reinforcement.
+    Skips nodes expanded in the last 6 hours."""
+    now = time.time()
+    SIX_HOURS = 21600
+
+    candidates = [
+        n for n in get_leaf_nodes(graph)
+        if n.id != "root"
+        and n.hit_count >= 1
+        and n.last_reinforced > 0
+        and (now - n.last_auto_expanded) > SIX_HOURS
+    ]
+
+    if not candidates:
+        return None
+
+    def score(n: Node) -> float:
+        recency = math.exp(-(now - n.last_reinforced) / 86400)  # decays over ~3 days
+        return n.hit_count * recency
+
+    return max(candidates, key=score)
+
+
+# ── PROMPT CONTEXT ───────────────────────────────────────────
+
+def graph_knowledge_context(graph: Graph, max_nodes: int = 6) -> str:
+    """Return a compact string describing nodes at depth ≥ 3 with notes.
+    These represent concepts Chloe has genuinely traced rather than just heard of."""
+    deep = [
+        n for n in graph.nodes
+        if n.depth >= 3 and n.note and n.id != "root"
+    ]
+    if not deep:
+        return ""
+    deep.sort(key=lambda n: n.hit_count, reverse=True)
+    lines = [f"{n.label} — {n.note}" for n in deep[:max_nodes]]
+    return "Things she's genuinely traced:\n" + "\n".join(lines)
 
 
 # ── HELPERS ──────────────────────────────────────────────────

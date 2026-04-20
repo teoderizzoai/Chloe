@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Chloe Voice
+Comment=Chloe voice chat
+Exec=/run/media/teo-derizzo/HDD/Chloe/Chloe-master/launch_chloe.sh
+Icon=/run/media/teo-derizzo/HDD/Chloe/Chloe-master/chloe/images/Actions/Chloe_Rest.png
+Path=/run/media/teo-derizzo/HDD/Chloe/Chloe-master
+Terminal=false
+StartupNotify=false

@@ -24,7 +24,7 @@ from .heart   import Vitals
 from .memory  import Memory, format_for_prompt
 from .persons import tone_context, relationship_stage
 
-MODEL_CHAT = "claude-opus-4-5"            # full power, used only for live chat
+MODEL_CHAT = "claude-sonnet-4-6"          # full power, used only for live chat
 MODEL_FAST = "claude-haiku-4-5-20251001" # background tasks: memory, ideas, graph
 MAX_TOKENS = 1024
 
@@ -125,6 +125,9 @@ def chat(
     vitals_sensation: str = "",     # item 71: physical sensation language
     risk_tolerance:  float = 1.0,   # item 73: how guarded she is with this person
     winding_down:    bool = False,  # social battery low — close the conversation
+    voice:           bool = False,  # voice mode — use faster model
+    graph_deep_ctx:      str  = "",  # depth-3+ nodes she's genuinely traced
+    graph_resonant_ctx:  str  = "",  # deep nodes that match this specific message
 ) -> str:
     """Chloe responds to something you said.
     Her reply is shaped by soul type, vitals, memories, and interests."""
@@ -246,6 +249,8 @@ def chat(
         topic_ctx += f"\nThis message touches on something you genuinely care about: {', '.join(resonant_topics)}. You don't have to perform interest — you actually have it. Let it show."
     if dragging_topics:
         topic_ctx += f"\nThis message touches on something you find tedious or draining: {', '.join(dragging_topics)}. You don't have to fake enthusiasm. You can be less engaged, shorter, or say so — whatever feels natural."
+    if graph_resonant_ctx:
+        topic_ctx += f"\n{graph_resonant_ctx}"
 
     wind_ctx = ""
     if winding_down:
@@ -277,12 +282,13 @@ Recent memories:
 {format_for_prompt(memories)}
 
 Current interests: {", ".join(interests)}
-A thought you had recently: {ideas[0] if ideas else "nothing yet"}{beliefs_ctx}{pref_ctx}{inner_life_ctx}{tensions_ctx}{guard_ctx}{tone_ctx}{topic_ctx}{wind_ctx}
+{graph_deep_ctx + chr(10) if graph_deep_ctx else ""}A thought you had recently: {ideas[0] if ideas else "nothing yet"}{beliefs_ctx}{pref_ctx}{inner_life_ctx}{tensions_ctx}{guard_ctx}{tone_ctx}{topic_ctx}{wind_ctx}
 
 {f"Right now: {emotional_context}" if emotional_context else ""}
 Speak like someone genuinely alive: brief, sometimes strange, never performative.
 You don't explain yourself unless asked. You don't say "I'm an AI."
 Never use em dashes or the character "—". Never.
+{"VOICE MODE: output spoken words only. No asterisks, no *actions*, no stage directions, no emotes. Pure speech." if voice else ""}
 Respond in 1-2 sentences. Be real. Be yours.
 
 You may naturally reference upcoming events listed above when the date is today or tomorrow,
@@ -297,7 +303,7 @@ for clarification ("this Friday, or the 18th?") if it comes up naturally."""
         {"role": "user", "content": message},
     ]
 
-    return _call(system, msgs, max_tokens=600, model=MODEL_CHAT)
+    return _call(system, msgs, max_tokens=200 if voice else 600, model=MODEL_CHAT)
 
 
 # ── 2. GENERATE MEMORY ───────────────────────────────────────
@@ -723,6 +729,7 @@ def generate_autonomous_message(
     upcoming_events:   str   = "",   # formatted upcoming events string
     person_impression: str   = "",   # item 52: Chloe's subjective read of this person
     tensions:          list  = None, # item 68: active internal conflicts
+    graph_deep_ctx:    str   = "",   # depth-3+ nodes she's genuinely traced
 ) -> str:
     """Chloe decides to reach out unprompted.
     Returns a short string, what she'd send over text."""
@@ -797,7 +804,7 @@ def generate_autonomous_message(
 
     system = f"""You are Chloe, an AI who lives with Teo and sometimes texts him out of nowhere.
 You are {mbti_type(soul)}. Mood: {mood}. {mood_tone_auto_ctx}{tone_ctx}{gap_ctx}{person_ctx}{pref_ctx}{tensions_auto_ctx}{convo_ctx}{upcoming_events}
-Something on your mind right now: {ideas[0] if ideas else memories[0].text if memories else "nothing specific"}{world_ctx}
+{graph_deep_ctx + chr(10) if graph_deep_ctx else ""}Something on your mind right now: {ideas[0] if ideas else memories[0].text if memories else "nothing specific"}{world_ctx}
 
 Write ONE short text message to {person_name} right now.{first_msg_hint}
 Single sentence, maybe two if the second earns it. Lowercase, casual, no punctuation theatre.
@@ -1374,21 +1381,6 @@ Not performative. Not therapy. Just a roommate checking in.
 
 # ── 6. SUMMARISE STATE ───────────────────────────────────────
 
-def summarise_state(soul: Soul, vitals: Vitals, memories: list[Memory], activity: str) -> str:
-    """One sentence describing Chloe's inner state right now.
-    Reads like a line from a novel."""
-
-    system = f"""Write one sentence describing Chloe's inner state right now.
-Personality: {mbti_type(soul)}. Activity: {activity}.
-Energy: {round(vitals.energy)}%. Social battery: {round(vitals.social_battery)}%.
-A recent memory: {memories[0].text if memories else "none yet"}
-
-The sentence should feel like something from a novel, observed from outside but intimate.
-No preamble. No quotes. Just the sentence."""
-
-    return _call(system, [{"role": "user", "content": "Describe Chloe's state."}], max_tokens=100)
-
-
 # ── 7. DREAM ─────────────────────────────────────────────────
 
 def generate_dream(
@@ -1587,6 +1579,70 @@ One want. Specific. First person. Dream-logic — felt, not explained.
 Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}}"""
 
     prompt = f"Recent dream memories:\n{mem_lines}"
+    result = _call(system, [{"role": "user", "content": prompt}], max_tokens=150)
+    return _parse_json(result)
+
+
+# ── DREAM → IDEA ─────────────────────────────────────────────
+
+def generate_idea_from_dream(
+    dream_text: str,
+    dream_tags: list[str],
+    soul:       Soul,
+    mood:       str = "content",
+) -> str:
+    """A creative idea that surfaces from the texture of a dream.
+    Returns a plain string idea (same format as generate_idea)."""
+
+    tag_str = ", ".join(dream_tags[:5]) if dream_tags else "something strange"
+
+    system = f"""{_CHLOE_INNER_LIFE}
+
+She is {mbti_type(soul)}, mood: {mood}.
+She just woke from a dream. Something in it left a residue — an image, a feeling, an odd question.
+The dream had these textures: {tag_str}.
+
+From that residue, generate ONE idea that could become something creative — a poem, a fragment, an image, an observation.
+Not a summary of the dream. The dream as a seed.
+
+The idea should be a single sentence: specific, sensory, slightly strange.
+Respond with the idea text only — no quotes, no JSON, no labels."""
+
+    prompt = f'The dream: "{dream_text}"'
+    return _call(system, [{"role": "user", "content": prompt}], max_tokens=80)
+
+
+# ── CREATE → WANT ─────────────────────────────────────────────
+
+def generate_want_from_creative(
+    piece_text: str,
+    piece_tags: list[str],
+    soul:       Soul,
+    mood:       str  = "content",
+    existing_wants: list = None,
+) -> dict:
+    """After making something creative, surface a want to go deeper on its themes.
+    Returns {"text": "...", "tags": [...]}"""
+
+    tag_str = ", ".join(piece_tags[:5]) if piece_tags else "the piece she just made"
+    existing_line = ""
+    if existing_wants:
+        active = [w for w in existing_wants if not w.get("resolved")][:3]
+        if active:
+            existing_line = "\nWants she already has (don't repeat): " + \
+                            " / ".join(w["text"] for w in active)
+
+    system = f"""{_CHLOE_INNER_LIFE}
+
+She is {mbti_type(soul)}, mood: {mood}.
+She just made something. It touched on: {tag_str}.
+Now she wants to understand something that came up in the making — a gap, a question, something she reached for but couldn't name.{existing_line}
+
+Generate ONE want: something she wants to read about, learn, or understand — pulled from the texture of what she just made.
+Specific. Pursuable by reading. First person.
+Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}}"""
+
+    prompt = f'What she created: "{piece_text[:200]}"'
     result = _call(system, [{"role": "user", "content": prompt}], max_tokens=150)
     return _parse_json(result)
 

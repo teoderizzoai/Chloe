@@ -56,6 +56,7 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     message:   str
     person_id: str = "teo"
+    voice:     bool = False
 
 class ActivityRequest(BaseModel):
     activity_id: str
@@ -93,7 +94,7 @@ async def chat(req: ChatRequest):
     reply is null if she's in deep sleep and the message was queued."""
     if not req.message.strip():
         raise HTTPException(400, "Empty message")
-    reply = await chloe.chat(req.message, person_id=req.person_id)
+    reply = await chloe.chat(req.message, person_id=req.person_id, voice=req.voice)
     return {"reply": reply, "queued": reply is None}
 
 

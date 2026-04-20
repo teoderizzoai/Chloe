@@ -57,13 +57,14 @@ API       = f"http://localhost:{PORT}"
 IMG_DIR   = os.path.join(BASE_DIR, "chloe", "images")
 
 # Prefer venv python so all deps are present
-VENV_PY = os.path.join(BASE_DIR, ".venv", "Scripts", "python.exe")
+_venv_bin = "Scripts" if sys.platform == "win32" else "bin"
+_venv_exe = "python.exe" if sys.platform == "win32" else "python"
+VENV_PY = os.path.join(BASE_DIR, ".venv", _venv_bin, _venv_exe)
 PYTHON  = VENV_PY if os.path.exists(VENV_PY) else sys.executable
 
 # Voice uses Python 3.11 venv (Coqui TTS doesn't support 3.12+)
-# Create with: py -3.11 -m venv .venv11 && .venv11\Scripts\pip install -r requirements_voice.txt
-VENV11_PY   = os.path.join(BASE_DIR, ".venv11", "Scripts", "python.exe")
-VOICE_SCRIPT = os.path.join(BASE_DIR, "run_voice.py")
+VENV11_PY   = os.path.join(BASE_DIR, ".venv11", _venv_bin, _venv_exe)
+VOICE_SCRIPT = os.path.join(BASE_DIR, "voice_app.py")
 
 # ── palette (matches dashboard) ──────────────────────────────
 BG      = "#07080a"
