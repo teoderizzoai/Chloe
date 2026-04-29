@@ -236,23 +236,19 @@ Effect: a bad day doesn't reset at midnight. A devastating conversation still ha
 
 ---
 
-### C4. Social risk model **[SOON]**
+### C4. Social risk model **[DONE — Session 25]**
 
-Before firing autonomous outreach, evaluate:
+`outreach_risk_score(person, fears, affect_records)` in `inner.py`. Normalized formula:
 
 ```python
-def outreach_risk_score(person, fears, recent_affect_records) -> float:
-    score = 0.0
-    score += person.conflict_level * 0.4
-    score += (100 - person.warmth) / 100 * 0.2
-    score += recent_rejection_count(person.id, hours=48) * 0.3
-    score += active_fear_match(fears, ["rejection", "ignored", "distance"]) * 0.25
-    return clamp(score, 0.0, 1.0)
+score += (person.conflict_level / 100) * 0.4
+score += (100 - person.warmth) / 100 * 0.2
+score += recent_rejection_count(person.id, affect_records, hours=48) * 0.3
+score += active_fear_match(fears, ["rejection", "ignored", "distance"]) * 0.25
+return clamp(score, 0.0, 1.0)
 ```
 
-If `risk_score > risk_tolerance`, outreach is suppressed. Suppression is logged as an affect_record: "wanted to reach out to [name] but held back." This accumulates as pressure on the social want.
-
-Repeated suppression without resolution eventually overrides the risk check.
+Risk gate in `_send_autonomous_outreach()`: if `risk_score > risk_tolerance` (item 73's per-person value), outreach is suppressed. Logs affect_record tagged with `[person_id, "held_back", "suppression", "social"]`. `_bump_social_want_pressure()` raises pressure on the social want by 0.12 per suppression. Override: social want pressure > 0.85 bypasses the gate — accumulated longing overrides fear. `recent_rejection_count` is person-specific because the affect_record tags include the person's id.
 
 ---
 

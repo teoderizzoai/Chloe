@@ -81,17 +81,11 @@ The identity layer is currently four MBTI floats: `soul.EI`, `soul.SN`, `soul.TF
 
 ---
 
-### Priority 3 — Social risk model for outreach
+### Priority 3 — Social risk model for outreach ✓ DONE (Session 25)
 
-Target: `chloe.py → _send_autonomous_outreach()`.
-
-**What to build:**
-- `outreach_risk_score(person, fears, affect_records)` function
-- Inputs: conflict_level, warmth, recent rejection count (from affect_records), active fears matching ["rejection", "ignored", "distance"]
-- If `risk_score > risk_tolerance`: suppress outreach, log affect_record "wanted to reach out to [name] but held back"
-- Suppression accumulates as pressure on the social want
-
-Full formula: `FEATURES.md → C4`.
+- `outreach_risk_score(person, fears, affect_records)` in `inner.py` — composite 0–1 score from conflict level, warmth, recent rejections (tagged by person_id in affect_records), active fears matching social-risk tags.
+- Risk gate in `_send_autonomous_outreach()`: if `risk_score > risk_tolerance`, suppress outreach and log affect_record tagged with `[target.id, "held_back", ...]`.
+- `_bump_social_want_pressure()` in `chloe.py`: raises pressure on the social connection want each time outreach is suppressed. If pressure > 0.85, the gate is bypassed — need overrides fear.
 
 ---
 

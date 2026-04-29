@@ -174,6 +174,12 @@ Every 5 seconds. Strict order:
 6b. Maybe send autonomous outreach
    Conditions: not busy, last outreach > 2h ago (5min in testing), social_battery > 35, not asleep
    → asyncio.create_task(_send_autonomous_outreach())
+   Inside _send_autonomous_outreach():
+   - choose_reach_out_target() picks a person
+   - outreach_risk_score(target, fears, affect_records) computed (0–1)
+   - compared to _get_risk_tolerance(target.id) (item 73, defaults 1.0, lowered by coldness)
+   - if risk > tolerance AND social want pressure < 0.85: suppress — logs affect_record tagged [person_id, "held_back"], bumps social want pressure via _bump_social_want_pressure()
+   - social want pressure > 0.85 overrides the check — accumulated longing wins
 
 7. Every AGE_EVERY ticks (~1 min):
    - age memories (decay weights)
