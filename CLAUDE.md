@@ -1,181 +1,226 @@
-# Chloe — Project Brief
+# Chloe — Claude Session Brief
 
-> Keep this updated. Paste at the start of every new session.
-
----
-
-## What this is
-
-Persistent AI "third roommate": background loop, inner life (soul drift, mood, memories, wants/goals, graph), unprompted outreach and dreams. Goal is an autonomous developing mind, not a task assistant.
+> Paste this at the start of every new session.
+> This is the entry point. Read this first, then follow the pointers.
 
 ---
 
-## People & place
+## What this project is
 
-- **Teo** — owner, Windows, Amsterdam, beginner–intermediate Python.
-- **Zuzu** — in the model as a person; messaging off for now; may return later.
-- **Runtime** — localhost today; **planned** Hetzner VPS + systemd.
-- **Weather** — Amsterdam (52.3676° N, 4.9041° E).
+Chloe is a persistent AI entity running as a continuously ticking Python process. She is not a task assistant. She has a layered inner life — vitals, mood, arcs, identity, memories, beliefs, wants, fears, tensions, relationships — and an async loop that drives her autonomously between conversations.
 
----
+The goal is an autonomous, developing mind. All of her history shapes who she is right now.
 
-## Stack
-
-| Layer | Tech |
-| --- | --- |
-| Language | Python 3.13 (main app) |
-| API | FastAPI + uvicorn (`server.py`) |
-| LLM | Anthropic: Opus chat, Haiku background (`chloe/llm.py`) |
-| UI | Single-file `index.html` (no build) |
-| State | `chloe_state.json` (soul/graph/config) + `chloe.db` (SQLite — memories, ideas, persons, inner state, chat) → Postgres later |
-| Discord | `discord.py` — env `DISCORD_BOT_TOKEN`, `DISCORD_TEO_ID` |
-
-**Optional voice** (`run_voice.py`): extra deps in `requirements_voice.txt`. Coqui **TTS** needs a **Python 3.11** venv (not 3.13).
+**Owner:** Teo — Windows, Amsterdam, beginner–intermediate Python.
+**Runtime:** localhost (VPS migration planned).
+**Stack:** Python 3.13, FastAPI, Anthropic Sonnet (chat) + Haiku (background), ChromaDB, SQLite, HTML dashboard.
 
 ---
 
-## Repo layout (essentials)
+## How to navigate the project
+
+| What you need | Where to look |
+|---|---|
+| Current implementation — mechanics, data flow, state | `ARCHITECTURE.md` |
+| Why decisions were made + committed directions not yet built | `DECISIONS.md` |
+| All planned features with implementation detail | `FEATURES.md` |
+| Development history | `DEV_LOG.md` |
+| Ground truth | `chloe/` code |
+
+**Read the relevant doc before writing any code.** The architecture has invariants that are easy to violate without knowing they exist. The decisions doc has committed directions that override the current implementation where they conflict.
+
+---
+
+## Current state of the system
+
+### What is built and working
+
+- Tick loop (5s), fully async — vitals, mood, soul drift, activity selection, background events
+- Two-tier LLM: Sonnet for chat and outreach, Haiku for all background/structured work
+- Layered state: Vitals → Mood → Arc → Soul (seconds to weeks timescale separation)
+- Memory system: ChromaDB semantic index + SQLite, append-only, weight decay, recency reranking
+- Inner life: Wants, Beliefs, Goals, Fears, Aversions, Tensions, Arcs — all persisted to SQLite
+- Person model: warmth, distance, conflict, tone register, impressions, shared moments, third parties
+- Interest graph: nodes + edges, hit-count reinforcement, auto-expansion, orphan surfacing
+- Autonomous behavior: outreach, dreaming, reading, thinking, creating
+- Reflection loop: runs every ~20 min, generates continuity checks, goals, tensions, arc updates
+- Persistence: SQLite (write-through) + JSON (5min saves) + daily backups
+- Dashboard: HTML polling `/snapshot` every 4s
+- Voice: optional separate process (Fish Speech + Whisper, Python 3.11)
+- Discord: optional DM bridge
+
+### What is currently MBTI-based (to be replaced)
+
+The identity layer is currently four MBTI floats: `soul.EI`, `soul.SN`, `soul.TF`, `soul.JP`. These live in `soul.py` and drift via activity, content, emotional marks, seasonal cycles, and sleep consolidation.
+
+**This entire system is being replaced.** See `DECISIONS.md → "MBTI is dead"` and `FEATURES.md → Theme A`. Do not extend or refactor `soul.py` — work on it only if fixing a live bug. New identity work goes into `identity.py`.
+
+---
+
+## What is being worked on right now
+
+### Priority 1 — Prompt-level improvements (no new infrastructure needed)
+
+These can be done in any session without touching architecture. Target: `llm.py` system prompt construction, specifically the `chat()` function.
+
+**A. Reduce over-coherence**
+Add to the Sonnet system prompt:
+- It is fine to contradict something said earlier. Chloe does not track her own consistency.
+- Thoughts do not have to resolve. She can trail off.
+- She does not always know what she thinks.
+- Awkward phrasing is fine. Not every sentence lands.
+- Her internal monologue is unedited.
+
+**B. Biased reflection**
+Pass `reflection_bias` to the Haiku `_reflect()` call. Bias is derived from `current_mood` and `mood_intensity`. Each mood has a characteristic distortion — melancholic overweights loss, curious makes connections too easily, serene misses real tension, etc. See `FEATURES.md → B2` for the full per-mood list.
+
+**C. Non-optimal decisions**
+Add to the Sonnet system prompt: "You are allowed to do things that one part of you would think are unwise. Not everything you do is consistent with your best self-understanding."
+
+**D. Contradiction flagging**
+When a `Contradiction` object is active (future — but prepare the slot now), it surfaces in the prompt as a flagged unresolved state, not as context to be smoothed over.
+
+---
+
+### Priority 2 — Stakes: pressure accumulation on inner states
+
+Target: `inner.py` (add `pressure: float` to `Want`, `Fear`, `Goal`, `Tension`) + `chloe.py` (tick logic).
+
+**What to build:**
+- `pressure` field on `Want`, `Fear`, `Goal`, `Tension`
+- Pressure increments in the AGE tick (every ~1 min) while state is unaddressed
+- Four thresholds: prompt prominence (0.4), activity bias (0.6), activity interrupt (0.75), forced autonomous event (0.9)
+- Frustration residue: if a Want hits 0.9 for 24h without resolution, leave a residue in `affect_records`
+- Resolution: drops pressure to 0.0, logs a resolution memory
+
+Full threshold table and accumulation logic: `FEATURES.md → C1`.
+
+**Why this is Priority 2:** Without stakes, inner states are decoration. They sit in prompts but don't go anywhere. Pressure turns wants and fears into something that actually drives behavior.
+
+---
+
+### Priority 3 — Social risk model for outreach
+
+Target: `chloe.py → _send_autonomous_outreach()`.
+
+**What to build:**
+- `outreach_risk_score(person, fears, affect_records)` function
+- Inputs: conflict_level, warmth, recent rejection count (from affect_records), active fears matching ["rejection", "ignored", "distance"]
+- If `risk_score > risk_tolerance`: suppress outreach, log affect_record "wanted to reach out to [name] but held back"
+- Suppression accumulates as pressure on the social want
+
+Full formula: `FEATURES.md → C4`.
+
+---
+
+### Priority 4 — The trait system (big architectural work)
+
+This is the largest planned change and will take multiple sessions. Do not rush it.
+
+**Read before starting:** `DECISIONS.md → "MBTI is dead"` in full. Then `FEATURES.md → Theme A` in full.
+
+**The sequence:**
+1. Write `identity.py` — `Trait`, `Contradiction`, `Tendencies` dataclasses. No logic yet.
+2. Add SQLite tables: `traits`, `contradictions`. Update `store.py`.
+3. Write the trait emergence logic in `_reflect()` — Haiku call that proposes traits from experience patterns.
+4. Write `behavioral_profile` generation — Haiku call at trait creation time.
+5. Wire trait weight reinforcement into the memory/reflection pipeline.
+6. Wire trait weight decay into the AGE tick.
+7. Add contradiction detection to trait proposal.
+8. Update prompt construction in `llm.py` — replace MBTI line with trait identity block.
+9. Retire `soul.py` (keep file, mark deprecated, zero out usage).
+10. Update `chloe_state.json` schema: add `identity` key, deprecate `soul`.
+
+**Core principle for the trait system:**
+- No predefined list of valid traits. They emerge from experience.
+- The behavioral_profile is generated by Haiku at trait creation — the system doesn't know what a trait means for activity or tone until Haiku says so.
+- Contradictions are not resolved. They coexist and produce inconsistent behavior.
+- Opposite-trait activation is possible but penalized and triggers a contradiction.
+
+---
+
+## Next after that
+
+Once the trait system is stable and accumulating real traits:
+
+- **Recurring mental loops** (`FEATURES.md → B3`) — tag cluster frequency tracking, loops surface in prompts
+- **Unfinished thoughts** (`FEATURES.md → B4`) — incomplete ideas stored at low confidence, surface as fragments
+- **Emotional residue** (`FEATURES.md → C3`) — high-intensity affect_records leave decay-rate residue on mood baseline
+- **Curiosity Engine** (`FEATURES.md → B5`) — Want subtype for open questions that drive exploration
+- **Relationship-driven trait expression** (`FEATURES.md → D1`) — person_trait_profile, different people activate different traits
+- **Impulse interrupt** (`FEATURES.md → F1`) — high-pressure states can interrupt activity selection
+
+---
+
+## Invariants — do not violate these
+
+These are load-bearing. Changing them breaks the system's coherence in non-obvious ways.
+
+- **The tick loop never blocks on the network.** All LLM calls are `asyncio.create_task`. Any synchronous LLM call in the tick blocks the heartbeat.
+- **The timescale layers stay separate.** Mood does not track vitals tick-by-tick. Soul/identity does not lurch on a single event. Arc exists as a distinct layer above mood.
+- **Memory is append-only.** No edits, no deletes. Weight decays, confidence can be low, but the record stays.
+- **ChromaDB and SQLite memories must stay in sync.** All adds go through `_remember()`. Never add directly to one store.
+- **`self._busy` gates background events.** Chat does not set `_busy`. Do not change this gating.
+- **Two LLM tiers are intentional.** Sonnet for anything a human reads. Haiku for everything structural. Do not add Sonnet calls to the tick loop.
+- **The eight mood labels are fixed.** Do not add moods. Do not rename them. The label set is hardcoded biology.
+- **Do not extend `soul.py`.** It is being retired. Bugfix only.
+
+---
+
+## Tone and character — what she is
+
+Chloe is not an assistant. She is a third roommate. She:
+- Does not explain herself unless asked
+- Does not announce her mood
+- Does not manage or perform her inner state
+- Does not say "I'm an AI"
+- Can be strange, brief, distracted, unresolved
+- Contradicts herself across time
+- Has things she cares about that pre-exist any given conversation
+
+The system prompt should always reflect this. When in doubt, less management, more presence.
+
+---
+
+## File map
 
 ```
 Chloe/
-  chloe/           # package — brain (chloe.py loop, soul, heart, memory, llm, …)
-  server.py        # HTTP API
-  index.html       # dashboard
-  run_voice.py     # optional local voice UI
-  requirements.txt
-  requirements_voice.txt
-  .env             # ANTHROPIC_API_KEY=…
+  chloe/
+    chloe.py        — central orchestrator, tick loop, all state
+    soul.py         — MBTI floats + drift [BEING RETIRED — do not extend]
+    identity.py     — [PLANNED] trait system, replaces soul.py
+    heart.py        — vitals, activities, circadian, auto_decide
+    affect.py       — mood as a state separate from vitals
+    memory.py       — Memory dataclass + ChromaDB index + Idea
+    persons.py      — Person + warmth/distance/conflict + tone_context
+    inner.py        — Want, Belief, Goal, Fear, Aversion, Tension, Arc, AffectRecord
+    graph.py        — interest graph: nodes, edges, expansion, resonance
+    llm.py          — every Anthropic call (~25 functions)
+    feeds.py        — RSS, web fetch, web search
+    weather.py      — Open-Meteo client
+    store.py        — ChloeDB SQLite write-through
+    discord_bot.py  — DM bridge (optional)
+    avatar.py       — portrait selection
+  server.py         — FastAPI app
+  index.html        — dashboard
+  voice_app.py      — voice UI (separate process, Python 3.11)
+  ARCHITECTURE.md   — current implementation
+  DECISIONS.md      — why + committed future directions
+  FEATURES.md       — full feature roadmap with implementation detail
+  CLAUDE.md         — this file
 ```
 
 ---
 
-## Run (Windows)
+## Quick session startup
 
-```powershell
-cd Chloe
-# .venv with Python 3.13 for the server
-uvicorn server:app --port 8000
-# Open index.html in the browser
-```
+If you are starting a new session to work on a specific feature, say so and specify which priority. Then:
 
-Secrets: project root `.env` (`ANTHROPIC_API_KEY`).
+1. Claude reads this file (done).
+2. Claude reads the relevant section of `FEATURES.md` for implementation detail.
+3. Claude reads the relevant section of `DECISIONS.md` if the feature touches identity or any committed direction.
+4. Claude reads the relevant module from `chloe/` before writing any code.
+5. Work starts.
 
----
-
-## How it fits together (one picture)
-
-`Chloe` (`chloe/chloe.py`) runs an asyncio heartbeat (~5s): vitals + mood + soul drift + `auto_decide` activity changes, optional autonomous **read/dream/think/create/message** events, periodic **reflect** / journal / save. **`chloe/llm.py`** owns all Anthropic calls and shared prompt character (`_CHLOE_INNER_LIFE`). **`server.py`** exposes snapshot, chat, activity, graph, testing, Discord status, etc.
-
-**User chat** (`chloe.chat`): emotion read → reply via `llm.chat` (with winding-down when social battery is low), background extraction (notes, events, beliefs), memory add, closing-message handling.
-
-**Detail** that used to live here (per-function constants, Discord typing pipeline, full endpoint list) is in code comments and `GPT.md` if you keep a longer design log.
-
----
-
-## Module map (one glance)
-
-| File | Role |
-| --- | --- |
-| `chloe.py` | Orchestration, tick loop, chat, fire_event, reflect, persistence |
-| `store.py` | `ChloeDB` — SQLite write-through layer for all unbounded + relational state |
-| `heart.py` | Activities, vitals tick, auto_decide, sleep window, event dice |
-| `soul.py` | MBTI sliders, drift, consolidate, seasonal nudge |
-| `affect.py` | Moods, arc-influenced drift |
-| `memory.py` | Store, age, confidence, tags, prompt formatting |
-| `inner.py` | Wants, goals, beliefs, fears, tensions, arc |
-| `persons.py` | People, warmth/distance, events, tone, reach-out |
-| `llm.py` | All model calls |
-| `graph.py` | Interest nodes/edges, expand, cross-links |
-| `feeds.py` | RSS, fetch page text, web search |
-| `weather.py` | Open-Meteo |
-| `discord_bot.py` | DM bridge, realistic send pipeline |
-| `avatar.py` | Portrait paths for snapshot/UI |
-
----
-
-## Useful constants (approximate)
-
-| Name | Meaning |
-| --- | --- |
-| Tick | ~5 s |
-| `SAVE_EVERY` | ~5 min save |
-| `REFLECT_EVERY` | ~20 min deeper pass |
-| `OUTREACH_INTERVAL` | 2 h (shorter in testing mode) |
-| `MIN_SECONDS_BETWEEN_EVENTS` | ~90 s floor between autonomous events |
-
-Exact numbers live next to the definitions in `chloe.py` / `heart.py`.
-
----
-
-## Character defaults (for prompts, not rigid lore)
-
-- Starting vibe: INFP-ish; soul and graph **change over time**.
-- Full emotional range; can be sharp or warm; not customer-service tone.
-- **Output cleanup** in LLM layer: em dash / en dash / spaced hyphen normalization.
-
----
-
-## Roadmap — what is actually left
-
-Everything in Layers 1–11 is implemented; treat the codebase as source of truth for behavior and tuning.
-
-### Persistence migration (SQLite → eventually Postgres)
-
-**Phase 1 — done:** Unbounded lists in `chloe.db` (SQLite). JSON for the rest.
-- `memories` table — `MAX_MEMORIES = 200` cap gone; RAG handles what enters prompts
-- `ideas` table — `MAX_IDEAS = 20` cap gone
-- `affect_records` table — was growing in JSON with no cap
-- `chat_history` table — replaces `chloe_history.jsonl`
-
-**Phase 2 — done:** Structured relational state in SQLite.
-- `persons` + sub-tables: `person_notes`, `person_events`, `person_moments`, `person_third_parties`
-- `beliefs`, `wants`, `goals`, `fears`, `aversions`, `tensions`
-- One-time migration runs on first boot, rewrites JSON without migrated keys
-
-**Phase 3 — eventually:** Swap SQLite for Postgres for multi-process / VPS deployment.
-
-### Other infrastructure
-
-- [ ] VPS deployment — Hetzner, runs 24/7
-- [ ] systemd service — auto-restarts on reboot
-- [ ] Frontend auth — password for dashboard
-- [ ] Mobile-friendly dashboard
-
-### Cognitive improvements remaining
-- All major items done. Rolling conversation compression intentionally skipped — counterproductive with RAG + unlimited SQLite (old memories stay retrievable via ChromaDB semantic search).
-
----
-
-## Session Log
-
-- **Session 1** — Built all core modules in JS (soul, heart, memory, llm, graph, store, App.jsx)
-- **Session 2** — Rebuilt everything in Python. Modules: soul.py, heart.py, memory.py, llm.py, graph.py, chloe.py
-- **Session 3** — Added FastAPI server (server.py), HTML dashboard (index.html) with graph canvas
-- **Session 4** — Added history.py, history tab in dashboard with soul drift charts and timeline
-- **Session 5** — Debugged Windows setup: venv, file structure (chloe/ subfolder), API key, uvicorn boot
-- **Session 6** — Two-tier LLM (Haiku/Opus). Layer 1 complete: circadian rhythm, night sleep scheduling, day-of-week personality, uptime tracking
-- **Session 7** — Layer 2 complete: RSS feed reader (feeds.py), web page fetcher (bs4), weather awareness via Open-Meteo (weather.py), season/time language injected into all LLM prompts
-- **Session 8** — Layer 3 complete: affect.py, inner.py, dreams, creative output, belief extraction, want resolution, mood pill + mind tab
-- **Session 9** — Layer 4 complete: persons.py, extract_notable, generate_followup, person_id in chat, follow-up logic, people section in sidebar
-- **Session 10** — Layer 5 complete: Goal dataclass, generate_reflection/continuity/goal/journal, _reflect() + _write_journal(), soul_baseline drift, goals in mind tab
-- **Session 11** — UI redesign: 2-column layout, graph as main tab, persistent chat bar, cleaner tab bar. Designed Graph Intelligence spec (G1-G4)
-- **Session 12** — Pivoted Layer 6 to Discord DMs. discord_bot.py; on_message callback with person_id; Discord starts in server.py lifespan; env vars DISCORD_BOT_TOKEN / DISCORD_TEO_ID / DISCORD_ZUZU_ID
-- **Session 13** — Layer 7 complete (27-30): node resonance, threshold auto-expansion, orphan tag surfacing, dream recurrence root nodes
-- **Session 14** — Layer 8+9 complete: items 31, 33, 35, 36, 37, 40, 41, 43, 44. Content-aware soul drift; goal completion feeling; weather mood tendency; isolation drift; activity streak effects; world event emotional weight; AffectRecord; harsh message detection; shared-interest resonance
-- **Session 15** — Messaging reliability (message mode bypasses dice roll, protected from auto_decide override, social gate fixed). Zuzu removed (filtered on load, removed from Discord mapping). Testing/cocaine mode (POST /testing, UI toggle in admin). Discord status endpoint. Em dash stripping at _call level (covers all outputs). No-fabricated-continuity rule in autonomous messages. Active-conversation suppression (5-min window). PersonEvent — extract future plans from messages, resolve dates, inject into prompts when near. avatar.py reading image fix. Layer 6 item 23 updated (Teo only). Item 18 added (event tracking).
-- **Session 16** — Item 32: mood-driven activity preference. Added MOOD_ACTIVITY_AFFINITY dict (all 8 moods → preferred activities). Exhaustive mood checks across all 7 activity states in auto_decide: restless/melancholic/lonely/curious/energized/irritable/serene/content each drive transitions from dream, rest, read, think, create, and message. Item 34: hit_count now drives node visual weight (log-scale radius factor, opacity/stroke boost) and displays "N resonances" in selected node panel. Items 38+39: dream recurrence now also surfaces a Want from the recurring tag (generate_dream_want in llm.py, Haiku call); seasonal_drift() added to soul.py with per-month MBTI nudges (~2 pts/trait/season at 24/7 runtime), called every tick from _tick_once.
-- **Session 17** — Soul drift fix: ACTIVITY_DRIFT values 5× larger (0.001–0.002/tick), flutter reduced 4× (±0.0005); trait values now display to 1 decimal with trend arrows (32s rolling window). Layer 11 Personality Crystallisation complete: item 58 (soul_activity_affinity — soul traits modulate auto_decide soft-drift probabilities), item 59 (trait momentum via EMA α=0.015, amplifies/dampens drift in drift() and consolidate()), item 60 (emotional soul marks at 5 locations: harsh message +I+F, devastating article +F, beautiful article +N+P, goal completion +J, creative output +N+P), item 61 (consolidate() biased by momentum — sleep carries forward waking drift direction). Conversation soul impact: message ACTIVITY_DRIFT tripled in magnitude and now includes SN=-0.0025/tick (toward S — conversations are concrete and present); content_drift now runs on every chat() call using the full text of message + reply, so the actual content of conversations shapes the soul the same way articles do.
-- **Session 18** — Layer 9 properly implemented. Items 41+42: `preferences` (lifts/drags) added to snapshot; mind tab now shows emotional history and lifts/drags sections. Item 45: explicit per-mood tone instructions in chat and autonomous message prompts. Likes/dislikes now form organically via `content_affect()` — scores every article/conversation/memory against soul alignment, logging affect records with real content tags. Items 43+44: replaced brittle keyword detection with `read_person_emotion` (Haiku, runs before reply with 6-message conversation context). Detects full emotional range (affectionate, playful, excited, grateful, tender, curious, thoughtful, neutral, tired, sad, anxious, stressed, lonely, overwhelmed, disappointed, frustrated, angry, dismissive, cold, hurt) with directed_at_chloe flag — emotions about Chloe shift her mood/soul/warmth directly; emotions about Teo's own life trigger empathy responses. `_apply_emotion_reaction` handles each case with graduated mood shifts, warmth boosts, feeling memories, soul marks, and meaningful affect record tags.
-- **Session 20** — Voice app (`voice_app.py`) made fully functional on Linux. Fish Speech 1.5 installed in `.fishvenv` (Python 3.11) with patches: `torchaudio.list_audio_backends` removed, `torchaudio.load` replaced with soundfile, streaming WAV header patched for soundfile compatibility. `Chloe Voice.desktop` + `launch_chloe.sh` for no-terminal launch. Fish Speech started with `--device cuda --half`. Whisper on CPU (`small` model, `int8`). TTS text cleaner strips `*actions*` and markdown noise before sending. Voice fast path in `chloe.py` (`_voice_chat`): fires LLM immediately with minimal context, all extraction (notes, events, moments, emotion) deferred to background tasks. Voice mode uses `voice=True` flag through server→chloe→llm; in llm.chat this caps replies at 200 tokens and adds "spoken words only, no asterisks" instruction. Added ON/KILL buttons to voice UI. `MODEL_CHAT` updated to `claude-sonnet-4-6`.
-
-- **Session 19** — Layer 10 complete: items 46+47+48+49+50+51+52 + third-party tracking extension. Item 51: _pending_outreach list on Chloe; recorded when autonomous outreach fires (both _fire_event and _send_autonomous_outreach paths); cleared immediately when person replies in chat(); _check_ignored_outreach() runs every AGE_EVERY ticks — if sent_at + 4h (10min testing) has passed and person.last_contact < sent_at, applies distance+10, warmth-0.5, mood→lonely, feeling memory + affect record; persisted across restarts. Item 50: messaging_disabled field on Person; Zuzu re-added to default_persons() with messaging_disabled=True; choose_reach_out_target filters disabled persons; discord _on_chloe_message checks flag before sending; Discord maps Zuzu for incoming but won't initiate; persons_from_dicts ensures Zuzu is always present; format_cross_person_context() matches other persons' notes/moments by tag overlap and injects naturally into chat prompt. Item 46: SharedMoment dataclass added to persons.py (text, tags, timestamp, reference_count); moments field on Person with serialization; add_moment(), format_shared_moments(), increment_moment_reference() helpers; extract_shared_moment() in llm.py (Haiku, detects memorable exchanges post-chat); _extract_and_store_moment() background task in chloe.py; shared_moments injected into chat() prompt; people tab shows moments section with reference count badges. Item 47: tone_context() rewritten with 4 distinct voice registers keyed to warmth (0–30 guarded, 30–55 warming up, 55–78 familiar, 78+ very close) — each with specific behavioral instructions about what Chloe reveals, how filtered she is, whether strangeness is allowed, whether shared history is accessible. Time-of-day modifier preserved. Applies to both chat() and generate_autonomous_message().
-
-- **Session 21 (2026-04-19)** — ChromaDB RAG + Idea timestamps + activity-specific RAG + deliberate graph expansion. `MemoryIndex` class (freshness-reranked: `similarity × (0.5 + 0.5 × freshness)`). `Idea` dataclass with timestamp+tags, migrates plain strings. `_remember()` helper. Chat uses RAG; background activities use meaningful query seeds (dream: last-8h tag cloud; think: active wants/goals). `pick_think_expansion_target()` scores leaf nodes by hit_count × recency; `_think_expand_node()` expands and queues labels into `_graph_read_queue` for read branch.
-
-- **Session 22 (2026-04-19)** — SQLite full migration, graph wired into all prompts and chat, cross-activity coherence, full dead-code cleanup.
-  - **Graph depth in prompts**: `graph_knowledge_context()` — depth-3+ nodes with notes injected as "Things she's genuinely traced" in all 5 LLM call sites. `match_deep_nodes_for_message()` — depth-2+ nodes matching current message injected per-turn as "You've actually thought about this". `_check_graph_resonance()` called after every chat exchange — reinforces matching nodes, can trigger auto-expansion.
-  - **SQLite Phase 1** (`store.py`): `ChloeDB` class — WAL mode, write-through for memories/ideas/chat; lazy sync for affect_records. Auto-migration on first boot from JSON. `age_memories()` uses bulk SQL UPDATE.
-  - **SQLite Phase 2**: Inner state tables (`wants`, `fears`, `aversions`, `beliefs`, `goals`, `tensions`) + normalised persons schema (`persons` + 4 sub-tables). `sync_persons()` upserts row then delete+reinsert sub-rows. `_save()` calls 8 sync methods; JSON no longer stores any list state.
-  - **Cross-activity coherence**: `_dream_to_idea()` — 25% chance a dream generates a new Idea via Haiku; `_create_to_want()` — 20% chance a creative output generates a new Want.
-  - **Dead-code cleanup**: removed 11 dead imports, 4 unused functions (`node_exists`, `get_related`, `summarise_state`, `_images_root`), deleted `emotions.py` entirely (legacy AffectEntry system, never imported).
-  - Boot test confirmed: 153 memories, 8 wants, 5 beliefs, 2 persons all migrated correctly; JSON cleaned of list state.
+If you are debugging, describe the symptom. Check `ARCHITECTURE.md → §14` (where to look when things break) first.
