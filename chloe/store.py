@@ -167,6 +167,23 @@ class ChloeDB:
             CREATE INDEX IF NOT EXISTS idx_events_pid ON person_events(person_id);
         """)
         self._con.commit()
+        self._migrate()
+
+    def _migrate(self):
+        """Add columns introduced after initial schema creation."""
+        migrations = [
+            ("wants",    "ALTER TABLE wants    ADD COLUMN pressure       REAL NOT NULL DEFAULT 0.0"),
+            ("wants",    "ALTER TABLE wants    ADD COLUMN pressure_since REAL NOT NULL DEFAULT 0.0"),
+            ("fears",    "ALTER TABLE fears    ADD COLUMN pressure       REAL NOT NULL DEFAULT 0.0"),
+            ("goals",    "ALTER TABLE goals    ADD COLUMN pressure       REAL NOT NULL DEFAULT 0.0"),
+            ("tensions", "ALTER TABLE tensions ADD COLUMN pressure       REAL NOT NULL DEFAULT 0.0"),
+        ]
+        for _, sql in migrations:
+            try:
+                self._con.execute(sql)
+            except sqlite3.OperationalError:
+                pass  # column already exists
+        self._con.commit()
 
     # ── MEMORIES ──────────────────────────────────────────────
 
@@ -334,28 +351,33 @@ class ChloeDB:
 
     def sync_wants(self, wants: list) -> None:
         self._con.execute("DELETE FROM wants")
-        self._con.executemany("INSERT INTO wants VALUES (?,?,?,?,?)",
-            [(w.id, w.text, json.dumps(w.tags), w.created_at, int(w.resolved))
+        self._con.executemany(
+            "INSERT INTO wants (id,text,tags,created_at,resolved,pressure,pressure_since) VALUES (?,?,?,?,?,?,?)",
+            [(w.id, w.text, json.dumps(w.tags), w.created_at, int(w.resolved),
+              w.pressure, w.pressure_since)
              for w in wants])
         self._con.commit()
 
     def load_wants(self) -> list:
         from .inner import Want
         return [Want(id=r["id"], text=r["text"], tags=json.loads(r["tags"]),
-                     created_at=r["created_at"], resolved=bool(r["resolved"]))
+                     created_at=r["created_at"], resolved=bool(r["resolved"]),
+                     pressure=r["pressure"], pressure_since=r["pressure_since"])
                 for r in self._con.execute("SELECT * FROM wants ORDER BY created_at DESC")]
 
     def sync_fears(self, fears: list) -> None:
         self._con.execute("DELETE FROM fears")
-        self._con.executemany("INSERT INTO fears VALUES (?,?,?,?,?)",
-            [(f.id, f.text, json.dumps(f.tags), f.created_at, int(f.resolved))
+        self._con.executemany(
+            "INSERT INTO fears (id,text,tags,created_at,resolved,pressure) VALUES (?,?,?,?,?,?)",
+            [(f.id, f.text, json.dumps(f.tags), f.created_at, int(f.resolved), f.pressure)
              for f in fears])
         self._con.commit()
 
     def load_fears(self) -> list:
         from .inner import Fear
         return [Fear(id=r["id"], text=r["text"], tags=json.loads(r["tags"]),
-                     created_at=r["created_at"], resolved=bool(r["resolved"]))
+                     created_at=r["created_at"], resolved=bool(r["resolved"]),
+                     pressure=r["pressure"])
                 for r in self._con.execute("SELECT * FROM fears ORDER BY created_at DESC")]
 
     def sync_aversions(self, aversions: list) -> None:
@@ -386,24 +408,27 @@ class ChloeDB:
 
     def sync_goals(self, goals: list) -> None:
         self._con.execute("DELETE FROM goals")
-        self._con.executemany("INSERT INTO goals VALUES (?,?,?,?,?,?,?)",
+        self._con.executemany(
+            "INSERT INTO goals (id,text,tags,created_at,resolved,progress,threshold,pressure) VALUES (?,?,?,?,?,?,?,?)",
             [(g.id, g.text, json.dumps(g.tags), g.created_at,
-              int(g.resolved), g.progress, g.threshold) for g in goals])
+              int(g.resolved), g.progress, g.threshold, g.pressure) for g in goals])
         self._con.commit()
 
     def load_goals(self) -> list:
         from .inner import Goal
         return [Goal(id=r["id"], text=r["text"], tags=json.loads(r["tags"]),
                      created_at=r["created_at"], resolved=bool(r["resolved"]),
-                     progress=r["progress"], threshold=r["threshold"])
+                     progress=r["progress"], threshold=r["threshold"],
+                     pressure=r["pressure"])
                 for r in self._con.execute("SELECT * FROM goals ORDER BY created_at DESC")]
 
     def sync_tensions(self, tensions: list) -> None:
         self._con.execute("DELETE FROM tensions")
-        self._con.executemany("INSERT INTO tensions VALUES (?,?,?,?,?,?,?,?)",
+        self._con.executemany(
+            "INSERT INTO tensions (id,text,tags,intensity,belief_ids,want_ids,created_at,last_fired,pressure) VALUES (?,?,?,?,?,?,?,?,?)",
             [(t.id, t.text, json.dumps(t.tags), t.intensity,
               json.dumps(t.belief_ids), json.dumps(t.want_ids),
-              t.created_at, t.last_fired) for t in tensions])
+              t.created_at, t.last_fired, t.pressure) for t in tensions])
         self._con.commit()
 
     def load_tensions(self) -> list:
@@ -412,7 +437,8 @@ class ChloeDB:
                         intensity=r["intensity"],
                         belief_ids=json.loads(r["belief_ids"]),
                         want_ids=json.loads(r["want_ids"]),
-                        created_at=r["created_at"], last_fired=r["last_fired"])
+                        created_at=r["created_at"], last_fired=r["last_fired"],
+                        pressure=r["pressure"])
                 for r in self._con.execute("SELECT * FROM tensions ORDER BY intensity DESC")]
 
     # ── PERSONS ───────────────────────────────────────────────
@@ -511,15 +537,19 @@ class ChloeDB:
         from .persons import persons_from_dicts
 
         for d in data.get("wants", []):
-            try: self._con.execute("INSERT OR IGNORE INTO wants VALUES (?,?,?,?,?)",
+            try: self._con.execute(
+                "INSERT OR IGNORE INTO wants (id,text,tags,created_at,resolved,pressure,pressure_since) VALUES (?,?,?,?,?,?,?)",
                 (d.get("id","?"), d["text"], json.dumps(d.get("tags",[])),
-                 float(d.get("created_at", 0)), int(d.get("resolved", False))))
+                 float(d.get("created_at", 0)), int(d.get("resolved", False)),
+                 float(d.get("pressure", 0.0)), float(d.get("pressure_since", 0.0))))
             except Exception: pass
 
         for d in data.get("fears", []):
-            try: self._con.execute("INSERT OR IGNORE INTO fears VALUES (?,?,?,?,?)",
+            try: self._con.execute(
+                "INSERT OR IGNORE INTO fears (id,text,tags,created_at,resolved,pressure) VALUES (?,?,?,?,?,?)",
                 (d.get("id","?"), d["text"], json.dumps(d.get("tags",[])),
-                 float(d.get("created_at", 0)), int(d.get("resolved", False))))
+                 float(d.get("created_at", 0)), int(d.get("resolved", False)),
+                 float(d.get("pressure", 0.0))))
             except Exception: pass
 
         for d in data.get("aversions", []):
@@ -536,18 +566,21 @@ class ChloeDB:
             except Exception: pass
 
         for d in data.get("goals", []):
-            try: self._con.execute("INSERT OR IGNORE INTO goals VALUES (?,?,?,?,?,?,?)",
+            try: self._con.execute(
+                "INSERT OR IGNORE INTO goals (id,text,tags,created_at,resolved,progress,threshold,pressure) VALUES (?,?,?,?,?,?,?,?)",
                 (d.get("id","?"), d["text"], json.dumps(d.get("tags",[])),
                  float(d.get("created_at", 0)), int(d.get("resolved", False)),
-                 int(d.get("progress", 0)), int(d.get("threshold", 5))))
+                 int(d.get("progress", 0)), int(d.get("threshold", 5)),
+                 float(d.get("pressure", 0.0))))
             except Exception: pass
 
         for d in data.get("tensions", []):
-            try: self._con.execute("INSERT OR IGNORE INTO tensions VALUES (?,?,?,?,?,?,?,?)",
+            try: self._con.execute(
+                "INSERT OR IGNORE INTO tensions (id,text,tags,intensity,belief_ids,want_ids,created_at,last_fired,pressure) VALUES (?,?,?,?,?,?,?,?,?)",
                 (d.get("id","?"), d["text"], json.dumps(d.get("tags",[])),
                  float(d.get("intensity", 0.5)), json.dumps(d.get("belief_ids",[])),
                  json.dumps(d.get("want_ids",[])), float(d.get("created_at", 0)),
-                 float(d.get("last_fired", 0))))
+                 float(d.get("last_fired", 0)), float(d.get("pressure", 0.0))))
             except Exception: pass
 
         for p_dict in data.get("persons", []):

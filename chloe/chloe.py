@@ -39,7 +39,8 @@ from .inner  import (Want, Belief, Goal, AffectRecord, Fear, Aversion,
                      add_goal, resolve_goals, goals_to_dicts,
                      add_affect_record, affect_records_to_dicts,
                      derive_preferences,
-                     add_tension, decay_tensions, tensions_to_dicts)
+                     add_tension, decay_tensions, tensions_to_dicts,
+                     tick_pressure)
 from .persons import (Person, PersonNote, PersonEvent, SharedMoment,
                       default_persons, on_contact, add_note, add_event, mark_followed_up,
                       pending_followups, tick_distance, choose_reach_out_target,
@@ -551,6 +552,7 @@ class Chloe:
                 third_party_ctx=third_party_ctx or None,
                 cross_person_ctx=cross_person_ctx or None,
                 person_impression=person.impression if person else "",
+                wants=wants_to_dicts(self.wants),
                 fears=fears_to_dicts(self.fears),
                 aversions=aversions_to_dicts(self.aversions),
                 tensions=tensions_to_dicts(self.tensions),
@@ -560,6 +562,7 @@ class Chloe:
                 voice=voice,
                 graph_deep_ctx=graph_knowledge_context(self.graph),
                 graph_resonant_ctx=_graph_resonant_ctx,
+                contradiction_ctx="",  # wired; populated when identity.py provides Contradiction objects
             )
         except Exception as e:
             print(f"[chat error] {type(e).__name__}: {e}")
@@ -1216,36 +1219,45 @@ class Chloe:
             if not override and self.activity not in _prefer and _prefer and random.random() < 0.15:
                 override = _prefer[0]  # gentle nudge toward arc-aligned activity
 
-        # Want + Goal influenced activity nudge
-        # Want + Goal influenced activity nudge (12% chance, topic-tag + text based).
-        # Goals are treated like long-term wants for activity nudging.
+        # Want + Goal influenced activity nudge (C1: pressure scales probability).
+        # Base 12% chance; pressure > 0.6 raises it to 50%; > 0.75 to 80%.
         if not override and not self.testing_mode:
             _safe_to_nudge = self.activity not in ("sleep", "dream", "message")
-            if _safe_to_nudge and random.random() < 0.12:
-                _nudge_act_map = {
-                    "read":   ["learn", "read", "research", "find", "understand", "discover",
-                               "know", "look", "curious"],
-                    "think":  ["think", "process", "reflect", "figure", "wonder"],
-                    "create": ["create", "write", "make", "express"],
-                    "rest":   ["rest", "quiet", "calm", "still", "peace", "alone",
-                               "solitude", "silence", "decompress"],
-                    "dream":  ["dream", "sleep", "drift"],
-                }
-                # Both wants and goals are candidates
+            if _safe_to_nudge:
                 _nudge_candidates = (
                     [w for w in self.wants if not w.resolved] +
                     [g for g in self.goals if not g.resolved]
                 )
-                for act, kws in _nudge_act_map.items():
-                    kw_set = set(kws)
-                    def _matches(item):
-                        if any(t.lower() in kw_set for t in item.tags):
-                            return True
-                        return any(k in item.text.lower() for k in kw_set)
-                    if any(_matches(item) for item in _nudge_candidates):
-                        if self.activity != act:
-                            override = act
-                            break
+                _max_pressure = max((item.pressure for item in _nudge_candidates), default=0.0)
+                _nudge_prob = (
+                    0.80 if _max_pressure > 0.75 else
+                    0.50 if _max_pressure > 0.60 else
+                    0.12
+                )
+                if random.random() < _nudge_prob:
+                    _nudge_act_map = {
+                        "read":   ["learn", "read", "research", "find", "understand", "discover",
+                                   "know", "look", "curious"],
+                        "think":  ["think", "process", "reflect", "figure", "wonder"],
+                        "create": ["create", "write", "make", "express"],
+                        "rest":   ["rest", "quiet", "calm", "still", "peace", "alone",
+                                   "solitude", "silence", "decompress"],
+                        "dream":  ["dream", "sleep", "drift"],
+                    }
+                    # Sort by pressure so the most urgent items drive the nudge
+                    _nudge_candidates_sorted = sorted(
+                        _nudge_candidates, key=lambda x: x.pressure, reverse=True
+                    )
+                    for act, kws in _nudge_act_map.items():
+                        kw_set = set(kws)
+                        def _matches(item):
+                            if any(t.lower() in kw_set for t in item.tags):
+                                return True
+                            return any(k in item.text.lower() for k in kw_set)
+                        if any(_matches(item) for item in _nudge_candidates_sorted):
+                            if self.activity != act:
+                                override = act
+                                break
 
         if self.testing_mode and self.activity in ("sleep", "dream"):
             self.set_activity("rest")
@@ -1291,10 +1303,22 @@ class Chloe:
             for p in self.persons
         )
 
+        # C1: pressure > 0.9 forces an autonomous event regardless of dice roll
+        _all_pressures = (
+            [w.pressure for w in self.wants if not w.resolved] +
+            [f.pressure for f in self.fears if not f.resolved] +
+            [g.pressure for g in self.goals if not g.resolved] +
+            [t.pressure for t in self.tensions]
+        )
+        _max_inner_pressure = max(_all_pressures, default=0.0)
+        _pressure_forces_event = _max_inner_pressure > 0.9 and not _recent_contact
+
         # When in "message" activity, bypass the dice roll — she will always fire.
         gap_ok = (time.monotonic() - self._last_autonomous_fire_mono) >= MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS
         if not self._busy and gap_ok and not _recent_contact and (
-            self.activity == "message" or should_fire_event(self.activity, TICK_SECONDS)
+            _pressure_forces_event or
+            self.activity == "message" or
+            should_fire_event(self.activity, TICK_SECONDS)
         ):
             self._last_autonomous_fire_mono = time.monotonic()
             asyncio.create_task(self._fire_event())
@@ -1321,6 +1345,18 @@ class Chloe:
             self.persons  = tick_conflict(self.persons)   # item 49
             self._check_ignored_outreach()                # item 51
             self.tensions = decay_tensions(self.tensions) # item 68
+
+            # C1: pressure accumulation on inner states
+            self.wants, self.fears, self.goals, self.tensions, _frustrated = tick_pressure(
+                self.wants, self.fears, self.goals, self.tensions
+            )
+            for _w in _frustrated:
+                self.affect_records = add_affect_record(
+                    self.affect_records, self.affect.mood,
+                    f"wanted to {_w.text} but nothing came of it",
+                    _w.tags,
+                )
+                self._remember(f"wanted to {_w.text} but it hasn't gone anywhere", "feeling", _w.tags)
 
             # Item 36 — isolation drift: days without contact push her more introverted
             if self.persons and all(p.distance > 70 for p in self.persons):
@@ -2162,12 +2198,13 @@ class Chloe:
             _r_tens = self.tensions[0].text if self.tensions else ""
             _r_t    = time.localtime()
             _r_sea  = f"{wthr.describe_season(_r_t.tm_mon)}, {circadian_phase(_r_t.tm_hour)}"
-            _reflect_q = f"{_r_arc} {self.affect.mood}".strip() if _r_arc else self.affect.mood
+            _reflect_q    = f"{_r_arc} {self.affect.mood}".strip() if _r_arc else self.affect.mood
+            _reflect_bias = llm._REFLECTION_BIAS.get(self.affect.mood, "")
             mem = await asyncio.to_thread(
                 llm.generate_reflection,
                 self.memory_index.query(_reflect_q, self.memories, 6), [i.text for i in self.ideas],
                 beliefs_to_dicts(self.beliefs), self.soul, self.affect.mood,
-                self.weather, _r_sea, _r_arc, _r_tens,
+                self.weather, _r_sea, _r_arc, _r_tens, _reflect_bias,
             )
             self._remember(mem["text"], "reflection", mem.get("tags", []))
             self._log(f'reflection: "{mem["text"]}…"')

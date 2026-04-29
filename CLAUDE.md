@@ -59,43 +59,25 @@ The identity layer is currently four MBTI floats: `soul.EI`, `soul.SN`, `soul.TF
 
 ## What is being worked on right now
 
-### Priority 1 — Prompt-level improvements (no new infrastructure needed)
+### Priority 1 — Prompt-level improvements ✓ DONE (Session 23)
 
-These can be done in any session without touching architecture. Target: `llm.py` system prompt construction, specifically the `chat()` function.
-
-**A. Reduce over-coherence**
-Add to the Sonnet system prompt:
-- It is fine to contradict something said earlier. Chloe does not track her own consistency.
-- Thoughts do not have to resolve. She can trail off.
-- She does not always know what she thinks.
-- Awkward phrasing is fine. Not every sentence lands.
-- Her internal monologue is unedited.
-
-**B. Biased reflection**
-Pass `reflection_bias` to the Haiku `_reflect()` call. Bias is derived from `current_mood` and `mood_intensity`. Each mood has a characteristic distortion — melancholic overweights loss, curious makes connections too easily, serene misses real tension, etc. See `FEATURES.md → B2` for the full per-mood list.
-
-**C. Non-optimal decisions**
-Add to the Sonnet system prompt: "You are allowed to do things that one part of you would think are unwise. Not everything you do is consistent with your best self-understanding."
-
-**D. Contradiction flagging**
-When a `Contradiction` object is active (future — but prepare the slot now), it surfaces in the prompt as a flagged unresolved state, not as context to be smoothed over.
+- **A. Over-coherence reduction** — 4-line block in Sonnet chat prompt: contradictions allowed, trailing thoughts OK, not knowing what you think is fine, awkward phrasing is fine.
+- **B. Biased reflection** — `_REFLECTION_BIAS` dict in `llm.py`; `generate_reflection()` takes `reflection_bias` param; `_reflect()` derives bias from current mood and passes it.
+- **C. Non-optimal decisions** — One-line permission added to chat prompt.
+- **D. Contradiction slot** — `contradiction_ctx` param wired in `llm.chat()` and the main call site; populated once `identity.py` provides `Contradiction` objects.
 
 ---
 
-### Priority 2 — Stakes: pressure accumulation on inner states
+### Priority 2 — Stakes: pressure accumulation on inner states ✓ DONE (Session 24)
 
-Target: `inner.py` (add `pressure: float` to `Want`, `Fear`, `Goal`, `Tension`) + `chloe.py` (tick logic).
-
-**What to build:**
-- `pressure` field on `Want`, `Fear`, `Goal`, `Tension`
-- Pressure increments in the AGE tick (every ~1 min) while state is unaddressed
-- Four thresholds: prompt prominence (0.4), activity bias (0.6), activity interrupt (0.75), forced autonomous event (0.9)
-- Frustration residue: if a Want hits 0.9 for 24h without resolution, leave a residue in `affect_records`
-- Resolution: drops pressure to 0.0, logs a resolution memory
-
-Full threshold table and accumulation logic: `FEATURES.md → C1`.
-
-**Why this is Priority 2:** Without stakes, inner states are decoration. They sit in prompts but don't go anywhere. Pressure turns wants and fears into something that actually drives behavior.
+- `pressure: float` on `Want`, `Fear`, `Goal`, `Tension`; `pressure_since: float` on `Want` for frustration tracking
+- `tick_pressure()` in `inner.py` — rates: Want 0.015, Fear 0.008, Goal 0.004, Tension 0.010 per AGE tick
+- Resolution zeroes pressure immediately (`resolve_wants`, `advance_goals`)
+- Frustration residue: Want at ≥0.9 for 24h → `affect_record` + memory
+- Activity nudge scales with pressure (12% → 50% at >0.6 → 80% at >0.75)
+- Pressure >0.9 forces autonomous event
+- `wants` passed to `llm.chat()`; pressure >0.4 surfaces as "Something that's been building in you"
+- `store.py`: `_migrate()` adds pressure columns to existing DB safely
 
 ---
 

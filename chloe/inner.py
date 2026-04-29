@@ -32,11 +32,13 @@ MAX_TENSIONS       = 5    # max active internal conflicts at once
 
 @dataclass
 class Want:
-    text:       str
-    tags:       list[str] = field(default_factory=list)
-    created_at: float     = field(default_factory=time.time)
-    resolved:   bool      = False
-    id:         str       = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    text:           str
+    tags:           list[str] = field(default_factory=list)
+    created_at:     float     = field(default_factory=time.time)
+    resolved:       bool      = False
+    id:             str       = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    pressure:       float     = 0.0   # 0–1, urgency of this unmet want
+    pressure_since: float     = 0.0   # timestamp when pressure first hit 0.9 (for frustration residue)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -48,6 +50,8 @@ class Want:
             created_at=float(d.get("created_at", time.time())),
             resolved=bool(d.get("resolved", False)),
             id=d.get("id", str(uuid.uuid4())[:8]),
+            pressure=float(d.get("pressure", 0.0)),
+            pressure_since=float(d.get("pressure_since", 0.0)),
         )
 
 
@@ -63,7 +67,7 @@ def resolve_wants(wants: list[Want], new_tags: list[str]) -> list[Want]:
     """Mark wants as resolved when freshly-absorbed content shares their tags."""
     tag_set = {t.lower() for t in new_tags}
     return [
-        Want(**{**w.to_dict(), "resolved": True})
+        Want(**{**w.to_dict(), "resolved": True, "pressure": 0.0, "pressure_since": 0.0})
         if (not w.resolved and {t.lower() for t in w.tags} & tag_set)
         else w
         for w in wants
@@ -89,6 +93,7 @@ class Fear:
     created_at: float     = field(default_factory=time.time)
     resolved:   bool      = False   # resolved when she faces or works through it
     id:         str       = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    pressure:   float     = 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -100,6 +105,7 @@ class Fear:
             created_at=float(d.get("created_at", time.time())),
             resolved=bool(d.get("resolved", False)),
             id=d.get("id", str(uuid.uuid4())[:8]),
+            pressure=float(d.get("pressure", 0.0)),
         )
 
 
@@ -238,6 +244,7 @@ class Goal:
     progress:  int       = 0                          # times related content was encountered
     threshold: int       = _GOAL_DEFAULT_THRESHOLD   # progress needed to resolve
     id:        str       = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    pressure:  float     = 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -251,6 +258,7 @@ class Goal:
             progress=int(d.get("progress", 0)),
             threshold=int(d.get("threshold", _GOAL_DEFAULT_THRESHOLD)),
             id=d.get("id", str(uuid.uuid4())[:8]),
+            pressure=float(d.get("pressure", 0.0)),
         )
 
 
@@ -274,7 +282,8 @@ def advance_goals(goals: list[Goal], new_tags: list[str]) -> list[Goal]:
         if {t.lower() for t in g.tags} & tag_set:
             new_progress = g.progress + 1
             resolved = new_progress >= g.threshold
-            result.append(Goal(**{**g.to_dict(), "progress": new_progress, "resolved": resolved}))
+            result.append(Goal(**{**g.to_dict(), "progress": new_progress, "resolved": resolved,
+                                  "pressure": 0.0 if resolved else g.pressure}))
         else:
             result.append(g)
     return result
@@ -378,6 +387,7 @@ class Tension:
     created_at: float     = field(default_factory=time.time)
     last_fired: float     = field(default_factory=time.time)  # last time either side was active
     id:         str       = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    pressure:   float     = 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -392,6 +402,7 @@ class Tension:
             created_at=float(d.get("created_at", time.time())),
             last_fired=float(d.get("last_fired", time.time())),
             id=d.get("id", str(uuid.uuid4())[:8]),
+            pressure=float(d.get("pressure", 0.0)),
         )
 
 
@@ -495,3 +506,66 @@ class Arc:
             intensity=float(d.get("intensity", 0.5)),
             id=d.get("id", str(uuid.uuid4())[:8]),
         )
+
+
+# ── PRESSURE ACCUMULATION ─────────────────────────────────────
+# Called every AGE tick (~1 min). Returns updated state plus a list of
+# Wants that have just crossed the 24h frustration threshold (pressure ≥ 0.9
+# for ≥ 86400 s without resolution) — the caller logs affect_records for these.
+
+_WANT_PRESSURE_RATE    = 0.015   # hits 0.9 in ~60 AGE ticks (~60 min)
+_FEAR_PRESSURE_RATE    = 0.008   # hits 0.9 in ~112 ticks (~2 h)
+_GOAL_PRESSURE_RATE    = 0.004   # hits 0.9 in ~225 ticks (~3.75 h)
+_TENSION_PRESSURE_RATE = 0.010   # hits 0.9 in ~90 ticks (~1.5 h)
+_FRUSTRATION_WINDOW    = 86400.0 # 24 h in seconds
+
+
+def tick_pressure(
+    wants:    list[Want],
+    fears:    list[Fear],
+    goals:    list[Goal],
+    tensions: list[Tension],
+) -> tuple[list[Want], list[Fear], list[Goal], list[Tension], list[Want]]:
+    """Accumulate pressure on all unresolved inner states.
+    Returns (wants, fears, goals, tensions, frustrated_wants).
+    frustrated_wants are Wants that have been at pressure ≥ 0.9 for 24 h — the
+    caller should log an affect_record and a memory for each."""
+    now = time.time()
+    frustrated: list[Want] = []
+
+    new_wants: list[Want] = []
+    for w in wants:
+        if w.resolved:
+            new_wants.append(w)
+            continue
+        new_p = min(1.0, w.pressure + _WANT_PRESSURE_RATE)
+        # Track when pressure first crosses 0.9
+        new_since = w.pressure_since
+        if new_p >= 0.9 and w.pressure < 0.9:
+            new_since = now
+        elif new_p < 0.9:
+            new_since = 0.0
+        # Detect 24 h frustration
+        if new_since > 0.0 and (now - new_since) >= _FRUSTRATION_WINDOW:
+            frustrated.append(w)
+            new_since = 0.0  # reset so we don't fire repeatedly
+        new_wants.append(Want(**{**w.to_dict(), "pressure": new_p, "pressure_since": new_since}))
+
+    new_fears = [
+        Fear(**{**f.to_dict(), "pressure": min(1.0, f.pressure + _FEAR_PRESSURE_RATE)})
+        if not f.resolved else f
+        for f in fears
+    ]
+
+    new_goals = [
+        Goal(**{**g.to_dict(), "pressure": min(1.0, g.pressure + _GOAL_PRESSURE_RATE)})
+        if not g.resolved else g
+        for g in goals
+    ]
+
+    new_tensions = [
+        Tension(**{**t.to_dict(), "pressure": min(1.0, t.pressure + _TENSION_PRESSURE_RATE)})
+        for t in tensions
+    ]
+
+    return new_wants, new_fears, new_goals, new_tensions, frustrated

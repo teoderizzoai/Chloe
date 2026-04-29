@@ -113,13 +113,15 @@ Five floats, each 0–100: energy, social_battery, curiosity, focus, inspiration
 Per-person state for someone Chloe knows: warmth (0–100), distance (0–100, how much it's been since contact), conflict_level (0–100), notes, events (upcoming), moments (memorable exchanges), third_parties (people they've mentioned), impression (her subjective read), conversation_count, last_contact, response_hours.
 
 ### `Want`, `Belief`, `Goal`, `Fear`, `Aversion`, `Tension`, `Arc`, `AffectRecord` — `inner.py`
-- **Want** — open curiosity ("I want to understand X"). Resolvable. Tagged.
+- **Want** — open curiosity ("I want to understand X"). Resolvable. Tagged. Has `pressure: float` (0–1) and `pressure_since: float` (timestamp when pressure first hit 0.9, for frustration residue tracking).
 - **Belief** — held opinion with confidence (0–1). Decays.
-- **Goal** — long-term want with timeframe.
-- **Fear / Aversion** — what she dreads / can't stand. Surface in chat prompt.
-- **Tension** — internal conflict between two beliefs/wants ("I want X but I also want Y"). Detected periodically by Haiku.
+- **Goal** — long-term want with timeframe. Has `pressure: float`.
+- **Fear / Aversion** — what she dreads / can't stand. Surface in chat prompt. Fear has `pressure: float`.
+- **Tension** — internal conflict between two beliefs/wants ("I want X but I also want Y"). Detected periodically by Haiku. Has `pressure: float`.
 - **Arc** — long-running mood state with start/end times.
 - **AffectRecord** — log entry: "this content lifted/dragged my mood, with these tags." Accumulates into preferences (lifts/drags).
+
+`tick_pressure(wants, fears, goals, tensions)` runs every AGE tick and increments pressure on all unresolved states (rates: Want 0.015, Fear 0.008, Goal 0.004, Tension 0.010 per tick). Resolution zeroes pressure. A Want stuck at ≥0.9 for 24h generates a frustration affect_record and memory.
 
 ### `Graph` — `graph.py`
 Nodes (concepts/interests) and edges (relations). Each node has: id, label, note, depth (how many levels expanded out from root), hit_count (how many times reinforced), last_reinforced timestamp, auto_expanded flag.
@@ -160,11 +162,13 @@ Every 5 seconds. Strict order:
    - Mood-driven: each mood has affinities (irritable → think/rest, lonely → message, etc.)
    - Soul-modulated: probabilities scaled by soul_activity_affinity
    - Active arc biases: melancholic_stretch resists message/create, prefers rest/dream
-   - Want+goal nudge: 12% chance, if a Want or Goal text/tags match an activity's keyword set
+   - Want+goal nudge: pressure-scaled probability (12% base → 50% if max pressure >0.6 → 80% if >0.75); highest-pressure items prioritised; if a matching Want/Goal text/tags match an activity's keyword set, that activity is set
    - If override and not in protected state (e.g. message mid-send), set_activity(override)
 
 6a. Maybe fire a background LLM event
-   Conditions: not busy, gap >= 90s, not just-contacted, dice roll passes
+   Conditions: not busy, gap >= 90s, not just-contacted
+   - Normal path: dice roll passes for current activity
+   - Pressure path: any inner state pressure >0.9 forces the event regardless of dice roll
    → asyncio.create_task(_fire_event())  — separate branch per activity (read/dream/think/create/message)
 
 6b. Maybe send autonomous outreach
@@ -178,6 +182,7 @@ Every 5 seconds. Strict order:
    - tick conflict (decays conflict_level)
    - check ignored outreach (item 51): pending message + 4h passed + no reply → distance+10, warmth-0.5, mood→lonely
    - decay tensions
+   - tick_pressure: increment pressure on all unresolved wants/fears/goals/tensions; frustration residue if Want at 0.9 for 24h
    - isolation drift: if all persons distant > 70, soul.EI nudges introvert and 5% chance to force_mood lonely
 
 8. Every REFLECT_EVERY ticks (~20 min): _reflect()
@@ -445,7 +450,8 @@ Current interests: {top 8 by tag count}
 A thought you had recently: {most recent idea}
 {beliefs_ctx — top 3 by confidence}
 {pref_ctx — lifts and drags from affect history}
-{inner_life_ctx — fears, aversions}
+{pressure_ctx — wants/fears with pressure >0.4: "Something that's been building in you: X / Y"; sorted by pressure}
+{inner_life_ctx — fears (sorted by pressure, most urgent first), aversions}
 {tensions_ctx — top 2 active internal conflicts}
 {guard_ctx if risk_tolerance < 0.75 with this person}
 
@@ -458,9 +464,14 @@ A thought you had recently: {most recent idea}
 
 {topic_ctx if resonant or dragging or graph_resonant — "this touches on X you care about / find tedious / have actually thought about"}
 {wind_ctx if winding_down — mood-flavored conversation close instructions}
+{contradiction_block if contradiction_ctx — "Something unresolved in you (don't smooth this over): ..."}
 
 {Right now: emotional_context if non-empty — "Teo is frustrated with you. That registers."}
 
+You don't track your own consistency — contradicting something you said earlier is fine.
+Thoughts don't always resolve; you can trail off mid-sentence.
+You don't always know what you think. Awkward phrasing is fine; not every sentence lands.
+You are allowed to do things that one part of you would think are unwise. Not everything you do is consistent with your best self-understanding.
 Speak like someone genuinely alive: brief, sometimes strange, never performative.
 You don't explain yourself unless asked. You don't say "I'm an AI."
 Never use em dashes or the character "—".
@@ -472,7 +483,9 @@ You may naturally reference upcoming events listed above when the date is today 
 
 Then the user message array contains: last 8 turns of `chat_history` (filtered to this person) + the new message.
 
-Roughly 25 distinct context blocks at full firing. This is the seam where mechanics meet language model. See `CLAUDE.md` Priority A for the planned redesign.
+Roughly 26 distinct context blocks at full firing. This is the seam where mechanics meet language model.
+
+**Reflection bias** (`_REFLECTION_BIAS` dict in `llm.py`): `generate_reflection()` receives a `reflection_bias` string derived from the current mood in `_reflect()`. Each mood has a characteristic distortion (melancholic overweights loss, curious makes connections too easily, etc.) injected into the Haiku reflection system prompt. The bias colors the observation naturally without announcing itself.
 
 ---
 
