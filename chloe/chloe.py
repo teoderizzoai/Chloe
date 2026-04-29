@@ -39,6 +39,7 @@ from .inner  import (Want, Belief, Goal, AffectRecord, Fear, Aversion,
                      add_goal, resolve_goals, goals_to_dicts,
                      add_affect_record, affect_records_to_dicts,
                      derive_preferences,
+                     outreach_risk_score,
                      add_tension, decay_tensions, tensions_to_dicts,
                      tick_pressure)
 from .persons import (Person, PersonNote, PersonEvent, SharedMoment,
@@ -385,6 +386,23 @@ class Chloe:
             "value":   max(0.2, current - by),
             "expires": time.time() + hours * 3600,
         }
+
+    def _bump_social_want_pressure(self, by: float = 0.12):
+        """Priority 3: when outreach is suppressed, raise pressure on the social want.
+        Finds the first unresolved want tagged with social connection, or creates one."""
+        social_tags = {"connection", "social", "reach out", "people"}
+        for i, w in enumerate(self.wants):
+            if not w.resolved and {t.lower() for t in w.tags} & social_tags:
+                new_pressure = min(1.0, w.pressure + by)
+                self.wants[i] = Want(**{**w.to_dict(), "pressure": new_pressure})
+                return
+        self.wants = add_want(
+            self.wants,
+            "reach out to someone",
+            ["connection", "social"],
+        )
+        if self.wants:
+            self.wants[0] = Want(**{**self.wants[0].to_dict(), "pressure": by})
 
     # ── PUBLIC API ───────────────────────────────────────────
 
@@ -1833,6 +1851,25 @@ class Chloe:
 
             target = choose_reach_out_target(self.persons, self.affect.mood, hour=hour)
             if not target:
+                self._busy = False
+                return
+
+            # Priority 3: social risk check
+            _risk_tol = self._get_risk_tolerance(target.id)
+            _social_want_pressure = next(
+                (w.pressure for w in self.wants
+                 if not w.resolved and {"connection", "social", "reach out"} & {t.lower() for t in w.tags}),
+                0.0,
+            )
+            _risk = outreach_risk_score(target, self.fears, self.affect_records)
+            if _risk > _risk_tol and _social_want_pressure < 0.85:
+                self.affect_records = add_affect_record(
+                    self.affect_records, self.affect.mood,
+                    f"wanted to reach out to {target.name} but held back",
+                    ["held_back", "suppression", "social", target.id],
+                )
+                self._bump_social_want_pressure()
+                self._log(f"outreach suppressed for {target.name} (risk {_risk:.2f} > tol {_risk_tol:.2f})")
                 self._busy = False
                 return
 

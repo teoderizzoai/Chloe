@@ -371,6 +371,39 @@ def derive_preferences(records: list[AffectRecord], n: int = 5) -> dict:
     return {"lifts": lifts, "drags": drags}
 
 
+# ── SOCIAL RISK MODEL (Priority 3) ────────────────────────────
+
+def recent_rejection_count(
+    person_id: str, records: list[AffectRecord], hours: float = 48.0
+) -> int:
+    """Count affect records from the last N hours that signal rejection from a specific person."""
+    cutoff = time.time() - hours * 3600
+    return sum(
+        1 for r in records
+        if r.timestamp >= cutoff
+        and person_id in r.tags
+        and any(t in r.tags for t in ("rejection", "ignored", "held_back"))
+    )
+
+
+def active_fear_match(fears: list, target_tags: list[str]) -> float:
+    """Return 1.0 if any active fear's tags overlap target_tags, else 0.0."""
+    target_set = {t.lower() for t in target_tags}
+    for f in fears:
+        if not f.resolved and {t.lower() for t in f.tags} & target_set:
+            return 1.0
+    return 0.0
+
+
+def outreach_risk_score(person, fears: list, affect_records: list[AffectRecord]) -> float:
+    score = 0.0
+    score += (person.conflict_level / 100) * 0.4
+    score += (100 - person.warmth) / 100 * 0.2
+    score += recent_rejection_count(person.id, affect_records, hours=48) * 0.3
+    score += active_fear_match(fears, ["rejection", "ignored", "distance"]) * 0.25
+    return min(1.0, max(0.0, score))
+
+
 # ── TENSIONS (Item 68) ────────────────────────────────────────
 # Internal conflicts — two beliefs or wants that pull in opposite directions.
 # Detected during _reflect(). Max 5 active. Decay if neither side fires.
