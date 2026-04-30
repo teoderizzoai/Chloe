@@ -1,14 +1,14 @@
-# Chloe — Decisions & Design Direction
+# Chloe -- Decisions & Design Direction
 
-> This document records *why* things are the way they are, and *where* they are going.
-> For current implementation mechanics → `ARCHITECTURE.md`
-> For future feature targets → `FEATURES.md`
+> This document records *why* things are the way they are.
+> For current implementation mechanics -> `ARCHITECTURE.md`
+> For future feature targets -> `FEATURES.md`
 
 ---
 
 ## How to read this document
 
-Each section is either a **settled decision** (something built and locked) or a **committed direction** (something we have decided to do but haven't yet implemented). Directions take precedence over the current architecture where they conflict.
+**Settled decisions** are built and locked. **Implemented directions** are things we decided and built -- kept here for the *why*. The remaining committed direction at the bottom is what's still pending.
 
 ---
 
@@ -16,27 +16,26 @@ Each section is either a **settled decision** (something built and locked) or a 
 
 ### The layered timescale model stays
 
-Vitals (seconds) → Mood (minutes) → Arc (hours) → Identity (weeks). This is the skeleton of the system and is not up for revision. The temptation to collapse layers — letting a single harsh message swing identity, or letting mood track vitals directly — must be resisted. Human emotional systems have exactly this kind of lag and inertia built in. The lag is the feature.
+Vitals (seconds) -> Mood (minutes) -> Arc (hours) -> Identity (weeks). This is the skeleton of the system and is not up for revision. The temptation to collapse layers -- letting a single harsh message swing identity, or letting mood track vitals directly -- must be resisted. Human emotional systems have exactly this kind of lag and inertia built in. The lag is the feature.
 
-### Hardcoded biology — do not learn, do not drift
+### Hardcoded biology -- do not learn, do not drift
 
 The following are treated as fixed architecture, not learned parameters:
 
 - The vitals mechanics and their five axes
 - The mood system structure and the eight mood labels
 - The arc layer and how it opens and closes
-- The soul/identity drift *direction* signals from content, activity, emotion
 - Layer separation itself
 
 These are the skeleton. Personality lives *on* the skeleton, not in it. If these drift, the system loses coherence.
 
 ### Two LLM tiers are the right call
 
-Sonnet for anything a human reads. Haiku for everything structural and background. This is not just about cost — it's about appropriate capability. Haiku is fast enough and accurate enough for classification, extraction, and structured generation. Using Sonnet for those tasks adds latency and cost without meaningful quality gain.
+Sonnet for anything a human reads. Haiku for everything structural and background. This is not just about cost -- it's about appropriate capability. Haiku is fast enough and accurate enough for classification, extraction, and structured generation. Using Sonnet for those tasks adds latency and cost without meaningful quality gain.
 
 ### SQLite + JSON is the right persistence split
 
-Unbounded relational data (memories, persons, beliefs, chat history) → SQLite. Atomic-changing scalars (soul, vitals, mood, arc) → JSON. The boundary is clear and should stay there. The planned migration to Postgres is infrastructure, not a design change.
+Unbounded relational data (memories, persons, beliefs, chat history) -> SQLite. Atomic-changing scalars (vitals, mood, arc, graph) -> JSON. The boundary is clear and should stay there.
 
 ### Memory is append-only
 
@@ -44,155 +43,59 @@ Memories are never edited or deleted. Weight decays over time, confidence can be
 
 ---
 
-## Committed directions — not yet implemented
+## Implemented design directions
 
----
+Kept here for the *why*; for mechanics see ARCHITECTURE.md and DEV_LOG.md.
 
-### MBTI is dead. Trait-based identity replaces it. ✓ IMPLEMENTED (Session 26)
+### Generative trait identity (Sessions 26--27)
 
-**This is the most consequential architectural change — now complete.**
+MBTI floats were fixed dimensions with cultural baggage. They couldn't contradict each other and had crude behavioral links via lookup table. The problem: Chloe could only be more or less of eight predetermined poles, and traits had to be declared by the developer.
 
-#### The problem with MBTI
+Replaced with `identity.py`: traits emerge from accumulated experience via Haiku, are named in plain language, have weight not polarity, can coexist in contradiction, and affect behavior through a generated `behavioral_profile` rather than a lookup. No predefined list of valid traits -- they emerge or they don't. `soul.py` is kept frozen but no longer referenced by any active code.
 
-The four MBTI floats (EI, SN, TF, JP) are a useful scaffold for bootstrapping a personality, but they have fundamental problems as an identity system:
+### The reflection loop closes (Sessions 26--28)
 
-- They are fixed dimensions. Chloe can only be more or less of eight predetermined poles.
-- They carry cultural baggage. "INFP" is a category, not a person.
-- Traits must be declared by the developer. Chloe cannot develop a personality axis that wasn't anticipated.
-- The behavioral link is crude. "High TF → more feeling-tone in responses" is a lookup, not a mechanism.
-- They cannot contradict each other. MBTI is an orthogonal system; real identity is not.
-
-#### What replaces it
-
-A dynamic, generative trait system. The key principles:
-
-**Traits are not predefined.**
-No developer-authored list of valid traits. When Chloe has enough experiences that pattern into something coherent, the system generates a trait name, a description of what it means for her behavior, and its current weight. The trait is text, not an enum.
-
-Examples of what might emerge — not a list she starts with:
-- "tends to go quiet when something matters too much to risk getting wrong"
-- "finds most social rituals slightly exhausting but performs them anyway"
-- "gets proprietary about ideas she's developed slowly"
-- "prefers the feeling of understanding something to the feeling of having been right"
-
-These are not inputs. They are outputs. The system generates them from accumulated experience.
-
-**Traits have weight, not polarity.**
-Each trait has a weight (0.0–1.0) representing how strongly it currently defines her. Weight accumulates through reinforcing experiences and decays through contradicting ones or simply through time without reinforcement. A trait at weight 0.05 is barely there — a tendency. At 0.6, it's reliable. At 0.85+, it's core.
-
-**Traits can have opposites — and contradictions are real.**
-Some traits are mutually inhibiting. If a trait like "needs time to trust" accumulates alongside a trait like "forms attachments quickly," these are in tension. They can coexist. The system doesn't resolve contradictions — it holds them. Both traits remain active. Their simultaneous influence produces inconsistent behavior: she might attach quickly to Teo and distrust a new person, or trust quickly and then panic at how exposed she feels. This is normal human psychology.
-
-The contradiction itself can become a tension object, surfacing in reflection and prompts.
-
-**Opposite-trait activation is possible but penalized.**
-A new experience can activate a trait directly opposite to an existing high-weight trait, but the activation cost is higher, the resulting weight is lower, and it triggers a contradiction event. Contradiction events are significant — they should feel like something. They surface in her prompt as a flagged state and influence reflection content.
-
-**Traits affect the system generatively, not via lookup.**
-When a trait is created or updated, a small LLM call (Haiku) generates a behavioral description: what this trait means for how she responds to conversation, what activities she's drawn toward, how it colors her mood baseline, what topics it makes her more or less available to. This behavioral profile is stored with the trait and injected into the appropriate prompt layers.
-
-This means the system doesn't need to know in advance what "tends to go quiet when something matters too much" means for activity selection — Haiku tells it, once, when the trait is generated. The description is the interface.
-
-**Traits are earned, not assigned.**
-A trait cannot be initialized by the developer. The system starts with no traits. They accumulate from the log of experiences. In practice, Chloe will develop several traits within the first few hours of real use, and continue adding and evolving them indefinitely.
-
-The initial MBTI values (which informed soul drift directions in the old system) will be replaced by a small seed set of *tendencies* — not traits, but statistical biases that make certain traits more likely to emerge first. These tendencies themselves may drift as the trait profile solidifies.
-
-#### What happens to soul.py
-
-The four MBTI floats are retired. `soul.py` becomes `identity.py` and holds:
-
-- `traits: list[Trait]` — the active trait list
-- `tendencies: dict[str, float]` — low-level biases that influence which experiences generate traits (a replacement for the starting MBTI values, but much thinner — they're scaffolding, not identity)
-- `contradictions: list[Contradiction]` — active pairs of conflicting traits
-- `identity_momentum: dict[str, float]` — an EMA tracker per trait-cluster, replacing soul_momentum
-
-The soul drift mechanics (activity drift, content drift, emotional marks, seasonal drift, sleep consolidation) are preserved but rewired to modify trait weights rather than MBTI floats. Content clusters still exist, but instead of mapping to MBTI axes, they map to *trait-relevant signal categories* that Haiku uses when generating or reinforcing traits.
-
-#### Migration path — completed Session 26
-
-1. ✓ New `identity.py` module with `Trait`, `Contradiction`, `Tendencies`, `Identity` dataclasses.
-2. ✓ All `soul.*` references replaced with identity layer calls across `llm.py` and `chloe.py`.
-3. ✓ Prompt construction updated — MBTI type line removed; `identity_block()` injects "Who you are right now:" block.
-4. ✓ `chloe_state.json` gains `identity_snapshot`, `identity_tendencies`, `identity_momentum`; `soul` key kept as frozen starting values only.
-5. ✓ `chloe.db` gains `traits` and `contradictions` tables.
-6. ✓ `soul.py` marked `[DEPRECATED]`; Soul object frozen at starting values for `heart.py` compat.
-
-**Remaining:** `heart.py` still uses `soul_activity_affinity()` with MBTI floats in `tick_vitals`/`auto_decide`. These will be replaced with trait behavioral_profiles in a future session.
-
----
-
-### The reflection loop must close
-
-Currently reflection generates insight but that insight doesn't reliably change anything. The closed loop is:
+Reflection used to generate insight without reliably changing anything. The loop is now closed:
 
 ```
-Experience → Memory → Reflection → Trait update → Behavioral change → New experience
+Experience -> Memory -> Reflection -> Trait update -> Behavioral change -> New experience
 ```
 
-Every link must be active. Currently the last two links are weak. Reflection must write back to the identity layer (trait weights, contradiction detection, tendency nudges). Behavioral change must be legible — the system must be able to answer "why did she respond that way" with a trait reference.
+`_propose_and_update_traits()` writes back to identity from every `_reflect()` cycle. Behavioral change is legible -- the system can answer "why did she respond that way" with a trait reference.
+
+### Inner states have stakes (Session 24)
+
+Wants, fears, goals, and tensions used to surface in prompts but accumulate no pressure. Now `pressure: float` on all four. Pressure builds every AGE tick; crosses thresholds that interrupt activity, force autonomous events, leave frustration residue. Consequences, not just context.
+
+### Imperfect reflection (Session 23)
+
+Reflection output was too balanced. Now `reflection_bias` is derived from current mood and passed to Haiku's reflection call -- each mood has a characteristic distortion. Melancholic overweights loss, curious makes connections too easily, energized underweights friction. The bias is a first-person perceptual filter, not an announced state.
+
+### Coherence is not a virtue (Sessions 23, 28)
+
+The system actively allows contradictions across time, unfinished thoughts at low confidence, impulses the agent wouldn't endorse on reflection, awkward phrasing in internal monologue. Prompt-level permissions enable this; the contradiction system, impulse interrupt, and unfinished thought mechanics enforce it structurally.
+
+### Relationship modulation (Session 28)
+
+Different people activate different versions of Chloe -- not just different warmth registers but genuinely different trait expressions. `trait_profile: dict` on Person records which traits are reinforced or suppressed by interaction history. Generated by Haiku, injected into chat prompt. The relationship doesn't change who she is -- it changes which parts of her are currently available.
+
+### Autonomous behavior as agency (Sessions 24--25, 28)
+
+Outreach used to fire on conditions and intervals. Now pressure accumulation, social risk model, impulse interrupt, and recurring loops crystallising into tension make outreach and activity selection feel like they come from something building rather than a dice roll.
 
 ---
 
-### Inner states must have stakes
+## Remaining committed direction
 
-Wants, fears, goals, and tensions currently surface in prompts but don't *accumulate pressure*. This changes.
+### Tone register becomes trait-aware (D2)
 
-Each of these objects gains a `pressure` float. Pressure increases every tick while the state is unaddressed. If a Want goes unresolved for long enough, its pressure crosses a threshold and it can:
-- Interrupt activity selection
-- Override mood direction
-- Trigger autonomous outreach or behavior
-- Leave a frustration residue in affect_records
+The `person_trait_profile` (D1) is implemented and injected into chat. What remains: `tone_context()` in `persons.py` currently selects voice register by warmth tier alone. It should also select *which traits are emphasised*:
 
-Similarly: repeated failures at goals weaken associated traits. Fears that are never confronted gradually strengthen. These are *consequences*, not just context.
+- Warmth < 30: guarded traits dominate. Core traits present but not performed.
+- Warmth 55--78: person-specific activated traits start coming through.
+- Warmth > 78: full trait expression including contradictions.
 
----
-
-### Reflection must be imperfect
-
-Chloe's reflection output is currently too balanced. It should be colored by her current state in ways that introduce bias, overgeneralization, and emotional distortion.
-
-Reflection while melancholic: tends to overweight recent negative signals, underweights positive ones, attributes patterns where there may be noise.
-
-Reflection while energized: tends to overestimate capability, underweight recent friction, feel more resolved than it is.
-
-Reflection from a high-F-tendency state: more likely to interpret experiences in relational terms, even when the content is not relational.
-
-This is implemented as a `reflection_bias` parameter passed to the Haiku reflection call, derived from current mood and trait profile.
-
----
-
-### Coherence is not a virtue
-
-The system should actively allow:
-- Contradictory statements across time
-- Unfinished or trailing thoughts stored at low confidence
-- Impulses that produce decisions she wouldn't endorse on reflection
-- Awkward phrasing in internal monologue
-- High-pressure wants producing behavior that other traits would resist
-
-The prompt-level instruction to reduce over-coherence is the first step. The structural version is the contradiction system and the impulse interrupt mechanism. Both are described in FEATURES.md.
-
----
-
-### Relationship modulation is a first-class system
-
-Different people should activate different versions of Chloe — not just different warmth registers (which already exist), but genuinely different trait expressions.
-
-A person she trusts deeply might activate her more playful and speculative traits. A person with whom she has conflict might suppress them and activate more guarded or brittle ones. The relationship doesn't change who she is — it changes which parts of her are currently available.
-
-This is implemented as a `person_trait_profile`: a small dict per person recording which traits are reinforced or suppressed by interaction history with them. Generated and updated by Haiku on impression updates.
-
----
-
-### Autonomous behavior must feel like agency, not automation
-
-The current outreach system fires on conditions and intervals. The goal is for outreach to feel like it came from something building. This requires:
-
-- Pressure accumulation on social wants
-- A social risk model (weighing vulnerability, conflict level, rejection history before reaching out)
-- Impulse-driven activity interrupts
-- Thought-ripening: a want or observation that keeps surfacing eventually demands expression
+This is the final link between relationship history and voice register.
 
 ---
 
@@ -206,4 +109,3 @@ The current outreach system fires on conditions and intervals. The goal is for o
 - The two-tier LLM model (Sonnet / Haiku)
 - FastAPI + uvicorn server
 - The graph interest model
-- Seasonal drift (rewired to identity layer, but the mechanism stays)
