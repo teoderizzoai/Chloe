@@ -68,7 +68,8 @@ SAVE_EVERY     = 60     # persist state every N ticks (~5 min)
 WEATHER_EVERY  = 720    # refresh weather every N ticks (~1 hour)
 REFLECT_EVERY  = 240    # self-reflection + continuity check every N ticks (~20 min)
 ORPHAN_CHECK_EVERY = 72 # orphan tag surfacing every N ticks (~6 min) — separate from full reflect
-STATE_FILE     = Path("chloe_state.json")
+STATE_FILE     = Path("data/chloe_state.json")
+STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 # ── Graph Intelligence constants ─────────────────────────────
 GRAPH_HIT_THRESHOLD        = 5        # hits before a leaf node auto-expands

@@ -207,7 +207,7 @@ def discord_status():
 
 
 # Mounted **after** API routes so `/snapshot` etc. are not shadowed.
-_chloe_images_dir = Path(__file__).resolve().parent / "chloe" / "images"
+_chloe_images_dir = Path(__file__).resolve().parent / "assets" / "images"
 if _chloe_images_dir.is_dir():
     app.mount(
         "/media/chloe",

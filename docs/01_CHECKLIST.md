@@ -1,6 +1,6 @@
 # Chloe — Upcoming Features Checklist
 
-Cross off items when done. Implementation detail in FEATURES.md; history in DEV_LOG.md.
+Cross off items when done. Implementation detail in 05_FEATURES.md; history in 04_DEV_LOG.md.
 
 ---
 

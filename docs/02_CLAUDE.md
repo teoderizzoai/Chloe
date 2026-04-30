@@ -21,10 +21,10 @@ The goal is an autonomous, developing mind. All of her history shapes who she is
 
 | What you need | Where to look |
 |---|---|
-| Current implementation — mechanics, data flow, state | `ARCHITECTURE.md` |
-| Why decisions were made + committed directions not yet built | `DECISIONS.md` |
-| All planned features with implementation detail | `FEATURES.md` |
-| Development history | `DEV_LOG.md` |
+| Current implementation — mechanics, data flow, state | `00_ARCHITECTURE.md` |
+| Why decisions were made + committed directions not yet built | `03_DECISIONS.md` |
+| All planned features with implementation detail | `05_FEATURES.md` |
+| Development history | `04_DEV_LOG.md` |
 | Ground truth | `chloe/` code |
 
 **Read the relevant doc before writing any code.** The architecture has invariants that are easy to violate without knowing they exist. The decisions doc has committed directions that override the current implementation where they conflict.
@@ -161,7 +161,7 @@ Chloe/
   chloe/
     chloe.py        — central orchestrator, tick loop, all state
     identity.py     — trait system: Trait, Contradiction, Tendencies, Identity
-    soul.py         — [DEPRECATED] MBTI floats, frozen for heart.py compat only
+    soul.py         — [DEPRECATED] MBTI floats, frozen for compat only
     heart.py        — vitals, activities, circadian, auto_decide
     affect.py       — mood as a state separate from vitals
     memory.py       — Memory dataclass + ChromaDB index + Idea
@@ -174,13 +174,31 @@ Chloe/
     store.py        — ChloeDB SQLite write-through
     discord_bot.py  — DM bridge (optional)
     avatar.py       — portrait selection
+  voice/
+    app.py          — self-contained voice UI (separate process, Python 3.11)
+    legacy.py       — older push-to-talk interface
+    pipeline.py     — zero-latency Deepgram streaming pipeline
+    sample.wav      — reference audio for voice cloning
+    requirements.txt — voice dependencies
+  scripts/
+    clone_voice.py            — one-time: upload sample to Cartesia
+    generate_interjections.py — one-time: pre-bake interjection wavs
+    test_tts.py               — quick TTS smoke test
+    trim.py                   — audio trim utility
+  assets/
+    images/
+      actions/      — activity portraits (Chloe_Sleep.png etc.)
+      emotions/     — mood portraits (Chloe_Sad.png etc.)
   server.py         — FastAPI app
   index.html        — dashboard
-  voice_app.py      — voice UI (separate process, Python 3.11)
-  ARCHITECTURE.md   — current implementation
-  DECISIONS.md      — why + committed future directions
-  FEATURES.md       — full feature roadmap with implementation detail
-  CLAUDE.md         — this file
+  cli.py            — terminal client (requires server running)
+  bin/start-server.sh — Linux server launcher
+  00_ARCHITECTURE.md   — current implementation
+  03_DECISIONS.md      — why decisions were made
+  05_FEATURES.md       — unbuilt feature roadmap
+  01_CHECKLIST.md      — upcoming features checklist
+  04_DEV_LOG.md        — development history
+  02_CLAUDE.md         — this file
 ```
 
 ---
@@ -190,9 +208,9 @@ Chloe/
 If you are starting a new session to work on a specific feature, say so and specify which priority. Then:
 
 1. Claude reads this file (done).
-2. Claude reads the relevant section of `FEATURES.md` for implementation detail.
-3. Claude reads the relevant section of `DECISIONS.md` if the feature touches identity or any committed direction.
+2. Claude reads the relevant section of `05_FEATURES.md` for implementation detail.
+3. Claude reads the relevant section of `03_DECISIONS.md` if the feature touches identity or any committed direction.
 4. Claude reads the relevant module from `chloe/` before writing any code.
 5. Work starts.
 
-If you are debugging, describe the symptom. Check `ARCHITECTURE.md → §14` (where to look when things break) first.
+If you are debugging, describe the symptom. Check `00_ARCHITECTURE.md → §14` (where to look when things break) first.

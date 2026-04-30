@@ -45,7 +45,9 @@
       "Bash(/run/media/teo-derizzo/HDD/Chloe/Chloe-master/.venv/bin/python -c \"import faster_whisper, f5_tts, sounddevice, pynput; print\\('voice deps OK'\\)\")",
       "WebSearch",
       "WebFetch(domain:docs.fish.audio)",
-      "Bash(chmod +x *)"
+      "Bash(chmod +x *)",
+      "Bash(mv /workspaces/Chloe/chloe/images/Actions/* /workspaces/Chloe/assets/images/actions/)",
+      "Bash(mv /workspaces/Chloe/chloe/images/Emotions/* /workspaces/Chloe/assets/images/emotions/)"
     ]
   }
 }

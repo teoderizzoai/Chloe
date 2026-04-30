@@ -1,6 +1,6 @@
 # Chloe — Architecture
 
-This document describes the *current* implementation. Future direction is in `CLAUDE.md`.
+This document describes the *current* implementation. Future direction is in `02_CLAUDE.md`.
 
 The goal of this document is that someone (or future-you) can understand how every piece of state is shaped, where it lives, and how a single event ripples through everything else. If you read it once front-to-back, you should know what happens when she reads an article, when she gets a mean message, and what determines what comes out of `chat()`.
 
@@ -43,7 +43,7 @@ All calls go through `_call(system, messages, max_tokens, model)` in `llm.py`. T
 ### ChromaDB (semantic memory index)
 A persistent client at `<state_file_dir>/memory_index/` embeds every memory's text. Used at chat time to retrieve the 5 memories most semantically similar to the incoming message, reranked by recency. Falls back to recency-only retrieval (`get_vivid`) if chromadb isn't installed.
 
-### SQLite — `chloe.db`
+### SQLite — `data/chloe.db`
 WAL mode. Holds everything that's unbounded or relational:
 - `memories` (each with type, tags, weight, confidence, timestamp)
 - `ideas`, `chat_history`, `affect_records`
@@ -54,17 +54,17 @@ WAL mode. Holds everything that's unbounded or relational:
 
 Write-through pattern: in-memory operations call `add_memory()` etc. on the `ChloeDB`, which inserts to SQLite immediately for memories/ideas/chat. List state (wants, beliefs, etc.) syncs every save (every ~5 min) via `sync_*` methods that delete-and-reinsert.
 
-### JSON — `chloe_state.json`
+### JSON — `data/chloe_state.json`
 Holds atomic-changing scalars that don't fit the relational model: soul values (frozen starting values only), vitals, current activity, current mood, the graph, the active arc, identity_snapshot, identity_tendencies, identity_momentum, pending outreach, last journal/backup dates, the runtime log buffer.
 
 ### Backups
-At 23:00 daily, `_backup()` copies `chloe_state.json` to `backups/chloe_YYYY-MM-DD.json`. SQLite is not currently backed up the same way (it's append-only and lives in one file).
+At 23:00 daily, `_backup()` copies `data/chloe_state.json` to `backups/chloe_YYYY-MM-DD.json`. SQLite is not currently backed up the same way (it's append-only and lives in one file).
 
 ### Frontend — `index.html`
 Single HTML file, no build step. Polls `GET /snapshot` every 4 seconds, renders vitals bars, soul sliders, mood pill, interests cloud, graph canvas, etc. Sends chat through `POST /chat`.
 
-### Voice — `voice_app.py` (separate process)
-Optional, runs in `.fishvenv` (Python 3.11) because Fish Speech needs an older Torch. Captures audio with Whisper, calls `chloe.chat(message, voice=True)` against the running server, plays the reply through Fish Speech 1.5.
+### Voice — `voice/app.py` (separate process)
+Optional, runs in `.fishvenv` (Python 3.11) because Fish Speech needs an older Torch. Starts the brain server and Fish Speech automatically. Captures audio with Whisper, calls `chloe.chat(message, voice=True)` against the running server, plays the reply through Fish Speech 1.5.
 
 ### Discord — `discord_bot.py`
 Optional. Starts in the FastAPI lifespan if env vars are set. Routes incoming DMs to `chloe.chat()` with the right `person_id`. Outgoing autonomous messages are sent through a "realistic send pipeline" with typing indicators and per-message delays.
@@ -78,7 +78,7 @@ Chloe/
   chloe/
     chloe.py        — central orchestrator, holds all state, runs the loop
     identity.py     — trait system: Trait, Contradiction, Tendencies, Identity
-    soul.py         — [DEPRECATED] MBTI floats, frozen for heart.py compat
+    soul.py         — [DEPRECATED] MBTI floats, no longer used
     heart.py        — vitals, activities, circadian, day-of-week, auto_decide
     affect.py       — mood as a state separate from vitals
     memory.py       — Memory dataclass + ChromaDB index + Idea
@@ -91,9 +91,14 @@ Chloe/
     store.py        — ChloeDB SQLite write-through
     discord_bot.py  — DM bridge
     avatar.py       — portrait selection from activity/mood
+  voice/
+    app.py          — self-contained voice UI (separate process, Python 3.11)
+    legacy.py       — older push-to-talk voice interface
+    pipeline.py     — zero-latency Deepgram streaming pipeline
+  assets/images/    — action and emotion portraits served via /media/chloe/
   server.py         — FastAPI app
   index.html        — dashboard
-  voice_app.py      — voice UI (separate process)
+  cli.py            — terminal client
 ```
 
 ---
@@ -640,7 +645,7 @@ Memories, ideas, chat — these go to SQLite immediately on creation (write-thro
 8. Rebuild `_surfaced_tags` from current graph node labels.
 
 ### `_backup()` — daily at 23:00
-Copy `chloe_state.json` to `backups/chloe_YYYY-MM-DD.json`. SQLite is not separately backed up; rely on the file-system.
+Copy `data/chloe_state.json` to `backups/chloe_YYYY-MM-DD.json`. SQLite is not separately backed up; rely on the file-system.
 
 ---
 

@@ -1,8 +1,8 @@
 # Chloe -- Decisions & Design Direction
 
 > This document records *why* things are the way they are.
-> For current implementation mechanics -> `ARCHITECTURE.md`
-> For future feature targets -> `FEATURES.md`
+> For current implementation mechanics -> `00_ARCHITECTURE.md`
+> For future feature targets -> `05_FEATURES.md`
 
 ---
 
@@ -45,7 +45,7 @@ Memories are never edited or deleted. Weight decays over time, confidence can be
 
 ## Implemented design directions
 
-Kept here for the *why*; for mechanics see ARCHITECTURE.md and DEV_LOG.md.
+Kept here for the *why*; for mechanics see 00_ARCHITECTURE.md and 04_DEV_LOG.md.
 
 ### Generative trait identity (Sessions 26--27)
 

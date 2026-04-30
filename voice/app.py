@@ -1,28 +1,24 @@
 #!/usr/bin/env python3
 """
-voice_app.py — Self-contained Chloe voice chat.
+voice/app.py — Self-contained Chloe voice chat.
 
 Starts the Chloe brain server and Fish Speech TTS server automatically,
 then runs the voice UI. Hold F1 anywhere to speak; release to send.
 Everything shuts down cleanly when the window is closed.
 
-Run:
-    python voice_app.py
-
-    # Or after: chmod +x voice_app.py
-    ./voice_app.py
+Run (from project root):
+    python voice/app.py
 
 Config (env vars):
-    CHLOE_DIR         — path to Chloe project root   (default: dir of this file)
     FISH_SPEECH_DIR   — path to fish-speech repo root (required if not next to Chloe)
     FISH_CHECKPOINT   — checkpoint folder name        (default: fish-speech-1.5)
     CHLOE_PORT        — brain server port             (default: 8000)
     FISH_PORT         — Fish Speech server port       (default: 8080)
-    REF_AUDIO         — voice clone reference wav     (default: voice_sample.wav)
+    REF_AUDIO         — voice clone reference wav     (default: voice/sample.wav)
     REF_TEXT          — transcript of REF_AUDIO
-    WHISPER_MODEL     — faster-whisper model size     (default: large-v3)
-    WHISPER_DEVICE    — cuda | cpu                    (default: cuda)
-    WHISPER_COMPUTE   — float16 | int8                (default: float16)
+    WHISPER_MODEL     — faster-whisper model size     (default: small)
+    WHISPER_DEVICE    — cuda | cpu                    (default: cpu)
+    WHISPER_COMPUTE   — float16 | int8                (default: int8)
 """
 
 import base64
@@ -45,20 +41,21 @@ import httpx
 from pynput import keyboard
 
 # ── Paths ─────────────────────────────────────────────────────
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR  = os.path.dirname(os.path.abspath(__file__))   # .../Chloe/voice/
+PROJ_ROOT = os.path.dirname(BASE_DIR)                     # .../Chloe/
 
 _venv_bin = "Scripts" if sys.platform == "win32" else "bin"
 _venv_exe = "python.exe" if sys.platform == "win32" else "python"
-VENV_PY   = os.path.join(BASE_DIR, ".venv", _venv_bin, _venv_exe)
+VENV_PY   = os.path.join(PROJ_ROOT, ".venv", _venv_bin, _venv_exe)
 PYTHON    = VENV_PY if os.path.exists(VENV_PY) else sys.executable
 
-# Fish Speech repo location — look next to Chloe by default
-_default_fish_dir = os.path.join(os.path.dirname(BASE_DIR), "fish-speech")
+# Fish Speech repo location — look next to the Chloe project root by default
+_default_fish_dir = os.path.join(os.path.dirname(PROJ_ROOT), "fish-speech")
 FISH_SPEECH_DIR   = os.getenv("FISH_SPEECH_DIR", _default_fish_dir)
 FISH_CHECKPOINT   = os.getenv("FISH_CHECKPOINT", "fish-speech-1.5")
 
-IMG_DIR    = os.path.join(BASE_DIR, "chloe", "images")
-OFFLINE_IMG = "Actions/Chloe_Sleep.png"
+IMG_DIR     = os.path.join(PROJ_ROOT, "assets", "images")
+OFFLINE_IMG = "actions/Chloe_Sleep.png"
 
 # ── Network ───────────────────────────────────────────────────
 CHLOE_PORT  = int(os.getenv("CHLOE_PORT", "8000"))
@@ -68,7 +65,7 @@ FISH_URL    = f"http://localhost:{FISH_PORT}"
 
 # ── Voice config ──────────────────────────────────────────────
 PERSON_ID       = "teo"
-REF_AUDIO       = os.getenv("REF_AUDIO", os.path.join(BASE_DIR, "voice_sample.wav"))
+REF_AUDIO       = os.getenv("REF_AUDIO", os.path.join(BASE_DIR, "sample.wav"))
 REF_TEXT        = os.getenv("REF_TEXT",  "")
 WHISPER_MODEL   = os.getenv("WHISPER_MODEL",   "small")
 WHISPER_DEVICE  = os.getenv("WHISPER_DEVICE",  "cpu")
@@ -230,7 +227,7 @@ class ServerManager:
         self._log("starting brain server…", "gold")
         cmd = [PYTHON, "-m", "uvicorn", "server:app", "--port", str(CHLOE_PORT)]
         self._brain = subprocess.Popen(
-            cmd, cwd=BASE_DIR,
+            cmd, cwd=PROJ_ROOT,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, bufsize=1,
         )

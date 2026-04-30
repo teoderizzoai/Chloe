@@ -1,7 +1,7 @@
 # Chloe — Features Roadmap
 
-> Unbuilt features only. Completed work is in DEV_LOG.md.
-> Read DECISIONS.md for the *why*. Current implementation → ARCHITECTURE.md
+> Unbuilt features only. Completed work is in 04_DEV_LOG.md.
+> Read 03_DECISIONS.md for the *why*. Current implementation → 00_ARCHITECTURE.md
 
 Priority labels: **[BUILD]** (significant scope), **[LATER]** (depends on earlier work or extended runtime).
 

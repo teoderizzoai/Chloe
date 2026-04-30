@@ -1,7 +1,7 @@
-"""voice.py — Real-time voice interface for Chloe.
+"""voice/legacy.py — Real-time voice interface for Chloe (older interface).
 
-Usage:
-    python voice.py
+Usage (from project root):
+    python voice/legacy.py
 
 Controls:
     Hold SPACE  — record your voice
@@ -52,7 +52,7 @@ WHISPER_DEVICE  = os.getenv("WHISPER_DEVICE",   "cuda")    # "cuda" | "cpu"
 WHISPER_COMPUTE = os.getenv("WHISPER_COMPUTE",  "float16") # "float16" | "int8"
 
 # Path to your reference voice clip + exact transcript of what's said in it
-REF_AUDIO       = os.getenv("REF_AUDIO", "voice_sample.wav")
+REF_AUDIO       = os.getenv("REF_AUDIO", os.path.join(os.path.dirname(os.path.abspath(__file__)), "sample.wav"))
 REF_TEXT        = os.getenv("REF_TEXT",  "")
 
 # Fish Speech inference server

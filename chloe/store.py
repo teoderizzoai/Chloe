@@ -8,7 +8,7 @@
 #   wants, fears, aversions, beliefs, goals, tensions
 #   persons + person_notes, person_events, person_moments, person_third_parties
 #
-# Soul, vitals, affect, arc, graph stay in chloe_state.json —
+# Soul, vitals, affect, arc, graph stay in data/chloe_state.json —
 # they are scalar/struct state that changes atomically, not lists.
 # ─────────────────────────────────────────────────────────────
 
@@ -19,11 +19,12 @@ import uuid
 from pathlib import Path
 
 
-DB_FILE = Path("chloe.db")
+DB_FILE = Path("data/chloe.db")
 
 
 class ChloeDB:
     def __init__(self, path: Path = DB_FILE):
+        path.parent.mkdir(parents=True, exist_ok=True)
         self._path = path
         self._con  = sqlite3.connect(str(path), check_same_thread=False)
         self._con.row_factory = sqlite3.Row

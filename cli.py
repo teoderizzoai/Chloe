@@ -1,11 +1,11 @@
-# main.py
+# cli.py
 # ─────────────────────────────────────────────────────────────
 # Terminal client — talks to the running server at localhost:8000.
 # One Chloe instance lives in the server; this is just a thin CLI.
 #
 # Usage (server must already be running):
 #   uvicorn server:app --port 8000   ← in one terminal
-#   python -m chloe.main             ← in another terminal
+#   python cli.py                    ← in another terminal
 # ─────────────────────────────────────────────────────────────
 
 import asyncio

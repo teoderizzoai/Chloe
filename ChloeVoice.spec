@@ -13,14 +13,14 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 block_cipher = None
 
 a = Analysis(
-    ['voice_app.py'],
+    ['voice/app.py'],
     pathex=['.'],
     binaries=[],
     datas=[
         # Bundle Chloe images so the portrait works from the binary
-        ('chloe/images', 'chloe/images'),
+        ('assets/images', 'assets/images'),
         # Bundle voice sample if present
-        *([('voice_sample.wav', '.')] if os.path.exists('voice_sample.wav') else []),
+        *([('voice/sample.wav', 'voice')] if os.path.exists('voice/sample.wav') else []),
     ],
     hiddenimports=[
         # faster-whisper / ctranslate2

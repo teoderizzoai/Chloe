@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['launcher.pyw'],
+    ['legacy/launcher.pyw'],
     pathex=[],
     binaries=[],
     datas=[],

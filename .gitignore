@@ -2,9 +2,8 @@ __pycache__/
 *.pyc
 *.pyo
 *.db
-chloe_state.json
+data/
 backups/
-memory_index/
 *.wav
 desktop.ini
 .env

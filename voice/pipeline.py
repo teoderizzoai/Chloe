@@ -1,5 +1,5 @@
 """
-voice_pipeline.py — Zero-latency streaming voice pipeline for Chloe.
+voice/pipeline.py — Zero-latency streaming voice pipeline for Chloe.
 
 Requirements:
     pip install deepgram-sdk>=3.0.0 sounddevice soundfile numpy httpx
@@ -37,13 +37,13 @@ DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
 CHLOE_URL        = os.getenv("CHLOE_URL",        "http://localhost:8000")
 PERSON_ID        = os.getenv("CHLOE_PERSON_ID",  "teo")
 FISH_URL         = os.getenv("FISH_URL",          "http://localhost:8080")
-REF_AUDIO        = os.getenv("REF_AUDIO",         "voice_sample.wav")
+REF_AUDIO        = os.getenv("REF_AUDIO",         str(Path(__file__).parent / "sample.wav"))
 REF_TEXT         = os.getenv("REF_TEXT",          "")
 
 FISH_SAMPLE_RATE = 44100   # Fish Speech PCM output rate (int16 mono)
 MIC_SAMPLE_RATE  = 16000   # Deepgram input rate
 
-SOUNDS_DIR = Path(__file__).parent / "assets" / "interjections"
+SOUNDS_DIR = Path(__file__).parent.parent / "assets" / "interjections"
 
 # ── Interjection sound mappings ─────────────────────────────────────────────
 # mood takes priority; activity fills remaining candidates.

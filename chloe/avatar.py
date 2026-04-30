@@ -3,8 +3,8 @@
 # Portrait art for the dashboard — ties visible "face" to inner state.
 #
 # We only have two families of assets today:
-#   • Actions/ — pose keyed to heartbeat activity (sleep, read, …)
-#   • Emotions/ — expression keyed to affect.mood
+#   • actions/ — pose keyed to heartbeat activity (sleep, read, …)
+#   • emotions/ — expression keyed to affect.mood
 #
 # Design goals
 # ------------
@@ -17,8 +17,8 @@
 # 4. **Graceful fallback** — unknown future activity/mood → no path so the
 #    frontend keeps the classic `image.webp`.
 #
-# URL shape: mounted in server.py as `/media/chloe/…` pointing at this
-# package's `images/` folder, so paths here are *relative to that root*.
+# URL shape: mounted in server.py as `/media/chloe/…` pointing at `assets/images/`,
+# so paths here are relative to that root.
 # ─────────────────────────────────────────────────────────────
 
 from __future__ import annotations
@@ -28,27 +28,27 @@ from typing import Any, Final
 
 # Files on disk (Windows-friendly); values are relative to chloe/images/.
 _ACTIVITY_FILES: Final[dict[str, str]] = {
-    "sleep":   "Actions/Chloe_Sleep.png",
-    "dream":   "Actions/Chloe_Dream.png",
-    "rest":    "Actions/Chloe_Rest.png",
+    "sleep":   "actions/Chloe_Sleep.png",
+    "dream":   "actions/Chloe_Dream.png",
+    "rest":    "actions/Chloe_Rest.png",
     # heart.py calls this id "read" while the UI label is "Research"
-    "read":    "Actions/Chloe_Reading.png",
-    "think":   "Actions/Chloe_Thinking.png",
-    "message": "Actions/Chloe_Texting.png",
-    "create":  "Actions/Chloe_Create.png",
+    "read":    "actions/Chloe_Reading.png",
+    "think":   "actions/Chloe_Thinking.png",
+    "message": "actions/Chloe_Texting.png",
+    "create":  "actions/Chloe_Create.png",
 }
 
 # Every key in affect.MOODS should resolve so we never dead-end after choosing
 # "mood mode". Missing keys would be a bug — keep in sync with affect.py.
 _MOOD_FILES: Final[dict[str, str]] = {
-    "content":     "Emotions/Chloe_Content.png",
-    "restless":    "Emotions/Chloe_Restless.png",
-    "irritable":   "Emotions/Chloe_Irritable.png",
-    "melancholic": "Emotions/Chloe_Sad.png",
-    "curious":     "Emotions/Chloe_Happy.png",
-    "serene":      "Emotions/Chloe_Content.png",
-    "energized":   "Emotions/Chloe_Happy.png",
-    "lonely":      "Emotions/Chloe_Crying.png",
+    "content":     "emotions/Chloe_Content.png",
+    "restless":    "emotions/Chloe_Restless.png",
+    "irritable":   "emotions/Chloe_Irritable.png",
+    "melancholic": "emotions/Chloe_Sad.png",
+    "curious":     "emotions/Chloe_Happy.png",
+    "serene":      "emotions/Chloe_Content.png",
+    "energized":   "emotions/Chloe_Happy.png",
+    "lonely":      "emotions/Chloe_Crying.png",
 }
 
 # When resting, vitals recovery is "neutral" activity — good moment to let
