@@ -19,10 +19,13 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
-from .soul   import Soul, drift, consolidate, content_drift, content_affect, seasonal_drift, update_soul_momentum, mbti_type, describe
+from .soul     import Soul, drift, consolidate, content_drift, content_affect, seasonal_drift, update_soul_momentum, mbti_type, describe  # DEPRECATED — kept for heart.py compat only
+from .identity import (Identity, identity_block, add_trait, reinforce_trait,
+                       decay_traits, check_core_promotion, traits_snapshot,
+                       snapshot_diff, add_contradiction, update_identity_momentum)
 from .heart  import (Vitals, ACTIVITIES, tick_vitals, auto_decide,
                      should_fire_event, circadian_phase, day_name)
-from .memory import Memory, seed_memories, add, age, get_vivid, derive_interests, derive_fringe_interests, to_dicts, MemoryIndex, Idea, MAX_IDEAS, ideas_to_dicts
+from .memory import Memory, seed_memories, add, age, get_vivid, derive_interests, derive_fringe_interests, to_dicts, MemoryIndex, Idea, MAX_IDEAS, ideas_to_dicts, find_recurring_loops
 from .graph  import (Graph, seed_graph, expand, clear_new_flags, get_labels,
                      reinforce_node, match_nodes_by_tags, get_leaf_nodes,
                      mark_auto_expanded, find_node_by_label,
@@ -41,7 +44,8 @@ from .inner  import (Want, Belief, Goal, AffectRecord, Fear, Aversion,
                      derive_preferences,
                      outreach_risk_score,
                      add_tension, decay_tensions, tensions_to_dicts,
-                     tick_pressure)
+                     tick_pressure,
+                     impulse_check, decay_affect_residue, total_residue)
 from .persons import (Person, PersonNote, PersonEvent, SharedMoment,
                       default_persons, on_contact, add_note, add_event, mark_followed_up,
                       pending_followups, tick_distance, choose_reach_out_target,
@@ -50,7 +54,8 @@ from .persons import (Person, PersonNote, PersonEvent, SharedMoment,
                       add_moment, format_shared_moments,
                       add_conflict, reduce_conflict, tick_conflict, format_conflict_context,
                       upsert_third_party, format_third_party_context,
-                      format_cross_person_context, set_impression)
+                      format_cross_person_context, set_impression,
+                      format_trait_profile_context)
 from . import llm
 from . import feeds
 from . import weather as wthr
@@ -175,7 +180,7 @@ class Chloe:
 
         # ── Layer 5: self-awareness ──
         self.goals:            list[Goal] = []
-        self.soul_baseline:    dict       = {}   # soul at last continuity check
+        self._identity_snapshot: dict     = {}   # trait weights at last continuity check
         self.last_journal_date: str       = ""   # "YYYY-MM-DD"
         self.last_backup_date:  str       = ""   # "YYYY-MM-DD"
 
@@ -188,16 +193,15 @@ class Chloe:
         self.affect_records:    list[AffectRecord] = []
         self._activity_streak:  int                = 0   # consecutive ticks in current activity
 
-        # ── Layer 11: Personality Crystallisation ──
-        # Exponential moving average of per-tick soul drift direction.
-        # Saturates ≈ ±1.0 after ~5.5 min of consistent activity.
-        self.soul_momentum: dict = {}   # {"EI": float, "SN": float, "TF": float, "JP": float}
+        # ── Layer 11: Identity (replaces MBTI soul momentum) ──
+        # Trait weights tracked in self.identity.identity_momentum
 
         # ── Layer 13: Friction & Inner Depth ──
         self.tensions: list[Tension]    = []   # item 68: active internal conflicts
         self.arc: Optional[Arc]         = None # item 74: current long-term mood arc
         self._reflect_mood_history: list[str] = []  # item 74: last N moods at reflect time
         self._risk_tolerance: dict      = {}   # item 73: {person_id: {value, expires}}
+        self.recurring_loops: list[str] = []   # B3: tag clusters that keep resurfacing
 
         # ── Item 24: conversation session tracking ──
         self._current_session:  int   = 0
@@ -250,11 +254,35 @@ class Chloe:
 
     # ── Memory helper ────────────────────────────────────────
 
-    def _remember(self, text: str, type: str = "observation", tags: list = None) -> None:
+    def _remember(self, text: str, type: str = "observation", tags: list = None,
+                  salience: float = 0.0) -> None:
         """Add a memory to the store, the semantic index, and SQLite."""
-        self.memories = add(self.memories, text, type, tags)
+        self.memories = add(self.memories, text, type, tags, salience=salience)
         self.memory_index.add(self.memories[0])
         self.db.add_memory(self.memories[0])
+        if self.identity.traits and random.random() < 0.10:
+            asyncio.create_task(self._maybe_reinforce_traits(self.memories[0]))
+
+    async def _maybe_reinforce_traits(self, memory) -> None:
+        """10% chance on any memory add: check if the memory reinforces a random active trait."""
+        try:
+            from .identity import active_traits as _at
+            candidates = _at(self.identity)[:5]
+            if not candidates:
+                return
+            trait = random.choice(candidates)
+            delta = await asyncio.to_thread(
+                llm.classify_trait_reinforcement,
+                memory.text, trait.name, trait.behavioral_profile,
+            )
+            if delta > 0:
+                # High-salience memories contribute more to trait reinforcement
+                salience_scale = 1.0 + getattr(memory, "salience", 0.0)
+                self.identity = reinforce_trait(self.identity, trait.id, delta * salience_scale)
+                self.identity = update_identity_momentum(self.identity, trait.id, delta * salience_scale)
+                self.db.sync_traits(self.identity.traits)
+        except Exception as e:
+            self._log(f"trait reinforce error: {e}")
 
     # ── Layer 13 helpers ─────────────────────────────────────
 
@@ -545,7 +573,7 @@ class Chloe:
                 llm.chat,
                 message=message,
                 history=chat_ctx,
-                soul=self.soul,
+                identity=self.identity,
                 vitals=self.vitals,
                 memories=self.memory_index.query(message, self.memories, 5),
                 interests=interests,
@@ -581,6 +609,10 @@ class Chloe:
                 graph_deep_ctx=graph_knowledge_context(self.graph),
                 graph_resonant_ctx=_graph_resonant_ctx,
                 contradiction_ctx="",  # wired; populated when identity.py provides Contradiction objects
+                loops_ctx=", ".join(self.recurring_loops[:3]) if self.recurring_loops else "",
+                residue_ctx=f"emotional weight {total_residue(self.affect_records):.2f}" if total_residue(self.affect_records) > 0.3 else "",
+                incomplete_ideas=[i for i in self.ideas[:10] if not getattr(i, "complete", True)] or None,
+                trait_profile_ctx=format_trait_profile_context(person) if person else "",
             )
         except Exception as e:
             print(f"[chat error] {type(e).__name__}: {e}")
@@ -608,6 +640,7 @@ class Chloe:
             self._remember(
                 "tried to reach through and found nothing there. it stays.",
                 "feeling", ["rejection", "vulnerability", "guarded"],
+                salience=min(1.0, 0.5 + _e_int * 0.5),
             )
             self._reduce_risk_tolerance(person_id, by=0.25, hours=24)
             self._log(f"item 73: vulnerability met with coldness from {person_id}")
@@ -640,19 +673,7 @@ class Chloe:
         # Conversations shape the graph — reinforce nodes matched by the exchange.
         self._check_graph_resonance(_conv_tags)
 
-        # Conversations shape the soul based on what was actually said.
-        # Both message and reply are used — she articulates thoughts, not just receives them.
-        _conv_words = (message + " " + reply).split()
-        self.soul = content_drift(self.soul, _conv_words)
-        _conv_reaction = content_affect(self.soul, _conv_words, self.affect.mood)
-        if _conv_reaction:
-            _r_mood, _r_tags = _conv_reaction
-            self.affect_records = add_affect_record(
-                self.affect_records, _r_mood,
-                f"talking with {person_name}",
-                _r_tags,
-            )
-
+        # Soul content drift retired — trait reinforcement happens via _reflect()
         return reply
 
     async def _voice_chat(self, message: str, person_id: str) -> str:
@@ -671,7 +692,7 @@ class Chloe:
                 llm.chat,
                 message=message,
                 history=[m for m in self.chat_history if m.get("person_id") == person_id][-6:],
-                soul=self.soul,
+                identity=self.identity,
                 vitals=self.vitals,
                 memories=self.memory_index.query(message, self.memories, 5),
                 interests=interests,
@@ -688,6 +709,8 @@ class Chloe:
                 person_impression=person.impression if person else "",
                 voice=True,
                 graph_deep_ctx=graph_knowledge_context(self.graph),
+                loops_ctx=", ".join(self.recurring_loops[:3]) if self.recurring_loops else "",
+                trait_profile_ctx=format_trait_profile_context(person) if person else "",
             )
         except Exception as e:
             print(f"[voice chat error] {type(e).__name__}: {e}")
@@ -743,12 +766,6 @@ class Chloe:
             self.persons = reduce_conflict(self.persons, person_id, 15.0 * intensity)  # item 49
             if self.affect.mood not in ("irritable",):
                 self.affect = force_mood("content", min(0.9, 0.4 + intensity * 0.5))
-            self.soul = Soul(
-                EI=self.soul.EI,
-                SN=self.soul.SN,
-                TF=min(100.0, self.soul.TF + 0.2 * intensity),  # warmth deepens F
-                JP=self.soul.JP,
-            )
             self.affect_records = add_affect_record(
                 self.affect_records, "content",
                 f"{person_name} was affectionate", ["affection", "closeness"] + tags,
@@ -848,16 +865,11 @@ class Chloe:
             self._remember(
                 f"{person_name} seemed disappointed in me",
                 "feeling", ["disappointment", "self-doubt"] + tags,
+                salience=min(1.0, 0.4 + intensity * 0.5),
             )
             self.affect_records = add_affect_record(
                 self.affect_records, "melancholic",
                 f"{person_name} was disappointed", ["disappointment", "self-doubt"] + tags,
-            )
-            self.soul = Soul(
-                EI=min(100.0, self.soul.EI + 0.2 * intensity),
-                SN=self.soul.SN,
-                TF=min(100.0, self.soul.TF + 0.15 * intensity),
-                JP=self.soul.JP,
             )
 
         elif emotion == "frustrated" and at_chloe:
@@ -877,16 +889,11 @@ class Chloe:
             self._remember(
                 f"{person_name} was angry with me",
                 "feeling", ["conflict", "hurt"] + tags,
+                salience=min(1.0, 0.5 + intensity * 0.5),
             )
             self.affect_records = add_affect_record(
                 self.affect_records, "irritable",
                 f"{person_name} was angry", ["anger", "conflict"] + tags,
-            )
-            self.soul = Soul(
-                EI=min(100.0, self.soul.EI + 0.4 * intensity),
-                SN=self.soul.SN,
-                TF=min(100.0, self.soul.TF + 0.3 * intensity),
-                JP=self.soul.JP,
             )
 
         elif emotion in ("dismissive", "cold") and at_chloe:
@@ -896,6 +903,7 @@ class Chloe:
             self._remember(
                 f"{person_name} was {emotion} toward me",
                 "feeling", ["dismissal", "distance"] + tags,
+                salience=min(1.0, 0.4 + intensity * 0.4),
             )
             self.affect_records = add_affect_record(
                 self.affect_records, "irritable",
@@ -920,7 +928,7 @@ class Chloe:
             belief_data = await asyncio.to_thread(
                 llm.extract_belief,
                 f"Conversation with {person_name}", exchange,
-                beliefs_to_dicts(self.beliefs), self.soul,
+                beliefs_to_dicts(self.beliefs), self.identity,
                 confidence_base=0.4,
             )
             if belief_data:
@@ -937,7 +945,7 @@ class Chloe:
         """Background task: check if message contains something worth remembering."""
         try:
             notable = await asyncio.to_thread(
-                llm.extract_notable, message, person_name, self.soul
+                llm.extract_notable, message, person_name, self.identity
             )
             if notable:
                 self.persons = add_note(
@@ -1046,7 +1054,8 @@ class Chloe:
             pass
 
     async def _update_person_impression(self, person_id: str):
-        """Item 52 — regenerate Chloe's impression of a person after enough conversations."""
+        """Item 52 — regenerate Chloe's impression of a person after enough conversations.
+        Also updates D1 trait profile for this person."""
         try:
             person = get_person(self.persons, person_id)
             if not person:
@@ -1054,7 +1063,7 @@ class Chloe:
             from .persons import relationship_stage as _stage
             impression = await asyncio.to_thread(
                 llm.generate_person_impression,
-                person.name, self.soul, self.affect.mood,
+                person.name, self.identity, self.affect.mood,
                 person.warmth, _stage(person.warmth),
                 [n.to_dict() for n in person.notes],
                 [m.to_dict() for m in person.moments],
@@ -1062,6 +1071,22 @@ class Chloe:
             )
             self.persons = set_impression(self.persons, person_id, impression)
             self._log(f'impression updated for {person.name}: "{impression}"')
+
+            # D1: relationship-driven trait profile
+            from .identity import active_traits as _active_traits
+            _traits = _active_traits(self.identity)
+            if _traits:
+                trait_profile = await asyncio.to_thread(
+                    llm.generate_person_trait_profile,
+                    person.name, _traits, person.notes, person.moments,
+                )
+                # Patch trait_profile onto the person object in self.persons
+                for i, p in enumerate(self.persons):
+                    if p.id == person_id:
+                        from dataclasses import replace as _replace
+                        self.persons[i] = _replace(p, trait_profile=trait_profile)
+                        break
+                self._log(f'trait profile for {person.name}: +{trait_profile.get("activated",[])} -{trait_profile.get("suppressed",[])}')
         except Exception:
             pass
 
@@ -1104,16 +1129,18 @@ class Chloe:
     def snapshot(self) -> dict:
         """Full serialisable state — for the API / frontend."""
         t = time.localtime()
+        from .identity import active_traits
+        _traits = active_traits(self.identity)
         return {
-            "soul":        self.soul.to_dict(),
+            "identity":    self.identity.to_dict(),
+            "identity_block": identity_block(self.identity),
+            "traits":      [tr.to_dict() for tr in _traits],
             "vitals":      self.vitals.to_dict(),
             "activity":    self.activity,
             # Dashboard portrait — see avatar.portrait_meta for selection rules
             "avatar":      portrait_meta(
                 self.activity, self.affect.mood, self.affect.intensity
             ),
-            "mbti_type":   mbti_type(self.soul),
-            "soul_desc":   describe(self.soul),
             "interests":   derive_interests(self.memories),
             "memories":    to_dicts(get_vivid(self.memories, 10)),
             "ideas":       ideas_to_dicts(self.ideas),
@@ -1145,6 +1172,9 @@ class Chloe:
             # Layer 13: Friction & Inner Depth
             "tensions":    tensions_to_dicts(self.tensions),
             "arc":         self.arc.to_dict() if self.arc else None,
+            # Cognition features (Sessions 28+)
+            "recurring_loops": self.recurring_loops[:5],
+            "total_residue":   total_residue(self.affect_records),
             # Testing
             "testing_mode":   self.testing_mode,
         }
@@ -1167,7 +1197,7 @@ class Chloe:
         t       = time.localtime()
         hour    = t.tm_hour
         weekday = t.tm_wday
-        self.vitals = tick_vitals(self.vitals, self.activity, hour, weekday, soul=self.soul, mood=self.affect.mood)
+        self.vitals = tick_vitals(self.vitals, self.activity, hour, weekday, identity=self.identity, mood=self.affect.mood)
 
         # 2. Apply weather vitals nudge (subtle per-tick effect)
         if self.weather:
@@ -1184,16 +1214,7 @@ class Chloe:
         _active_arc = self.arc if (self.arc and self.arc.active) else None
         self.affect = update_mood(self.affect, self.vitals, self.weather, hour, self.activity, season_str, arc=_active_arc)
 
-        # 4. Drift soul (item 58/59: momentum tracks drift direction, feeds back into drift)
-        _old_soul = self.soul
-        if self.activity == "sleep":
-            self.soul = consolidate(self.soul, self.soul_momentum)
-        else:
-            self.soul = drift(self.soul, self.activity, self.soul_momentum)
-        # Item 39 — seasonal accumulation: tiny per-tick pull that adds up over weeks
-        self.soul = seasonal_drift(self.soul, t.tm_mon)
-        # Update momentum after all drift has been applied
-        self.soul_momentum = update_soul_momentum(self.soul_momentum, _old_soul, self.soul)
+        # 4. Soul drift retired — identity trait system handles personality development
 
         # ── Testing mode: floor vitals, prevent sleep ────────────
         if self.testing_mode:
@@ -1207,7 +1228,20 @@ class Chloe:
 
         # 5. Auto-regulate (vitals + time-of-day scheduling)
         prev_activity = self.activity
-        override = auto_decide(self.vitals, self.activity, hour, self.affect.mood, soul=self.soul)
+
+        # F1: Impulse interrupt — high-pressure inner states override activity selection
+        _impulse = None
+        if not self.testing_mode and self.activity not in ("sleep", "message"):
+            _impulse = impulse_check(self.wants, self.fears, self.tensions)
+            if _impulse:
+                _imp_act, _imp_reason = _impulse
+                self.set_activity(_imp_act)
+                self.affect_records = add_affect_record(
+                    self.affect_records, self.affect.mood,
+                    f"impulse: {_imp_reason}", ["impulse", _imp_act], intensity=0.6,
+                )
+
+        override = auto_decide(self.vitals, self.activity, hour, self.affect.mood, identity=self.identity)
         # Testing mode: block any sleep/dream transition
         if self.testing_mode and override in ("sleep", "dream"):
             override = "rest"
@@ -1363,6 +1397,12 @@ class Chloe:
             self.persons  = tick_conflict(self.persons)   # item 49
             self._check_ignored_outreach()                # item 51
             self.tensions = decay_tensions(self.tensions) # item 68
+            # Trait weight decay + core promotion
+            self.identity = decay_traits(self.identity)
+            self.identity = check_core_promotion(self.identity)
+
+            # C3: decay emotional residue from intense affect records
+            self.affect_records = decay_affect_residue(self.affect_records)
 
             # C1: pressure accumulation on inner states
             self.wants, self.fears, self.goals, self.tensions, _frustrated = tick_pressure(
@@ -1374,16 +1414,10 @@ class Chloe:
                     f"wanted to {_w.text} but nothing came of it",
                     _w.tags,
                 )
-                self._remember(f"wanted to {_w.text} but it hasn't gone anywhere", "feeling", _w.tags)
+                self._remember(f"wanted to {_w.text} but it hasn't gone anywhere", "feeling", _w.tags, salience=0.6)
 
-            # Item 36 — isolation drift: days without contact push her more introverted
+            # Item 36 — isolation drift: days without contact
             if self.persons and all(p.distance > 70 for p in self.persons):
-                self.soul = Soul(
-                    EI=min(100.0, self.soul.EI + 0.01),
-                    SN=self.soul.SN,
-                    TF=self.soul.TF,
-                    JP=self.soul.JP,
-                )
                 if (self.affect.mood not in ("lonely", "melancholic")
                         and random.random() < 0.05):
                     self.affect = force_mood("lonely", 0.4)
@@ -1430,7 +1464,7 @@ class Chloe:
         """Run an autonomous LLM event in the background."""
         self._busy = True
         interests    = derive_interests(self.memories)
-        soul         = self.soul
+        identity     = self.identity
         t            = time.localtime()
         season       = f"{wthr.describe_season(t.tm_mon)}, {circadian_phase(t.tm_hour)}"
         beliefs_d    = beliefs_to_dicts(self.beliefs)
@@ -1501,29 +1535,13 @@ class Chloe:
                             text = full
                     mem = await asyncio.to_thread(
                         llm.generate_memory_from_article,
-                        article.title, text, read_interests, soul,
+                        article.title, text, read_interests, identity,
                         self.affect.mood, beliefs_d, wants_d, recent_ideas,
                         self.weather, season, _arc_desc, _tensions_ctx,
                     )
                     self._remember(mem["text"], "observation", mem.get("tags", []))
                     self._log(f'read "{article.title}" → "{mem["text"]}…"')
                     self._check_graph_resonance(mem.get("tags", []))
-
-                    # Item 31 — content-aware soul drift
-                    self.soul = content_drift(self.soul, mem.get("tags", []))
-
-                    # Personality-driven emotional reaction: did this content resonate?
-                    # Tags that align with her soul position → lift; opposing → drag.
-                    # These accumulate as real likes/dislikes, not hardcoded categories.
-                    _art_reaction = content_affect(self.soul, mem.get("tags", []), self.affect.mood)
-                    if _art_reaction:
-                        _r_mood, _r_tags = _art_reaction
-                        _topic = ", ".join(mem.get("tags", []))
-                        self.affect_records = add_affect_record(
-                            self.affect_records, _r_mood,
-                            f"reading about {_topic}" if _topic else "reading",
-                            _r_tags + [t for t in mem.get("tags", []) if t not in _r_tags],
-                        )
 
                     # Item 40 — emotional weight of world events
                     weight = _article_emotional_weight(article.title, text)
@@ -1534,13 +1552,6 @@ class Chloe:
                             f"read about something devastating: {article.title}",
                             ["world", "grief", "weight"],
                         )
-                        # Item 60 — emotional soul mark: devastating → more F (feels it deeply)
-                        self.soul = Soul(
-                            EI=self.soul.EI,
-                            SN=self.soul.SN,
-                            TF=min(100.0, self.soul.TF + 0.25),
-                            JP=self.soul.JP,
-                        )
                         self._log(f"world event hit hard: {article.title}")
                     elif weight == "beautiful" and random.random() < 0.5:
                         new_mood = "serene" if self.vitals.energy < 50 else "curious"
@@ -1549,13 +1560,6 @@ class Chloe:
                             self.affect_records, new_mood,
                             f"read something beautiful: {article.title}",
                             ["wonder", "beauty", "lifted"],
-                        )
-                        # Item 60 — emotional soul mark: beautiful → more N + P (opens up)
-                        self.soul = Soul(
-                            EI=self.soul.EI,
-                            SN=min(100.0, self.soul.SN + 0.25),
-                            TF=self.soul.TF,
-                            JP=min(100.0, self.soul.JP + 0.20),
                         )
                         self._log(f"article lifted her: {article.title}")
 
@@ -1572,7 +1576,7 @@ class Chloe:
                         belief_data = await asyncio.to_thread(
                             llm.extract_belief,
                             article.title, text,
-                            beliefs_d, soul,
+                            beliefs_d, identity,
                         )
                         if belief_data:
                             self.beliefs = add_or_reinforce_belief(
@@ -1585,21 +1589,12 @@ class Chloe:
                     # Feeds unreachable — generic memory
                     topic = read_interests[0] if read_interests else "something"
                     mem   = await asyncio.to_thread(
-                        llm.generate_memory, topic, read_interests, soul,
+                        llm.generate_memory, topic, read_interests, identity,
                         self.affect.mood, recent_ideas, self.weather, season, _arc_desc,
                     )
                     self._remember(mem["text"], "observation", mem.get("tags", []))
                     self._log(f'memory: "{mem["text"]}…"')
                     self._check_graph_resonance(mem.get("tags", []))
-                    self.soul = content_drift(self.soul, mem.get("tags", []))
-                    _mem_reaction = content_affect(self.soul, mem.get("tags", []), self.affect.mood)
-                    if _mem_reaction:
-                        _r_mood, _r_tags = _mem_reaction
-                        self.affect_records = add_affect_record(
-                            self.affect_records, _r_mood,
-                            f"thinking about {', '.join(mem.get('tags', []))}",
-                            _r_tags + [t for t in mem.get("tags", []) if t not in _r_tags],
-                        )
 
             elif self.activity == "dream":
                 # Dreams process the whole day — collect tags from the last 8 hours
@@ -1615,32 +1610,22 @@ class Chloe:
                 vivid = self.memory_index.query(_dream_q, self.memories, 4)
                 # Real dream pass — distorts recent memories, wants, ideas
                 mem = await asyncio.to_thread(
-                    llm.generate_dream, vivid, soul, self.vitals, self.weather, season,
+                    llm.generate_dream, vivid, identity, self.vitals, self.weather, season,
                     wants_d, recent_ideas,
                 )
-                self._remember(mem["text"], "dream", mem.get("tags", []))
+                self._remember(mem["text"], "dream", mem.get("tags", []), salience=0.5)
                 self._log(f'dream: "{mem["text"]}…"')
                 self._check_graph_resonance(mem.get("tags", []))
 
-                # Dreams feed likes/dislikes — emotional reaction to dream content
-                _dream_reaction = content_affect(self.soul, mem.get("tags", []), self.affect.mood)
-                if _dream_reaction:
-                    _r_mood, _r_tags = _dream_reaction
-                    self.affect_records = add_affect_record(
-                        self.affect_records, _r_mood,
-                        f"dreamed about {', '.join(mem.get('tags', []))}",
-                        _r_tags + [t for t in mem.get("tags", []) if t not in _r_tags],
-                    )
-
                 # Dreams occasionally seed a creative idea (25% chance)
                 if random.random() < 0.25:
-                    asyncio.create_task(self._dream_to_idea(mem["text"], mem.get("tags", []), soul))
+                    asyncio.create_task(self._dream_to_idea(mem["text"], mem.get("tags", []), identity))
 
                 # Dreams occasionally crystallise a belief (10% chance, low confidence)
                 if random.random() < 0.10:
                     belief_data = await asyncio.to_thread(
                         llm.extract_belief,
-                        "Dream", mem["text"], beliefs_d, soul, confidence_base=0.35,
+                        "Dream", mem["text"], beliefs_d, identity, confidence_base=0.35,
                     )
                     if belief_data:
                         self.beliefs = add_or_reinforce_belief(
@@ -1666,15 +1651,15 @@ class Chloe:
                         # No good target yet — fall through to idea generation
                         _think_q = interests[0] if interests else self.affect.mood
                         vivid = self.memory_index.query(_think_q, self.memories, 4)
-                        idea = await asyncio.to_thread(
-                            llm.generate_idea, vivid, interests, soul,
+                        idea_d = await asyncio.to_thread(
+                            llm.generate_idea, vivid, interests, identity,
                             self.affect.mood, beliefs_d, wants_d,
                             self.weather, season, _arc_desc, _tensions_ctx,
                         )
-                        _new_idea = Idea(text=idea)
+                        _new_idea = Idea(text=idea_d["text"], complete=idea_d.get("complete", True))
                         self.ideas = [_new_idea, *self.ideas]
                         self.db.add_idea(_new_idea)
-                        self._log(f'idea: "{idea}…"')
+                        self._log(f'idea: "{idea_d["text"]}…"')
                 else:
                     # Want / goal / idea — pull memories toward active curiosities,
                     # not dominant interest, to avoid topic rabbit holes.
@@ -1690,7 +1675,7 @@ class Chloe:
 
                     if roll < 0.35 + 0.20:   # want (20%)
                         want_data = await asyncio.to_thread(
-                            llm.generate_want, vivid, interests, soul,
+                            llm.generate_want, vivid, interests, identity,
                             beliefs_d, wants_d, self.affect.mood, _arc_desc, _tensions_ctx,
                         )
                         self.wants = add_want(self.wants, want_data["text"], want_data.get("tags", []))
@@ -1698,22 +1683,34 @@ class Chloe:
                         self._check_graph_resonance(want_data.get("tags", []))
                     elif roll < 0.35 + 0.20 + 0.10:   # goal (10%)
                         goal_data = await asyncio.to_thread(
-                            llm.generate_goal, vivid, interests, soul,
+                            llm.generate_goal, vivid, interests, identity,
                             wants_d, beliefs_d, goals_d,
                         )
                         self.goals = add_goal(self.goals, goal_data["text"], goal_data.get("tags", []))
                         self._log(f'goal: "{goal_data["text"]}…"')
                         self._check_graph_resonance(goal_data.get("tags", []))
-                    else:                              # idea (35%)
-                        idea = await asyncio.to_thread(
-                            llm.generate_idea, vivid, interests, soul,
+                    elif roll < 0.35 + 0.20 + 0.10 + 0.15:   # curiosity question (15%) B5
+                        _cq_node = _expand_target if (_expand_target := pick_think_expansion_target(self.graph)) else None
+                        _cq_label = _cq_node.label if _cq_node else (interests[0] if interests else self.affect.mood)
+                        cq_data = await asyncio.to_thread(
+                            llm.generate_curiosity_question,
+                            _cq_label, interests, identity, self.affect.mood,
+                        )
+                        self.wants = add_want(
+                            self.wants, cq_data["text"], cq_data.get("tags", [_cq_label]),
+                            subtype="curiosity_question",
+                        )
+                        self._log(f'curiosity: "{cq_data["text"]}…"')
+                    else:                              # idea (20%)
+                        idea_d2 = await asyncio.to_thread(
+                            llm.generate_idea, vivid, interests, identity,
                             self.affect.mood, beliefs_d, wants_d,
                             self.weather, season, _arc_desc, _tensions_ctx,
                         )
-                        _new_idea2 = Idea(text=idea)
+                        _new_idea2 = Idea(text=idea_d2["text"], complete=idea_d2.get("complete", True))
                         self.ideas = [_new_idea2, *self.ideas]
                         self.db.add_idea(_new_idea2)
-                        self._log(f'idea: "{idea}…"')
+                        self._log(f'idea: "{idea_d2["text"]}…"')
 
             elif self.activity == "create":
                 _create_q = self.ideas[0].text if self.ideas else (interests[0] if interests else self.affect.mood)
@@ -1724,7 +1721,7 @@ class Chloe:
                 if (self.vitals.curiosity > 55 or self.vitals.inspiration > 65) \
                         and self.vitals.energy > 45 and self.vitals.focus > 30:
                     piece = await asyncio.to_thread(
-                        llm.generate_creative, vivid, interests, soul, self.affect.mood,
+                        llm.generate_creative, vivid, interests, identity, self.affect.mood,
                         wants_d, beliefs_d, recent_ideas,
                         self.weather, season, _arc_desc, _tensions_ctx,
                     )
@@ -1732,13 +1729,6 @@ class Chloe:
                     self.creative_outputs = [entry, *self.creative_outputs]
                     # Store first 150 chars as a creative memory
                     self._remember(piece["text"], "creative", piece.get("tags", []))
-                    # Item 60 — emotional soul mark: creative breakthrough nudges N + P
-                    self.soul = Soul(
-                        EI=self.soul.EI,
-                        SN=min(100.0, self.soul.SN + 0.3),   # more Intuitive (generative mode)
-                        TF=self.soul.TF,
-                        JP=min(100.0, self.soul.JP + 0.3),   # more Perceiving (open exploration)
-                    )
                     self._log(f'created {piece.get("form","piece")}: "{piece["text"]}…"')
                     # Creating sometimes surfaces a want to go deeper on the themes (20% chance)
                     if random.random() < 0.20:
@@ -1752,7 +1742,7 @@ class Chloe:
                 else:
                     topic = interests[0] if interests else "something"
                     mem   = await asyncio.to_thread(
-                        llm.generate_memory, topic, interests, soul,
+                        llm.generate_memory, topic, interests, identity,
                         self.affect.mood, recent_ideas, self.weather, season, _arc_desc,
                     )
                     self._remember(mem["text"], "observation", mem.get("tags", []))
@@ -1777,7 +1767,7 @@ class Chloe:
                         note = followups[0]
                         msg = await asyncio.to_thread(
                             llm.generate_followup,
-                            p_name, note.text, soul, self.vitals, self.affect.mood,
+                            p_name, note.text, identity, self.vitals, self.affect.mood,
                         )
                         self.persons = mark_followed_up(self.persons, target.id, note.id)
                         self._log(f'followed up with {p_name}: "{note.text}…"')
@@ -1789,7 +1779,7 @@ class Chloe:
                         _biased_ideas = [f"been thinking about {t}" for t in _attn] + _idea_texts if _attn else _idea_texts
                         msg = await asyncio.to_thread(
                             llm.generate_autonomous_message,
-                            soul, self.vitals, vivid, interests, _biased_ideas,
+                            identity, self.vitals, vivid, interests, _biased_ideas,
                             self.weather, season, self.affect.mood,
                             p_name, p_notes, prefs,
                             target.warmth, msg_hour,
@@ -1805,7 +1795,7 @@ class Chloe:
                     prefs = derive_preferences(self.affect_records)
                     msg = await asyncio.to_thread(
                         llm.generate_autonomous_message,
-                        soul, self.vitals, vivid, interests, [i.text for i in self.ideas],
+                        identity, self.vitals, vivid, interests, [i.text for i in self.ideas],
                         self.weather, season, self.affect.mood,
                         preferences=prefs,
                         tensions=tensions_to_dicts(self.tensions),
@@ -1882,7 +1872,7 @@ class Chloe:
                 note = followups[0]
                 msg = await asyncio.to_thread(
                     llm.generate_followup,
-                    p_name, note.text, self.soul, self.vitals, self.affect.mood,
+                    p_name, note.text, self.identity, self.vitals, self.affect.mood,
                 )
                 self.persons = mark_followed_up(self.persons, target.id, note.id)
                 self._log(f'outreach: follow-up to {p_name}: "{note.text}…"')
@@ -1894,7 +1884,7 @@ class Chloe:
                 upcoming = format_upcoming_events(get_upcoming_events(target))
                 msg = await asyncio.to_thread(
                     llm.generate_autonomous_message,
-                    self.soul, self.vitals, vivid, interests, _biased_ideas,
+                    self.identity, self.vitals, vivid, interests, _biased_ideas,
                     self.weather, season, self.affect.mood,
                     p_name, p_notes, prefs,
                     target.warmth, hour,
@@ -1931,9 +1921,9 @@ class Chloe:
         try:
             feeling = await asyncio.to_thread(
                 llm.generate_completion_feeling,
-                goal.text, self.affect.mood, self.soul,
+                goal.text, self.affect.mood, self.identity,
             )
-            self._remember(feeling["text"], "feeling", feeling.get("tags", []))
+            self._remember(feeling["text"], "feeling", feeling.get("tags", []), salience=0.7)
             mood_nudge = feeling.get("mood_nudge", "satisfied")
             nudge_map = {
                 "satisfied":  ("serene",      0.60),
@@ -1949,12 +1939,6 @@ class Chloe:
                 feeling.get("tags", []),
             )
             # Item 60 — emotional soul mark: completion nudges toward J (structured follow-through)
-            self.soul = Soul(
-                EI=self.soul.EI,
-                SN=self.soul.SN,
-                TF=self.soul.TF,
-                JP=max(0.0, self.soul.JP - 0.3),   # more Judging (closes loops)
-            )
             self._log(f'goal resolved ({mood_nudge}): "{feeling["text"]}…"')
         except Exception as e:
             self._log(f"completion feeling error: {e}")
@@ -2041,12 +2025,12 @@ class Chloe:
         except Exception as e:
             self._log(f"think-expand error: {e}")
 
-    async def _dream_to_idea(self, dream_text: str, dream_tags: list, soul):
+    async def _dream_to_idea(self, dream_text: str, dream_tags: list, identity):
         """Cross-activity: dream imagery seeds a creative idea."""
         try:
             idea_text = await asyncio.to_thread(
                 llm.generate_idea_from_dream,
-                dream_text, dream_tags, soul, self.affect.mood,
+                dream_text, dream_tags, identity, self.affect.mood,
             )
             if idea_text:
                 _idea = Idea(text=idea_text)
@@ -2061,7 +2045,7 @@ class Chloe:
         try:
             result = await asyncio.to_thread(
                 llm.generate_want_from_creative,
-                piece_text, piece_tags, self.soul, self.affect.mood,
+                piece_text, piece_tags, self.identity, self.affect.mood,
                 wants_to_dicts(self.wants),
             )
             if result and result.get("text"):
@@ -2099,7 +2083,7 @@ class Chloe:
             try:
                 result = await asyncio.to_thread(
                     llm.find_or_create_node,
-                    tag, get_labels(self.graph), interests, self.soul,
+                    tag, get_labels(self.graph), interests, self.identity,
                 )
                 if result:
                     parent = find_node_by_label(self.graph, result["parent_label"])
@@ -2147,7 +2131,7 @@ class Chloe:
             try:
                 result = await asyncio.to_thread(
                     llm.find_or_create_node,
-                    tag, get_labels(self.graph), interests, self.soul,
+                    tag, get_labels(self.graph), interests, self.identity,
                 )
                 if result:
                     self.graph = expand(self.graph, "root",
@@ -2171,7 +2155,7 @@ class Chloe:
             try:
                 result = await asyncio.to_thread(
                     llm.generate_dream_want,
-                    dream_tag, self.soul, dream_memories,
+                    dream_tag, self.identity, dream_memories,
                     wants_to_dicts(self.wants),
                 )
                 if result and result.get("text"):
@@ -2203,7 +2187,7 @@ class Chloe:
                     llm.chat,
                     message=pm["text"],
                     history=person_history[-6:],
-                    soul=self.soul,
+                    identity=self.identity,
                     vitals=self.vitals,
                     memories=self.memory_index.query(pm["text"], self.memories, 5),
                     interests=derive_interests(self.memories),
@@ -2218,6 +2202,7 @@ class Chloe:
                     sleep_state="missed",
                     missed_at=pm["time"],
                     graph_deep_ctx=graph_knowledge_context(self.graph),
+                    loops_ctx=", ".join(self.recurring_loops[:3]) if self.recurring_loops else "",
                 )
                 self._add_chat("chloe", reply, person_id=pm["person_id"])
                 self._log(f"replied to queued message from {person_name}")
@@ -2240,33 +2225,28 @@ class Chloe:
             mem = await asyncio.to_thread(
                 llm.generate_reflection,
                 self.memory_index.query(_reflect_q, self.memories, 6), [i.text for i in self.ideas],
-                beliefs_to_dicts(self.beliefs), self.soul, self.affect.mood,
+                beliefs_to_dicts(self.beliefs), self.identity, self.affect.mood,
                 self.weather, _r_sea, _r_arc, _r_tens, _reflect_bias,
             )
             self._remember(mem["text"], "reflection", mem.get("tags", []))
             self._log(f'reflection: "{mem["text"]}…"')
 
-            # 19. Continuity awareness — notice soul drift
-            if self.soul_baseline:
-                drift_total = sum(
-                    abs(getattr(self.soul, t) - self.soul_baseline.get(t, 50))
-                    for t in ("EI", "SN", "TF", "JP")
-                )
-                max_single = max(
-                    abs(getattr(self.soul, t) - self.soul_baseline.get(t, 50))
-                    for t in ("EI", "SN", "TF", "JP")
-                )
-                if drift_total > 15 or max_single > 10:
+            # 19. Continuity awareness — notice trait shifts
+            if self._identity_snapshot:
+                _trait_changes = snapshot_diff(self._identity_snapshot, self.identity)
+                if _trait_changes:
                     note = await asyncio.to_thread(
                         llm.generate_continuity_note,
-                        self.soul_baseline, self.soul, self.affect.mood,
+                        _trait_changes, self.identity, self.affect.mood,
                     )
                     self._remember(note["text"], "reflection", note.get("tags", []))
                     self._log(f'continuity: "{note["text"]}…"')
-                    # Reset baseline
-                    self.soul_baseline = self.soul.to_dict()
+                self._identity_snapshot = traits_snapshot(self.identity)
             else:
-                self.soul_baseline = self.soul.to_dict()
+                self._identity_snapshot = traits_snapshot(self.identity)
+
+            # 20. Trait emergence — propose new traits from recent experience
+            asyncio.create_task(self._propose_and_update_traits())
 
             # G3: surface orphan tags → new graph nodes
             await self._surface_orphan_tags()
@@ -2281,7 +2261,7 @@ class Chloe:
                         llm.detect_tension,
                         beliefs_to_dicts(self.beliefs),
                         wants_to_dicts(self.wants),
-                        self.soul, self.affect.mood,
+                        self.identity, self.affect.mood,
                     )
                     if tension_data:
                         self.tensions = add_tension(
@@ -2315,6 +2295,7 @@ class Chloe:
                         self._remember(
                             f"something settled in, heavier than a mood — {self.arc.desc}.",
                             "feeling", [mood_name, "arc", "sustained"],
+                            salience=0.5,
                         )
                     elif self.arc and self.arc.active and arc_type == self.arc.type:
                         # Deepen the current arc slightly
@@ -2326,9 +2307,107 @@ class Chloe:
                             id=self.arc.id,
                         )
 
+            # B3: Recurring mental loops — tag clusters that keep resurfacing
+            self.recurring_loops = find_recurring_loops(self.memories)
+            if self.recurring_loops:
+                self._log(f"recurring loops: {self.recurring_loops[:3]}")
+            # If a loop has been active long enough, crystallise it as a tension
+            for _loop_tag in self.recurring_loops[:2]:
+                _existing = [t for t in self.tensions
+                             if _loop_tag in t.tags and not t.resolved]
+                if not _existing:
+                    # Only add tension when loop is very frequent (threshold > 8)
+                    _loop_count = sum(1 for m in self.memories
+                                      if _loop_tag in m.tags
+                                      and (time.time() - m.timestamp) < 48 * 3600)
+                    if _loop_count >= 10:
+                        self.tensions = add_tension(
+                            self.tensions,
+                            f"something about {_loop_tag} keeps coming back — unresolved",
+                            [_loop_tag, "loop", "recurring"],
+                        )
+                        self._log(f"loop→tension: {_loop_tag}")
+
         except Exception as e:
             self._log(f"reflect error: {e}")
         self._busy = False
+
+    async def _propose_and_update_traits(self):
+        """Haiku reviews recent experience and proposes new traits or reinforces existing ones.
+        Called as a background task from every _reflect() cycle."""
+        try:
+            now    = time.time()
+            window = 48 * 3600  # look at last 48h of experience
+            recent_mems = [m for m in self.memories if (now - m.timestamp) < window]
+            recent_mems.sort(key=lambda m: m.weight, reverse=True)
+
+            recent_affect = [r for r in self.affect_records
+                             if (now - r.timestamp) < window]
+
+            proposals = await asyncio.to_thread(
+                llm.propose_traits_from_experience,
+                recent_mems[:20], recent_affect[:10],
+                self.identity.traits,
+                self.identity.tendencies.biases,
+                self.affect.mood,
+            )
+
+            for prop in proposals:
+                name   = prop.get("name", "").strip()
+                weight = float(prop.get("weight_suggestion", 0.15))
+                eids   = prop.get("evidence_memory_ids", [])
+                if not name:
+                    continue
+
+                # Generate behavioral profile for new trait
+                profile = await asyncio.to_thread(
+                    llm.generate_behavioral_profile,
+                    name,
+                    self.identity.tendencies.biases,
+                )
+
+                # Check for contradiction with existing traits
+                from .identity import active_traits as _active_traits
+                existing = _active_traits(self.identity)
+                contradiction_data = None
+                if existing:
+                    contradiction_data = await asyncio.to_thread(
+                        llm.detect_trait_contradiction,
+                        name, existing,
+                    )
+
+                # Penalty if contradicts an existing trait
+                if contradiction_data:
+                    weight *= 0.6
+
+                self.identity, new_trait = add_trait(
+                    self.identity, name, weight, profile, eids,
+                )
+
+                if contradiction_data:
+                    existing_id = contradiction_data.get("contradicts_id")
+                    desc        = contradiction_data.get("description", "")
+                    if existing_id:
+                        self.identity, _ = add_contradiction(
+                            self.identity, existing_id, new_trait.id, desc,
+                        )
+                        # Surface as a tension
+                        self.tensions = add_tension(
+                            self.tensions,
+                            desc or f"something unresolved: both \"{name}\" and the opposite",
+                            ["identity", "contradiction", "tension"],
+                            intensity=0.55,
+                        )
+                        self._log(f'trait contradiction: {desc}')
+
+                self._log(f'new trait ({weight:.2f}): "{name}"')
+                self._remember(
+                    f"something settling in me: {name}",
+                    "reflection", ["identity", "trait"],
+                )
+
+        except Exception as e:
+            self._log(f"trait proposal error: {e}")
 
     async def _write_journal(self, today: str):
         """Write the end-of-day private journal entry."""
@@ -2340,7 +2419,7 @@ class Chloe:
             entry  = await asyncio.to_thread(
                 llm.generate_journal,
                 self.memory_index.query(_journal_q, self.memories, 8), self.affect.mood, self.vitals,
-                self.soul, self.weather, season, day_name(t.tm_wday),
+                self.identity, self.weather, season, day_name(t.tm_wday),
             )
             self._remember(entry["text"], "journal", entry.get("tags", []))
             self._log(f'journal ({today}): "{entry["text"]}…"')
@@ -2368,9 +2447,13 @@ class Chloe:
         self.db.sync_tensions(self.tensions)
         self.db.sync_persons(self.persons)
 
+        # Sync identity to SQLite
+        self.db.sync_traits(self.identity.traits)
+        self.db.sync_contradictions(self.identity.contradictions)
+
         # JSON holds only scalar/struct state that changes atomically
         data = {
-            "soul":     self.soul.to_dict(),
+            "soul":     self.soul.to_dict(),  # kept for backward compat; no longer drifts
             "vitals":   self.vitals.to_dict(),
             "activity": self.activity,
             "graph":    self.graph.to_dict(),
@@ -2379,12 +2462,13 @@ class Chloe:
             # Layer 3
             "affect":   self.affect.to_dict(),
             "creative": self.creative_outputs,
+            # Identity
+            "identity_snapshot":  self._identity_snapshot,
+            "identity_tendencies": self.identity.tendencies.to_dict(),
+            "identity_momentum":   self.identity.identity_momentum,
             # Layer 5
-            "soul_baseline":     self.soul_baseline,
             "last_journal_date": self.last_journal_date,
             "last_backup_date":  self.last_backup_date,
-            # Layer 11: Personality Crystallisation
-            "soul_momentum": self.soul_momentum,
             # Item 51
             "pending_outreach": self._pending_outreach,
             # Layer 13: arc (single complex object, changes atomically)
@@ -2429,7 +2513,7 @@ class Chloe:
             self.chat_history = self.db.load_chat(limit=500)
             self.ideas        = self.db.load_ideas()
 
-            self.soul          = Soul.from_dict(data["soul"])
+            self.soul          = Soul.from_dict(data.get("soul", {}))
             self.vitals        = Vitals.from_dict(data["vitals"])
             self.activity      = data.get("activity", "rest")
             self.graph         = Graph.from_dict(data.get("graph", {}))
@@ -2448,7 +2532,6 @@ class Chloe:
             _db_persons = self.db.load_persons()
             self.persons = _db_persons if _db_persons else default_persons()
             # Layer 5
-            self.soul_baseline     = data.get("soul_baseline", {})
             self.last_journal_date = data.get("last_journal_date", "")
             self.last_backup_date  = data.get("last_backup_date", "")
             self.log               = data.get("log", [])
@@ -2460,8 +2543,19 @@ class Chloe:
             self.goals          = self.db.load_goals()
             self.affect_records = self.db.load_affect_records()
             self.tensions       = self.db.load_tensions()
-            # Layer 11: Personality Crystallisation
-            self.soul_momentum = data.get("soul_momentum", {})
+            # Identity — traits and contradictions from SQLite, config from JSON
+            _traits         = self.db.load_traits()
+            _contradictions = self.db.load_contradictions()
+            from .identity import Tendencies
+            _tendencies = Tendencies.from_dict(data.get("identity_tendencies", {})) \
+                          if data.get("identity_tendencies") else Tendencies.default()
+            self.identity = Identity(
+                traits=_traits,
+                contradictions=_contradictions,
+                tendencies=_tendencies,
+                identity_momentum=data.get("identity_momentum", {}),
+            )
+            self._identity_snapshot = data.get("identity_snapshot", {})
             # Item 51
             self._pending_outreach = data.get("pending_outreach", [])
             _arc_data = data.get("arc")
@@ -2560,6 +2654,7 @@ class Chloe:
             self._remember(
                 f"reached out to {pname} and heard nothing back",
                 "feeling", ["loneliness", "silence", "waiting"],
+                salience=0.6,
             )
             self.affect_records = add_affect_record(
                 self.affect_records, "lonely",

@@ -1,10 +1,13 @@
 # chloe/soul.py
 # ─────────────────────────────────────────────────────────────
-# Chloe's personality.
+# [DEPRECATED] — MBTI soul system. Replaced by identity.py.
 #
-# Soul is four MBTI sliders, each 0.0–100.0.
-# They drift slowly based on what Chloe does.
-# They never lock in — she is always becoming.
+# This file is kept because heart.py (tick_vitals, auto_decide)
+# still uses soul_activity_affinity() with MBTI floats.
+# The Soul object in Chloe.__init__ is frozen at starting values
+# and no longer drifts. heart.py will be updated in a future session.
+#
+# DO NOT extend this file. New identity work goes into identity.py.
 # ─────────────────────────────────────────────────────────────
 
 import random

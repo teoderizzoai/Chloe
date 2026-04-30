@@ -20,7 +20,7 @@ Priority labels: **[NOW]** (prompt/config changes, no new infrastructure), **[SO
 
 ---
 
-### A1. Replace MBTI with a generative trait system **[BUILD]**
+### A1. Replace MBTI with a generative trait system ✓ DONE (Session 26)
 
 **What it closes:** Soul is currently four MBTI floats — fixed axes with predetermined poles. Chloe can only be more or less of eight predefined things. She cannot develop a personality dimension that wasn't anticipated at design time. Traits replace this entirely.
 
@@ -63,7 +63,7 @@ The profile is stored as text and injected into prompt layers at runtime.
 
 ---
 
-### A2. Trait weight dynamics: reinforcement, decay, contradiction **[BUILD]**
+### A2. Trait weight dynamics: reinforcement, decay, contradiction ✓ DONE (Session 26)
 
 **Reinforcement:** Weight increases when experience signal matches a trait's behavioral_profile (Haiku classification). Maximum per-event: +0.08. Larger for high-weight memories and recent events.
 
@@ -82,7 +82,7 @@ Example: core trait "keeps people at arm's length until trust is earned" at weig
 
 ---
 
-### A3. Trait injection into prompt layers **[BUILD]**
+### A3. Trait injection into prompt layers ✓ DONE (Session 26)
 
 **Replaces the MBTI type line.** Current: `Personality type right now: INFP`. New:
 
@@ -104,7 +104,7 @@ Something unresolved in you:
 
 ---
 
-### A4. Reflection writes back to identity **[BUILD]**
+### A4. Reflection writes back to identity ✓ DONE (Session 26)
 
 Every `_reflect()` cycle:
 1. Proposes trait additions or weight changes from recent experience signal.

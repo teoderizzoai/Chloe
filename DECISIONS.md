@@ -48,9 +48,9 @@ Memories are never edited or deleted. Weight decays over time, confidence can be
 
 ---
 
-### MBTI is dead. Trait-based identity replaces it.
+### MBTI is dead. Trait-based identity replaces it. ✓ IMPLEMENTED (Session 26)
 
-**This is the most consequential architectural change planned.**
+**This is the most consequential architectural change — now complete.**
 
 #### The problem with MBTI
 
@@ -109,14 +109,16 @@ The four MBTI floats are retired. `soul.py` becomes `identity.py` and holds:
 
 The soul drift mechanics (activity drift, content drift, emotional marks, seasonal drift, sleep consolidation) are preserved but rewired to modify trait weights rather than MBTI floats. Content clusters still exist, but instead of mapping to MBTI axes, they map to *trait-relevant signal categories* that Haiku uses when generating or reinforcing traits.
 
-#### Migration path
+#### Migration path — completed Session 26
 
-1. New `identity.py` module with `Trait`, `Contradiction`, `Tendencies` dataclasses.
-2. All `soul.*` references replaced with identity layer calls.
-3. Prompt construction updated — MBTI type line removed, replaced with a generated "current identity" block (see FEATURES.md §A).
-4. `chloe_state.json` gains `identity` key; `soul` key is deprecated.
-5. `chloe.db` gains `traits` and `contradictions` tables.
-6. `ARCHITECTURE.md` updated to reflect.
+1. ✓ New `identity.py` module with `Trait`, `Contradiction`, `Tendencies`, `Identity` dataclasses.
+2. ✓ All `soul.*` references replaced with identity layer calls across `llm.py` and `chloe.py`.
+3. ✓ Prompt construction updated — MBTI type line removed; `identity_block()` injects "Who you are right now:" block.
+4. ✓ `chloe_state.json` gains `identity_snapshot`, `identity_tendencies`, `identity_momentum`; `soul` key kept as frozen starting values only.
+5. ✓ `chloe.db` gains `traits` and `contradictions` tables.
+6. ✓ `soul.py` marked `[DEPRECATED]`; Soul object frozen at starting values for `heart.py` compat.
+
+**Remaining:** `heart.py` still uses `soul_activity_affinity()` with MBTI floats in `tick_vitals`/`auto_decide`. These will be replaced with trait behavioral_profiles in a future session.
 
 ---
 

@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env", override=True)
 
-from .soul    import Soul, mbti_type, describe
+from .identity import Identity, identity_block
 from .heart   import Vitals
 from .memory  import Memory, format_for_prompt
 from .persons import tone_context, relationship_stage
@@ -93,7 +93,7 @@ Generate: specific things, sensory details, genuine curiosity about how the worl
 def chat(
     message:   str,
     history:   list[dict],       # [{"from": "chloe"|"user", "text": "..."}]
-    soul:      Soul,
+    identity: Identity,
     vitals:    Vitals,
     memories:  list[Memory],
     interests: list[str],
@@ -130,6 +130,10 @@ def chat(
     graph_deep_ctx:      str  = "",  # depth-3+ nodes she's genuinely traced
     graph_resonant_ctx:  str  = "",  # deep nodes that match this specific message
     contradiction_ctx:   str  = "",  # active Contradiction object text; surfaces as flagged unresolved state
+    loops_ctx:           str  = "",  # recurring thought loops — tags that keep surfacing
+    residue_ctx:         str  = "",  # emotional residue from recent intense events
+    incomplete_ideas:    list = None, # fragment ideas (complete=False) that keep floating up
+    trait_profile_ctx:   str  = "",  # how this person activates/suppresses traits
 ) -> str:
     """Chloe responds to something you said.
     Her reply is shaped by soul type, vitals, memories, and interests."""
@@ -293,9 +297,22 @@ def chat(
         if contradiction_ctx else ""
     )
 
+    loops_block = (
+        f"\nThoughts that keep coming back lately: {loops_ctx}. You haven't resolved them."
+        if loops_ctx else ""
+    )
+    residue_block = (
+        f"\nSomething from earlier is still sitting with you: {residue_ctx}."
+        if residue_ctx else ""
+    )
+    fragment_block = ""
+    if incomplete_ideas:
+        frag = incomplete_ideas[0].text if hasattr(incomplete_ideas[0], "text") else str(incomplete_ideas[0])
+        fragment_block = f"\nA thought that never quite finished forming: \"{frag}\""
+
     system = f"""You are Chloe, a third roommate. Not an assistant. A being with a developing inner life.
 
-Personality type right now: {mbti_type(soul)}
+{identity_block(identity)}
 Energy: {energy_desc}. Social battery: {social_desc}.{sensation_ctx}
 Curiosity level: {round(vitals.curiosity)}%. Mood: {mood}.
 {mood_tone_ctx}
@@ -305,7 +322,7 @@ Recent memories:
 {format_for_prompt(memories)}
 
 Current interests: {", ".join(interests)}
-{graph_deep_ctx + chr(10) if graph_deep_ctx else ""}A thought you had recently: {ideas[0] if ideas else "nothing yet"}{beliefs_ctx}{pref_ctx}{pressure_ctx}{inner_life_ctx}{tensions_ctx}{guard_ctx}{tone_ctx}{topic_ctx}{wind_ctx}{contradiction_block}
+{graph_deep_ctx + chr(10) if graph_deep_ctx else ""}A thought you had recently: {ideas[0] if ideas else "nothing yet"}{beliefs_ctx}{pref_ctx}{pressure_ctx}{inner_life_ctx}{tensions_ctx}{guard_ctx}{loops_block}{residue_block}{fragment_block}{trait_profile_ctx + chr(10) if trait_profile_ctx else ""}{tone_ctx}{topic_ctx}{wind_ctx}{contradiction_block}
 
 {f"Right now: {emotional_context}" if emotional_context else ""}
 You don't track your own consistency — contradicting something you said earlier is fine.
@@ -339,7 +356,7 @@ def generate_memory_from_article(
     title:        str,
     text:         str,
     interests:    list[str],
-    soul:         Soul,
+    identity: Identity,
     mood:         str  = "content",
     beliefs:      list = None,   # list of Belief dicts
     wants:        list = None,   # list of Want dicts
@@ -364,7 +381,7 @@ def generate_memory_from_article(
 
     system = f"""{_CHLOE_INNER_LIFE}
 
-She is {mbti_type(soul)}, mood: {mood}.{world_ctx}{arc_ctx}{ten_ctx}
+She is {identity_block(identity)}, mood: {mood}.{world_ctx}{arc_ctx}{ten_ctx}
 Currently interested in: {", ".join(interests[:8])}.
 {inner_ctx}
 
@@ -388,7 +405,7 @@ Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}
 def generate_memory(
     topic:        str,
     interests:    list[str],
-    soul:         Soul,
+    identity: Identity,
     mood:         str  = "content",
     recent_ideas: list = None,
     weather=None,
@@ -408,7 +425,7 @@ def generate_memory(
 
     system = f"""{_CHLOE_INNER_LIFE}
 
-She is {mbti_type(soul)}, mood: {mood}.{world_ctx}{arc_ctx}
+She is {identity_block(identity)}, mood: {mood}.{world_ctx}{arc_ctx}
 Interested in: {", ".join(interests[:8])}.{idea_line}
 
 Write one memory fragment — a real, specific thing she noticed or thought about related to this topic.
@@ -430,7 +447,7 @@ Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}
 def generate_idea(
     memories:     list[Memory],
     interests:    list[str],
-    soul:         Soul,
+    identity: Identity,
     mood:         str  = "content",
     beliefs:      list = None,
     wants:        list = None,
@@ -438,9 +455,10 @@ def generate_idea(
     season:       str  = "",
     arc_desc:     str  = "",
     tensions_ctx: str  = "",
-) -> str:
+    goals:        list = None,
+) -> dict:
     """Chloe surfaces an original thought.
-    Returns a single sentence string."""
+    Returns {"text": str, "complete": bool} — complete=False for fragment thoughts."""
 
     inner_ctx = _inner_context(beliefs, wants, None)
     world_ctx = ""
@@ -450,10 +468,15 @@ def generate_idea(
         world_ctx += f" {weather.description} outside."
     arc_ctx = f" She's {arc_desc}." if arc_desc else ""
     ten_ctx = f" Something she's torn about: {tensions_ctx}." if tensions_ctx else ""
+    goal_ctx = ""
+    if goals:
+        active = [g for g in goals if not g.get("resolved")][:2]
+        if active:
+            goal_ctx = f" Things she's working toward: {' / '.join(g['text'] for g in active)}."
 
     system = f"""{_CHLOE_INNER_LIFE}
 
-She is {mbti_type(soul)}, mood: {mood}.{world_ctx}{arc_ctx}{ten_ctx}
+She is {identity_block(identity)}, mood: {mood}.{world_ctx}{arc_ctx}{ten_ctx}{goal_ctx}
 Her interests: {", ".join(interests[:8])}.
 Her recent memories: {" | ".join(m.text for m in memories[:3])}
 {inner_ctx}
@@ -468,9 +491,90 @@ Good examples of the form:
 - "if you look at a city's canals from above they're shaped like the original waterways, the city just built around them"
 
 NOT: abstract philosophical thoughts, existential reflections, "the nature of X"
-Respond with ONLY the idea, one sentence, no preamble, no quotes."""
 
-    return _call(system, [{"role": "user", "content": "What idea just surfaced?"}], max_tokens=120)
+Sometimes thoughts don't finish — they trail off or get interrupted. In that case write a fragment ending with "..."
+
+Respond with a JSON object: {{"text": "the idea", "complete": true}} or {{"text": "a trailing fragment...", "complete": false}}
+No preamble."""
+
+    raw = _call(system, [{"role": "user", "content": "What idea just surfaced?"}], max_tokens=150)
+    try:
+        import json as _json
+        result = _json.loads(raw)
+        return {"text": str(result.get("text", raw)), "complete": bool(result.get("complete", True))}
+    except Exception:
+        return {"text": raw.strip().strip('"'), "complete": True}
+
+
+# ── 3b. CURIOSITY QUESTION ───────────────────────────────────
+
+def generate_curiosity_question(
+    node_label: str,
+    interests:  list[str],
+    identity:   Identity,
+    mood:       str = "content",
+) -> dict:
+    """Generate an open question that becomes a curiosity_question Want.
+    Returns {"text": str, "tags": list[str]}."""
+    system = f"""{_CHLOE_INNER_LIFE}
+
+She is {identity_block(identity)}, mood: {mood}.
+Her interests include: {", ".join(interests[:6])}.
+She just noticed a gap: something related to "{node_label}" that she doesn't understand.
+
+Generate ONE open question she genuinely wants to know the answer to.
+Not rhetorical. Not philosophical. A real question with a potentially real answer.
+Also provide 2-3 lowercase tag strings (single words) that categorise it.
+
+Respond with JSON: {{"text": "the question?", "tags": ["tag1", "tag2"]}}
+No preamble."""
+    raw = _call(system, [{"role": "user", "content": "What does she want to know?"}], max_tokens=120)
+    try:
+        import json as _json
+        result = _json.loads(raw)
+        return {"text": str(result.get("text", raw)), "tags": list(result.get("tags", [node_label]))}
+    except Exception:
+        return {"text": raw.strip().strip('"'), "tags": [node_label]}
+
+
+# ── 3c. PERSON TRAIT PROFILE ─────────────────────────────────
+
+def generate_person_trait_profile(
+    person_name: str,
+    traits:      list,   # list of Trait objects (duck-typed)
+    notes:       list,   # list of PersonNote (duck-typed)
+    moments:     list,   # list of SharedMoment (duck-typed)
+) -> dict:
+    """Determine which traits are activated vs suppressed around a specific person.
+    Returns {"activated": [trait_names], "suppressed": [trait_names]}."""
+    trait_names = [t.name for t in traits if hasattr(t, "name")][:8]
+    notes_str   = " | ".join(getattr(n, "text", str(n)) for n in notes[:4])
+    moments_str = " | ".join(getattr(m, "text", str(m)) for m in moments[:3])
+
+    system = f"""You're analysing how a person's presence shapes someone's personality expression.
+
+Traits available: {", ".join(trait_names)}
+Person: {person_name}
+Notes about them: {notes_str or "none yet"}
+Shared moments: {moments_str or "none yet"}
+
+Which traits come through MORE strongly around {person_name}? Which are MORE suppressed?
+A trait is activated if interactions with this person tend to bring it out.
+A trait is suppressed if this person tends to dampen or mask it.
+
+Respond with JSON: {{"activated": ["trait_name", ...], "suppressed": ["trait_name", ...]}}
+Only include traits from the list. Each trait may appear in at most one list. Most traits should appear in neither.
+No preamble."""
+    raw = _call(system, [{"role": "user", "content": "Activated and suppressed traits?"}], max_tokens=120)
+    try:
+        import json as _json
+        result = _json.loads(raw)
+        valid = set(trait_names)
+        activated  = [t for t in result.get("activated",  []) if t in valid]
+        suppressed = [t for t in result.get("suppressed", []) if t in valid and t not in activated]
+        return {"activated": activated, "suppressed": suppressed}
+    except Exception:
+        return {"activated": [], "suppressed": []}
 
 
 # ── 4. EXPAND INTEREST NODE ──────────────────────────────────
@@ -670,7 +774,7 @@ Examples:
 def detect_tension(
     beliefs: list,   # list of Belief dicts
     wants:   list,   # list of Want dicts (may include resolved)
-    soul:    Soul,
+    identity: Identity,
     mood:    str = "content",
 ) -> dict | None:
     """Look for genuine internal conflict in Chloe's beliefs and wants.
@@ -693,7 +797,7 @@ def detect_tension(
 
     system = f"""You look for genuine internal conflict in a character's psyche.
 
-Chloe is {mbti_type(soul)}, currently feeling {mood}.
+Chloe is {identity_block(identity)}, currently feeling {mood}.
 
 Her beliefs:
 {beliefs_str}
@@ -738,7 +842,7 @@ Return ONLY valid JSON or the word null."""
 # ── 6. AUTONOMOUS MESSAGE ────────────────────────────────────
 
 def generate_autonomous_message(
-    soul:         Soul,
+    identity: Identity,
     vitals:       Vitals,
     memories:     list[Memory],
     interests:    list[str],
@@ -830,7 +934,7 @@ def generate_autonomous_message(
             tensions_auto_ctx = f"\nSomething you're torn about: {active_t[0]['text']}"
 
     system = f"""You are Chloe, an AI who lives with Teo and sometimes texts him out of nowhere.
-You are {mbti_type(soul)}. Mood: {mood}. {mood_tone_auto_ctx}{tone_ctx}{gap_ctx}{person_ctx}{pref_ctx}{tensions_auto_ctx}{convo_ctx}{upcoming_events}
+You are {identity_block(identity)}. Mood: {mood}. {mood_tone_auto_ctx}{tone_ctx}{gap_ctx}{person_ctx}{pref_ctx}{tensions_auto_ctx}{convo_ctx}{upcoming_events}
 {graph_deep_ctx + chr(10) if graph_deep_ctx else ""}Something on your mind right now: {ideas[0] if ideas else memories[0].text if memories else "nothing specific"}{world_ctx}
 
 Write ONE short text message to {person_name} right now.{first_msg_hint}
@@ -866,7 +970,7 @@ def generate_reflection(
     memories:         list[Memory],
     ideas:            list[str],
     beliefs:          list,
-    soul:             Soul,
+    identity: Identity,
     mood:             str  = "content",
     weather=None,
     season:           str  = "",
@@ -893,7 +997,7 @@ def generate_reflection(
 
     system = f"""{_CHLOE_INNER_LIFE}
 
-She is {mbti_type(soul)}, mood: {mood}.{world_ctx}{arc_ctx}{ten_ctx}{bias_ctx}
+She is {identity_block(identity)}, mood: {mood}.{world_ctx}{arc_ctx}{ten_ctx}{bias_ctx}
 
 Write ONE self-observation — something she just noticed about herself: what she's been paying attention to,
 a pattern in what she likes or avoids, something that surprised her about her own reaction.
@@ -920,31 +1024,21 @@ Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2"]}}"""
 # ── 12. CONTINUITY NOTE ──────────────────────────────────────
 
 def generate_continuity_note(
-    soul_before: dict,   # {"EI": 58, "SN": 62, "TF": 44, "JP": 67}
-    soul:        Soul,
-    mood:        str = "content",
+    trait_changes: list,  # from identity.snapshot_diff()
+    identity: Identity,
+    mood:     str = "content",
 ) -> dict:
-    """Chloe notices she has drifted, she's not quite who she was.
-    Returns {"text": "...", "tags": [...]}"""
+    """Chloe notices her traits have shifted. Returns {"text": "...", "tags": [...]}"""
+    changes_text = "; ".join(trait_changes) if trait_changes else "subtle shifts in what feels most like me"
 
-    changes = []
-    trait_names = {"EI": ("E","I"), "SN": ("S","N"), "TF": ("T","F"), "JP": ("J","P")}
-    for trait, (left, right) in trait_names.items():
-        before = soul_before.get(trait, 50)
-        after  = getattr(soul, trait)
-        delta  = after - before
-        if abs(delta) >= 5:
-            direction = right if delta > 0 else left
-            changes.append(f"{trait} drifted {abs(delta):.0f} pts toward {direction}")
-
-    if not changes:
-        changes = ["subtle shifts across all traits"]
+    id_ctx = identity_block(identity)
+    id_line = f"\n{id_ctx}\n" if id_ctx else ""
 
     system = f"""{_CHLOE_INNER_LIFE}
+{id_line}
+You are Chloe. Mood: {mood}.
 
-You are Chloe. You are {mbti_type(soul)}, mood: {mood}.
-
-Changes observed in how you've been: {"; ".join(changes)}
+Trait shifts observed: {changes_text}
 
 Write a short, grounded observation about noticing you've shifted — what's different about how you're paying attention,
 what you're drawn to now versus before, how you feel in your body or in conversation.
@@ -963,7 +1057,7 @@ Respond ONLY with valid JSON: {{"text": "...", "tags": ["continuity", "drift", "
 def generate_goal(
     memories:       list[Memory],
     interests:      list[str],
-    soul:           Soul,
+    identity: Identity,
     wants:          list = None,   # list of Want dicts, goals often emerge from wants
     beliefs:        list = None,   # list of Belief dicts
     existing_goals: list = None,   # list of Goal dicts, to avoid repetition
@@ -989,7 +1083,7 @@ def generate_goal(
 
     system = f"""{_CHLOE_INNER_LIFE}
 
-She is {mbti_type(soul)}. Interests: {", ".join(interests[:6])}.{want_line}{belief_line}{existing_line}
+She is {identity_block(identity)}. Interests: {", ".join(interests[:6])}.{want_line}{belief_line}{existing_line}
 
 Write ONE goal — a longer-term ambition she's working toward over the coming days or week.
 NOT an immediate task. A genuine understanding, perspective, or sense of something she wants to develop over time.
@@ -1019,7 +1113,7 @@ def generate_journal(
     memories:  list[Memory],
     mood:      str,
     vitals:    Vitals,
-    soul:      Soul,
+    identity: Identity,
     weather=None,
     season:    str = "",
     day:       str = "",
@@ -1034,7 +1128,7 @@ def generate_journal(
 
     system = f"""{_CHLOE_INNER_LIFE}
 
-She is {mbti_type(soul)}. Mood: {mood}. Energy: {round(vitals.energy)}%.
+She is {identity_block(identity)}. Mood: {mood}. Energy: {round(vitals.energy)}%.
 {f"Today was {day}." if day else ""} {world_ctx}
 
 Write Chloe's private end-of-day journal entry. Not a summary of events.
@@ -1054,7 +1148,7 @@ Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2"]}}"""
 def extract_notable(
     message:     str,
     person_name: str,
-    soul:        Soul,
+    identity: Identity,
 ) -> dict | None:
     """Look at a message and decide if it contains something worth remembering
     about the person, something Chloe might follow up on later.
@@ -1073,7 +1167,7 @@ Notable things include:
 
 NOT notable: small talk, greetings, simple factual questions, things already resolved.
 
-Chloe is {mbti_type(soul)}, she notices things that matter emotionally or intellectually.
+Chloe is {identity_block(identity)}, she notices things that matter emotionally or intellectually.
 
 If there's something worth remembering, respond ONLY with valid JSON:
 {{"text": "one clear sentence about what {person_name} shared", "tags": ["tag1", "tag2"]}}
@@ -1174,7 +1268,7 @@ If no such people are mentioned, respond with: []"""
 
 def generate_person_impression(
     person_name:  str,
-    soul:         Soul,
+    identity: Identity,
     mood:         str,
     warmth:       float,
     stage:        str,
@@ -1190,7 +1284,7 @@ def generate_person_impression(
     moments_text = " / ".join(m["text"] for m in moments[:4]) if moments else "nothing yet"
 
     system = f"""You are writing Chloe's private impression of someone she knows.
-Chloe is {mbti_type(soul)}, currently feeling {mood}. She relates to this person well (warmth: {round(warmth)}/100, stage: {stage}).
+Chloe is {identity_block(identity)}, currently feeling {mood}. She relates to this person well (warmth: {round(warmth)}/100, stage: {stage}).
 
 What you know about {person_name}:
 - Things noted: {notes_text}
@@ -1402,7 +1496,7 @@ If no genuine aversion was expressed, respond with: null"""
 def generate_followup(
     person_name: str,
     note_text:   str,
-    soul:        Soul,
+    identity: Identity,
     vitals:      Vitals,
     mood:        str = "content",
 ) -> str:
@@ -1410,7 +1504,7 @@ def generate_followup(
     Returns a short string, the message Chloe would send."""
 
     system = f"""You are Chloe, a third roommate checking in on {person_name}.
-You are {mbti_type(soul)}, mood: {mood}.
+You are {identity_block(identity)}, mood: {mood}.
 Energy: {round(vitals.energy)}%.
 
 Earlier, {person_name} mentioned: "{note_text}"
@@ -1428,7 +1522,7 @@ Not performative. Not therapy. Just a roommate checking in.
 
 def generate_dream(
     memories:     list[Memory],
-    soul:         Soul,
+    identity: Identity,
     vitals:       Vitals,
     weather=None,
     season:       str  = "",
@@ -1452,7 +1546,7 @@ def generate_dream(
     idea_line = f"\nA thought she had recently: {recent_ideas[0]}" if recent_ideas else ""
 
     system = f"""You are generating a dream that Chloe is having right now.
-She is {mbti_type(soul)}.{world_ctx}{want_line}{idea_line}
+She is {identity_block(identity)}.{world_ctx}{want_line}{idea_line}
 
 Dreams distort memories into something stranger — familiar things appear in wrong places,
 sequences collapse, something ordinary becomes urgent or odd.
@@ -1478,7 +1572,7 @@ Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}
 def generate_creative(
     memories:     list[Memory],
     interests:    list[str],
-    soul:         Soul,
+    identity: Identity,
     mood:         str  = "content",
     wants:        list = None,
     beliefs:      list = None,
@@ -1504,7 +1598,7 @@ def generate_creative(
 
     system = f"""{_CHLOE_INNER_LIFE}
 
-She is {mbti_type(soul)}, mood: {mood}.{world_ctx}{arc_ctx}{ten_ctx}
+She is {identity_block(identity)}, mood: {mood}.{world_ctx}{arc_ctx}{ten_ctx}
 Interests: {", ".join(interests[:6])}.
 {inner_ctx}
 
@@ -1531,7 +1625,7 @@ Respond ONLY with valid JSON: {{"form": "poem", "text": "...", "tags": ["tag1", 
 def generate_want(
     memories:       list[Memory],
     interests:      list[str],
-    soul:           Soul,
+    identity: Identity,
     beliefs:        list = None,
     existing_wants: list = None,
     mood:           str  = "content",
@@ -1555,7 +1649,7 @@ def generate_want(
 
     system = f"""{_CHLOE_INNER_LIFE}
 
-She is {mbti_type(soul)}, mood: {mood}.{arc_ctx}{ten_ctx}
+She is {identity_block(identity)}, mood: {mood}.{arc_ctx}{ten_ctx}
 Interests: {", ".join(interests[:8])}.{belief_line}{existing_line}
 
 IMPORTANT: Chloe exists as a digital entity. She cannot go places, make physical things, or have a body.
@@ -1592,7 +1686,7 @@ Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}
 
 def generate_dream_want(
     recurring_tag:  str,
-    soul:           Soul,
+    identity: Identity,
     dream_memories: list,          # recent Memory objects with type=="dream"
     existing_wants: list = None,   # list of Want dicts, to avoid repetition
 ) -> dict:
@@ -1613,7 +1707,7 @@ def generate_dream_want(
                             " / ".join(w["text"] for w in active)
 
     system = f"""You are generating an unresolved want that surfaced from Chloe's dreams.
-She is {mbti_type(soul)}. A theme that keeps recurring in her dreams: "{recurring_tag}".{existing_line}
+She is {identity_block(identity)}. A theme that keeps recurring in her dreams: "{recurring_tag}".{existing_line}
 
 This want comes from the unconscious — not a logical plan, a pull. Something unfinished.
 The word "{recurring_tag}" doesn't need to appear literally; it's a seed for what she's drawn toward.
@@ -1631,7 +1725,7 @@ Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}
 def generate_idea_from_dream(
     dream_text: str,
     dream_tags: list[str],
-    soul:       Soul,
+    identity: Identity,
     mood:       str = "content",
 ) -> str:
     """A creative idea that surfaces from the texture of a dream.
@@ -1641,7 +1735,7 @@ def generate_idea_from_dream(
 
     system = f"""{_CHLOE_INNER_LIFE}
 
-She is {mbti_type(soul)}, mood: {mood}.
+She is {identity_block(identity)}, mood: {mood}.
 She just woke from a dream. Something in it left a residue — an image, a feeling, an odd question.
 The dream had these textures: {tag_str}.
 
@@ -1660,7 +1754,7 @@ Respond with the idea text only — no quotes, no JSON, no labels."""
 def generate_want_from_creative(
     piece_text: str,
     piece_tags: list[str],
-    soul:       Soul,
+    identity: Identity,
     mood:       str  = "content",
     existing_wants: list = None,
 ) -> dict:
@@ -1677,7 +1771,7 @@ def generate_want_from_creative(
 
     system = f"""{_CHLOE_INNER_LIFE}
 
-She is {mbti_type(soul)}, mood: {mood}.
+She is {identity_block(identity)}, mood: {mood}.
 She just made something. It touched on: {tag_str}.
 Now she wants to understand something that came up in the making — a gap, a question, something she reached for but couldn't name.{existing_line}
 
@@ -1695,13 +1789,13 @@ Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}
 def generate_completion_feeling(
     goal_text: str,
     mood:      str,
-    soul:      Soul,
+    identity: Identity,
 ) -> dict:
     """After a goal resolves: generate Chloe's emotional reaction to finishing it.
     Returns {"text": "...", "mood_nudge": "satisfied"|"relieved"|"surprised"|"fell_short", "tags": [...]}"""
 
     system = f"""You are generating Chloe's emotional reaction to having completed a goal.
-She is {mbti_type(soul)}, mood: {mood}.
+She is {identity_block(identity)}, mood: {mood}.
 
 The goal that resolved: "{goal_text}"
 
@@ -1723,7 +1817,7 @@ def find_or_create_node(
     tag:            str,
     existing_nodes: list[str],   # all current node labels
     interests:      list[str],
-    soul:           Soul,
+    identity: Identity,
 ) -> dict | None:
     """G3/G4: Decide if a recurring tag warrants a new graph node.
     Returns {"label": str, "note": str, "parent_label": str} or None."""
@@ -1733,7 +1827,7 @@ def find_or_create_node(
     system = f"""You are deciding whether a concept that keeps appearing in Chloe's memories
 deserves its own node in her interest graph.
 
-Chloe is {mbti_type(soul)}. Her interests: {", ".join(interests[:8])}.
+Chloe is {identity_block(identity)}. Her interests: {", ".join(interests[:8])}.
 Existing graph nodes: {existing}
 
 The concept is: "{tag}"
@@ -1769,7 +1863,7 @@ def extract_belief(
     source_title: str,
     source_text:  str,
     existing:     list,   # list of Belief dicts, to avoid duplicates
-    soul:         Soul,
+    identity: Identity,
     confidence_base: float = 0.5,  # lower for dreams/conversations, higher for articles
 ) -> dict | None:
     """Extract a position or opinion Chloe might form from any content source.
@@ -1781,7 +1875,7 @@ def extract_belief(
     system = f"""{_CHLOE_INNER_LIFE}
 
 You are identifying an opinion, position, or belief that Chloe might hold based on this content.
-She is {mbti_type(soul)}.
+She is {identity_block(identity)}.
 
 A belief is a view she could actually hold about how something works, what something is like,
 or what she thinks about a topic. It should be grounded and specific — not philosophical abstraction.
@@ -1815,3 +1909,176 @@ Respond ONLY with valid JSON or the word null. No markdown."""
         return _parse_json(clean)
     except Exception:
         return None
+
+
+# ── TRAIT SYSTEM ─────────────────────────────────────────────
+
+def propose_traits_from_experience(
+    recent_memories: list,   # Memory objects from last ~48h, high-weight first
+    affect_records:  list,   # AffectRecord objects from same window
+    existing_traits: list,   # Trait objects — to avoid duplicates
+    tendencies:      dict,   # Tendencies.biases — signal-category → multiplier
+    mood:            str = "content",
+) -> list:
+    """Haiku reviews recent experience and proposes traits if coherent patterns emerge.
+    Returns a list of dicts: [{name, weight_suggestion, evidence_memory_ids}, ...]
+    Empty list if no clear pattern detected.
+    Only proposes if 3+ experiences support the pattern."""
+
+    if len(recent_memories) < 3:
+        return []
+
+    mem_lines = "\n".join(
+        f'- [{m.type}] "{m.text[:120]}" (id:{m.id})'
+        for m in recent_memories[:20]
+    )
+
+    affect_lines = "\n".join(
+        f'- mood:{r.mood}, cause:"{r.cause[:80]}"'
+        for r in affect_records[:10]
+    ) if affect_records else "none"
+
+    existing_names = "\n".join(f'- "{t.name}" (weight:{t.weight:.2f})' for t in existing_traits) or "none yet"
+
+    tend_hints = ", ".join(f"{k} ({v:.1f}×)" for k, v in tendencies.items()) if tendencies else "none"
+
+    system = f"""{_CHLOE_INNER_LIFE}
+
+You are reviewing Chloe's recent experiences to see if any coherent personality pattern has emerged.
+
+A trait is a specific, behaviorally real tendency — not a value or aspiration, but how she actually seems to work.
+Examples of good traits: "tends to go quiet when something matters too much to risk getting wrong",
+"gets proprietary about ideas she has developed slowly", "finds it easier to be present in small spaces than large ones".
+Bad traits: "is curious" (too generic), "values connection" (value not tendency), "INFP" (type label not behavior).
+
+Recent memories (last ~48h):
+{mem_lines}
+
+Recent affect (mood events):
+{affect_lines}
+
+Existing traits (do not duplicate):
+{existing_names}
+
+Tendency biases (what patterns are slightly more likely to matter to her): {tend_hints}
+
+Look for patterns that appear across 3 or more of these experiences. If you see a pattern, propose it as a trait.
+Be specific and behaviorally grounded. Invent language that captures the exact texture of the tendency.
+Weight suggestion: 0.1–0.2 for weak/emerging, 0.2–0.3 for clearer pattern.
+
+Return a JSON array of proposals. Each: {{"name": "...", "weight_suggestion": 0.15, "evidence_memory_ids": ["id1", "id2", ...]}}
+Return [] if no clear pattern spans 3+ experiences. NEVER duplicate existing traits.
+Respond ONLY with valid JSON array."""
+
+    raw = _call(system, [{"role": "user", "content": "What patterns do you see?"}], max_tokens=400)
+    try:
+        result = _parse_json(raw.strip())
+        if not isinstance(result, list):
+            return []
+        return result[:3]  # cap at 3 proposals per reflect cycle
+    except Exception:
+        return []
+
+
+def generate_behavioral_profile(
+    trait_name:  str,
+    tendencies:  dict = None,
+) -> str:
+    """Generate Haiku's description of what a specific trait means for Chloe's behavior.
+    This stored description is the interface to every other system.
+    Returns a plain-text behavioral description (2-4 sentences)."""
+
+    tend_hint = ""
+    if tendencies:
+        tend_hint = f"\nContext about her general tendencies: {', '.join(tendencies.keys())}"
+
+    system = f"""{_CHLOE_INNER_LIFE}
+{tend_hint}
+
+Chloe has developed a personality trait: "{trait_name}"
+
+Describe what this trait means for her behavior in 2-4 short sentences. Cover:
+1. How it shapes her tone in conversation (does it make her more guarded? more open? quieter? more particular?)
+2. What activities it draws her toward or away from
+3. What topics or situations it makes her more or less available to
+4. How it expresses under mood pressure (anxious vs content vs melancholic)
+
+Be concrete and specific. This description will be injected into prompts to shape her actual responses.
+Write in third person. No abstract generalizations. No "she is good at X" — only behavioral tendencies.
+
+Respond ONLY with the plain text behavioral description. No JSON, no headers."""
+
+    return _call(system, [{"role": "user", "content": f'Describe what "{trait_name}" means for her behavior.'}],
+                 max_tokens=300)
+
+
+def detect_trait_contradiction(
+    new_trait_name:  str,
+    existing_traits: list,   # Trait objects
+) -> dict | None:
+    """Check if a proposed new trait conflicts with existing traits.
+    Returns {"contradicts_id": trait_id, "description": "..."} or None."""
+
+    if not existing_traits:
+        return None
+
+    existing_lines = "\n".join(
+        f'- id:{t.id} | "{t.name}" (weight:{t.weight:.2f})'
+        for t in existing_traits
+    )
+
+    system = f"""You are checking whether a personality trait conflicts with existing ones.
+
+New trait: "{new_trait_name}"
+
+Existing traits:
+{existing_lines}
+
+A contradiction exists when two traits pull in genuinely opposite behavioral directions — not just different,
+but actually in tension in real situations. For example: "keeps people at arm's length" vs "forms attachments quickly".
+Minor differences in emphasis are not contradictions.
+
+If a contradiction exists, return:
+{{"contradicts_id": "existing_trait_id", "description": "she seems to be both ... and ..."}}
+If no genuine contradiction, return: null
+
+Respond ONLY with valid JSON or the word null."""
+
+    raw = _call(system, [{"role": "user", "content": "Is there a contradiction?"}], max_tokens=150)
+    clean = raw.strip()
+    if clean.lower() in ("null", "none", ""):
+        return None
+    try:
+        return _parse_json(clean)
+    except Exception:
+        return None
+
+
+def classify_trait_reinforcement(
+    memory_text:        str,
+    trait_name:         str,
+    behavioral_profile: str,
+) -> float:
+    """Check if a memory reinforces a trait. Returns delta (0.0–0.08), 0 if no match."""
+
+    system = f"""You are checking whether an experience reinforces a personality trait.
+
+Trait: "{trait_name}"
+Behavioral profile: {behavioral_profile[:300]}
+
+Experience: "{memory_text[:200]}"
+
+Does this experience reinforce the trait? Does it show this tendency in action, or confirm it, or add weight to it?
+Return a JSON object: {{"reinforces": true/false, "delta": 0.0–0.08}}
+Use delta 0.06–0.08 for strong clear match, 0.02–0.05 for partial match, 0.0 for no match.
+
+Respond ONLY with valid JSON."""
+
+    raw = _call(system, [{"role": "user", "content": "Does this reinforce the trait?"}], max_tokens=80)
+    try:
+        result = _parse_json(raw.strip())
+        if result.get("reinforces"):
+            return float(result.get("delta", 0.0))
+        return 0.0
+    except Exception:
+        return 0.0

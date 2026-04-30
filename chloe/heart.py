@@ -9,7 +9,10 @@
 
 import random
 from dataclasses import dataclass, asdict, field
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .identity import Identity
 
 
 # ── CIRCADIAN RHYTHM ─────────────────────────────────────────
@@ -222,47 +225,13 @@ MOOD_ACTIVITY_AFFINITY: dict[str, list[str]] = {
 }
 
 
-# ── SOUL → ACTIVITY AFFINITY (item 58) ──────────────────────
-# How well a given activity aligns with current soul traits.
-# Returns a probability multiplier (0.5–1.5) applied to soft-drift
-# thresholds in auto_decide — higher = more likely to drift toward
-# that activity. Hard gates (energy/sleep) are never modulated.
-#
-# Trait conventions: EI 0=E 100=I, SN 0=S 100=N, TF 0=T 100=F, JP 0=J 100=P
+# ── IDENTITY → ACTIVITY AFFINITY ────────────────────────────
+# Delegated to identity.trait_activity_affinity().
+# Kept here as a thin wrapper so call sites inside this file stay local.
 
-def soul_activity_affinity(soul, activity_id: str) -> float:
-    """Return a probability multiplier for drifting toward activity_id.
-    Neutral soul (all traits = 50) → 1.0. Strongly aligned → up to 1.5.
-    Misaligned → down to 0.5."""
-    ei = soul.EI / 100.0   # 0=full E, 1=full I
-    sn = soul.SN / 100.0   # 0=full S, 1=full N
-    tf = soul.TF / 100.0   # 0=full T, 1=full F
-    jp = soul.JP / 100.0   # 0=full J, 1=full P
-
-    if activity_id == "read":
-        # N (intuitive) and T (thinking) are drawn to reading
-        score = 0.5 * sn + 0.5 * (1.0 - tf)
-    elif activity_id == "think":
-        # I (introspective) + N (abstract) + T (analytical) → deep internal work
-        score = 0.3 * ei + 0.4 * sn + 0.3 * (1.0 - tf)
-    elif activity_id == "create":
-        # N (imaginative) + P (open-ended) + slight E (expressive output)
-        score = 0.4 * sn + 0.4 * jp + 0.2 * (1.0 - ei)
-    elif activity_id == "message":
-        # E (social energy) + F (relational warmth)
-        score = 0.5 * (1.0 - ei) + 0.5 * tf
-    elif activity_id == "rest":
-        # I (recharges alone) + J (structured stillness)
-        score = 0.5 * ei + 0.5 * (1.0 - jp)
-    elif activity_id in ("sleep", "dream"):
-        # I (withdraws naturally) + F (emotional processing in dreams)
-        score = 0.5 * ei + 0.5 * tf
-    else:
-        return 1.0   # unknown activity — no modulation
-
-    # score is 0.0–1.0 (neutral soul → ~0.5)
-    # map to multiplier range 0.5–1.5  (score=0.5 → 1.0 neutral)
-    return 0.5 + score * 1.0
+def _identity_activity_affinity(identity: "Identity", activity_id: str) -> float:
+    from .identity import trait_activity_affinity
+    return trait_activity_affinity(identity, activity_id)
 
 
 # ── VITALS ───────────────────────────────────────────────────
@@ -317,19 +286,13 @@ _MOOD_SOCIAL_MODIFIER: dict[str, float] = {
 
 
 def tick_vitals(vitals: Vitals, activity_id: str, hour: int = 12,
-                weekday: int = 2, soul=None, mood: str = "") -> Vitals:
+                weekday: int = 2, identity=None, mood: str = "") -> Vitals:
     """Advance vitals one tick based on activity, time of day, day of week, and personality.
 
-    Soul traits shape drain/recovery rates:
-    - EI (0=E, 100=I):
-        Introverts: messaging drains social more, rest/sleep recovers social more
-        Extroverts: messaging barely drains social, but alone-time gives less recovery
-    - SN (0=S, 100=N):
-        Intuitive (high): curiosity and inspiration build faster from reading/dreaming
-        Sensing (low):    more stable curiosity; less jump from abstract content
-    - JP (0=J, 100=P):
-        Perceiving (high): focus is spiky — drains faster but inspiration spikes higher
-        Judging (low):     focus is disciplined — drains slower, rebuilds reliably
+    Identity trait scalars shape drain/recovery rates:
+    - ei (introversion): messaging drains social more; rest/sleep recovers social more
+    - sn (intuitive):    curiosity and inspiration build faster from reading/dreaming
+    - jp (perceiving):   focus is spiky — drains faster but inspiration spikes higher
     """
     act = ACTIVITIES.get(activity_id)
     if not act:
@@ -338,10 +301,12 @@ def tick_vitals(vitals: Vitals, activity_id: str, hour: int = 12,
     circ_e, circ_s = circadian_delta(hour)
     day_e,  day_s  = day_delta(weekday)
 
-    # ── Extract personality scalars ───────────────────────────
-    ei  = (soul.EI  / 100.0) if soul else 0.5   # 0=full E, 1=full I
-    sn  = (soul.SN  / 100.0) if soul else 0.5   # 0=full S, 1=full N
-    jp  = (soul.JP  / 100.0) if soul else 0.5   # 0=full J, 1=full P
+    # ── Extract personality scalars from identity ─────────────
+    if identity is not None:
+        from .identity import trait_personality_scalars
+        ei, sn, _tf, jp = trait_personality_scalars(identity)
+    else:
+        ei, sn, jp = 0.5, 0.5, 0.5
 
     # ── Social battery — personality is the main differentiator ──
     base_social = act.social_per_tick
@@ -404,15 +369,15 @@ def tick_vitals(vitals: Vitals, activity_id: str, hour: int = 12,
 
 
 def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
-                mood: str = "", soul=None) -> Optional[str]:
+                mood: str = "", identity=None) -> Optional[str]:
     """Chloe self-regulates. Returns a new activity id if she should switch,
     or None if she's fine to continue.
 
     Hard gates fire immediately when thresholds are crossed.
     Soft drifts use probability rolls — the longer she stays, the more
     likely she'll shift. Mood colours the direction.
-    Soul affinity (item 58) multiplies soft-drift thresholds so that
-    the personality increasingly reinforces its own natural pulls.
+    Identity affinity multiplies soft-drift thresholds so personality
+    reinforces its own natural pulls.
     """
     e   = vitals.energy
     s   = vitals.social_battery
@@ -421,9 +386,9 @@ def auto_decide(vitals: Vitals, current_activity: str, hour: int = 12,
     ins = vitals.inspiration
     r   = random.random   # shorthand
 
-    # Soul affinity multiplier — applied to soft-drift probability thresholds only.
+    # Identity affinity multiplier — applied to soft-drift probability thresholds only.
     # Hard gates and safety-valve exits are never modulated.
-    _aff = (lambda act: soul_activity_affinity(soul, act)) if soul else (lambda act: 1.0)
+    _aff = (lambda act: _identity_activity_affinity(identity, act)) if identity is not None else (lambda act: 1.0)
 
     daytime  = SLEEP_END <= hour < SLEEP_START      # 07:00–23:00
     morning  = SLEEP_END <= hour <= SLEEP_END + 2   # 07:00–09:00

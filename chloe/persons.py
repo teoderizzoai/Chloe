@@ -142,6 +142,8 @@ class Person:
     last_contact:       Optional[float] = None   # unix timestamp
     # Item 25 — hour (str "0"–"23") → response count
     response_hours:     dict        = field(default_factory=dict)
+    # D1 — which of Chloe's traits are activated/suppressed around this person
+    trait_profile:      dict        = field(default_factory=dict)  # {"activated": [...], "suppressed": [...]}
 
     def to_dict(self) -> dict:
         return {
@@ -160,6 +162,7 @@ class Person:
             "conversation_count": self.conversation_count,
             "last_contact":       self.last_contact,
             "response_hours":     self.response_hours,
+            "trait_profile":      self.trait_profile,
         }
 
     @classmethod
@@ -180,6 +183,7 @@ class Person:
             conversation_count=int(d.get("conversation_count", 0)),
             last_contact=d.get("last_contact"),
             response_hours=d.get("response_hours", {}),
+            trait_profile=d.get("trait_profile", {}),
         )
 
 
@@ -832,6 +836,19 @@ def format_cross_person_context(persons: list[Person], current_person_id: str,
              for name, text in hits[:2]]  # max 2, never overwhelming
     return ("\nYour other roommate(s) have touched on this too — "
             "you can reference it naturally if it fits:\n" + "\n".join(lines))
+
+
+def format_trait_profile_context(person: Person) -> str:
+    """D1: inject which of Chloe's traits are more/less active around this person."""
+    profile = person.trait_profile
+    if not profile:
+        return ""
+    lines = []
+    for name in (profile.get("activated") or [])[:2]:
+        lines.append(f'Around {person.name}, "{name}" comes through more strongly.')
+    for name in (profile.get("suppressed") or [])[:1]:
+        lines.append(f'Around {person.name}, you tend to be less "{name}".')
+    return ("\n" + " ".join(lines)) if lines else ""
 
 
 def format_shared_moments(moments: list[SharedMoment], max_items: int = 5) -> str:

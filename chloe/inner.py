@@ -39,6 +39,7 @@ class Want:
     id:             str       = field(default_factory=lambda: str(uuid.uuid4())[:8])
     pressure:       float     = 0.0   # 0–1, urgency of this unmet want
     pressure_since: float     = 0.0   # timestamp when pressure first hit 0.9 (for frustration residue)
+    subtype:        str       = "want"  # "want" | "curiosity_question"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -52,15 +53,16 @@ class Want:
             id=d.get("id", str(uuid.uuid4())[:8]),
             pressure=float(d.get("pressure", 0.0)),
             pressure_since=float(d.get("pressure_since", 0.0)),
+            subtype=d.get("subtype", "want"),
         )
 
 
-def add_want(wants: list[Want], text: str, tags: list[str]) -> list[Want]:
+def add_want(wants: list[Want], text: str, tags: list[str], subtype: str = "want") -> list[Want]:
     """Add a want unless already at the active limit."""
     active = sum(1 for w in wants if not w.resolved)
     if active >= MAX_WANTS:
         return wants
-    return [Want(text=text, tags=tags), *wants]
+    return [Want(text=text, tags=tags, subtype=subtype), *wants]
 
 
 def resolve_wants(wants: list[Want], new_tags: list[str]) -> list[Want]:
@@ -314,6 +316,8 @@ class AffectRecord:
     tags:      list[str] = field(default_factory=list)
     timestamp: float     = field(default_factory=time.time)
     id:        str       = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    intensity: float     = 0.0   # emotional intensity at time of recording (0–1)
+    residue:   float     = 0.0   # decaying emotional mass; set from intensity when > 0.7
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -325,14 +329,39 @@ class AffectRecord:
             tags=d.get("tags", []),
             timestamp=float(d.get("timestamp", time.time())),
             id=d.get("id", str(uuid.uuid4())[:8]),
+            intensity=float(d.get("intensity", 0.0)),
+            residue=float(d.get("residue", 0.0)),
         )
 
 
 def add_affect_record(
-    records: list[AffectRecord], mood: str, cause: str, tags: list[str]
+    records: list[AffectRecord], mood: str, cause: str, tags: list[str],
+    intensity: float = 0.0,
 ) -> list[AffectRecord]:
-    r = AffectRecord(mood=mood, cause=cause, tags=tags)
+    residue = intensity if intensity > 0.7 else 0.0
+    r = AffectRecord(mood=mood, cause=cause, tags=tags, intensity=intensity, residue=residue)
     return [r, *records]  # no cap — SQLite is unbounded
+
+
+def decay_affect_residue(records: list[AffectRecord]) -> list[AffectRecord]:
+    """Per AGE-tick residue decay (~48h half-life at 1 tick/min)."""
+    _RATE = 0.99976   # 0.5^(1/2880) ≈ 0.99976
+    result = []
+    for r in records:
+        if r.residue > 0.001:
+            result.append(AffectRecord(
+                mood=r.mood, cause=r.cause, tags=r.tags,
+                timestamp=r.timestamp, id=r.id,
+                intensity=r.intensity, residue=r.residue * _RATE,
+            ))
+        else:
+            result.append(r)
+    return result
+
+
+def total_residue(records: list[AffectRecord]) -> float:
+    """Sum of all active residue values — contributes to mood baseline."""
+    return sum(r.residue for r in records)
 
 
 def affect_records_to_dicts(records: list[AffectRecord]) -> list[dict]:
@@ -551,6 +580,57 @@ _FEAR_PRESSURE_RATE    = 0.008   # hits 0.9 in ~112 ticks (~2 h)
 _GOAL_PRESSURE_RATE    = 0.004   # hits 0.9 in ~225 ticks (~3.75 h)
 _TENSION_PRESSURE_RATE = 0.010   # hits 0.9 in ~90 ticks (~1.5 h)
 _FRUSTRATION_WINDOW    = 86400.0 # 24 h in seconds
+
+
+# ── IMPULSE INTERRUPT (F1) ────────────────────────────────────
+
+_IMPULSE_THRESHOLD = 0.75
+
+_SOCIAL_TAGS  = frozenset({"social", "connection", "loneliness", "reach", "message", "friend", "contact"})
+_CREATIVE_TAGS = frozenset({"creative", "create", "make", "write", "express", "art", "poem"})
+_KNOWLEDGE_TAGS = frozenset({"understand", "read", "knowledge", "learn", "research", "question", "curious"})
+
+
+def impulse_check(
+    wants: list, fears: list, tensions: list
+) -> "tuple[str, str] | None":
+    """Return (activity_id, reason) if any inner state has pressure > 0.75.
+    Called before auto_decide so high-pressure states can interrupt the current activity.
+    Returns None if nothing is pressing enough."""
+    candidates = []
+    for w in wants:
+        if not w.resolved:
+            candidates.append(("want", w.pressure, w.text, w.tags))
+    for f in fears:
+        if not f.resolved:
+            candidates.append(("fear", f.pressure, f.text, f.tags))
+    for t in tensions:
+        candidates.append(("tension", t.pressure, t.text, t.tags))
+
+    if not candidates:
+        return None
+
+    kind, pressure, text, tags = max(candidates, key=lambda x: x[1])
+    if pressure <= _IMPULSE_THRESHOLD:
+        return None
+
+    tag_set = {t.lower() for t in tags}
+    if kind == "want":
+        if tag_set & _SOCIAL_TAGS:
+            activity = "message"
+        elif tag_set & _CREATIVE_TAGS:
+            activity = "create"
+        elif tag_set & _KNOWLEDGE_TAGS:
+            activity = "read"
+        else:
+            activity = "think"
+    elif kind == "fear":
+        activity = "rest"
+    else:  # tension
+        activity = "think"
+
+    reason = f"impulse ({kind}, pressure {pressure:.2f}): {text[:60]}"
+    return (activity, reason)
 
 
 def tick_pressure(

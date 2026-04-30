@@ -26,6 +26,7 @@ class Idea:
     timestamp: float     = field(default_factory=time.time)
     tags:      list[str] = field(default_factory=list)
     id:        str       = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    complete:  bool      = True   # False = fragment, surfaces differently in prompts
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -39,6 +40,7 @@ class Idea:
             timestamp=float(d.get("timestamp", time.time())),
             tags=d.get("tags", []),
             id=d.get("id", str(uuid.uuid4())[:8]),
+            complete=bool(d.get("complete", True)),
         )
 
 
@@ -60,6 +62,7 @@ class Memory:
     confidence: float            = 1.0       # item 69: how sure she is of this memory
     timestamp:  float            = field(default_factory=time.time)
     id:         str              = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    salience:   float            = 0.0       # 0.0–1.0, emotional intensity at creation
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -69,9 +72,10 @@ class Memory:
         return cls(
             text=d["text"], type=d["type"], tags=d.get("tags", []),
             weight=float(d.get("weight", 1.0)),
-            confidence=float(d.get("confidence", 1.0)),  # default 1.0 for old records
+            confidence=float(d.get("confidence", 1.0)),
             timestamp=float(d.get("timestamp", time.time())),
             id=d.get("id", str(uuid.uuid4())[:8]),
+            salience=float(d.get("salience", 0.0)),
         )
 
 
@@ -87,21 +91,24 @@ MAX_MEMORIES = 200
 
 def add(store: list[Memory], text: str,
         type: MemoryType = "observation",
-        tags: list[str] | None = None) -> list[Memory]:
+        tags: list[str] | None = None,
+        salience: float = 0.0) -> list[Memory]:
     """Prepend a new memory. No cap — SQLite is unbounded."""
-    m = Memory(text=text, type=type, tags=tags or [], weight=1.0)
+    m = Memory(text=text, type=type, tags=tags or [], weight=1.0, salience=salience)
     return [m, *store]
 
 
 def age(store: list[Memory]) -> list[Memory]:
     """Decay every memory's weight and confidence slightly.
-    Call this periodically (e.g. every few minutes or on sleep)."""
-    return [
-        Memory(**{**m.to_dict(),
-                  "weight":     max(0.05, m.weight     * 0.997),
-                  "confidence": max(0.10, m.confidence * 0.998)})
-        for m in store
-    ]
+    High-salience memories decay more slowly (1.5× half-life at salience=1.0)."""
+    result = []
+    for m in store:
+        # salience shifts decay rate: 0.997 at s=0 → 0.998 at s=1 (1.5× half-life)
+        w_rate = 0.997 + 0.001 * m.salience
+        result.append(Memory(**{**m.to_dict(),
+                                "weight":     max(0.05, m.weight     * w_rate),
+                                "confidence": max(0.10, m.confidence * 0.998)}))
+    return result
 
 
 def get_vivid(store: list[Memory], n: int = 5) -> list[Memory]:
@@ -210,7 +217,8 @@ class MemoryIndex:
             self._col.upsert(
                 ids=[memory.id],
                 documents=[memory.text],
-                metadatas=[{"type": memory.type, "tags": ",".join(memory.tags)}],
+                metadatas=[{"type": memory.type, "tags": ",".join(memory.tags),
+                            "salience": memory.salience}],
             )
         except Exception:
             pass
@@ -248,8 +256,9 @@ class MemoryIndex:
                     continue
                 similarity = 1.0 - (dist / 2.0)
                 freshness  = m.weight * _recency(m.timestamp) * m.confidence
-                # similarity dominates; freshness can suppress but not eliminate
-                score = similarity * (0.5 + 0.5 * freshness)
+                # salience boosts score up to +20% for emotionally intense memories
+                salience_boost = 1.0 + 0.2 * m.salience
+                score = similarity * (0.5 + 0.5 * freshness) * salience_boost
                 scored.append((score, m))
 
             scored.sort(key=lambda x: x[0], reverse=True)
@@ -257,3 +266,31 @@ class MemoryIndex:
             return found if found else get_vivid(store, n)
         except Exception:
             return get_vivid(store, n)
+
+
+# ── RECURRING LOOPS (B3) ─────────────────────────────────────
+
+def find_recurring_loops(
+    store: list[Memory],
+    window_hours: float = 48.0,
+    threshold: int = 5,
+) -> list[str]:
+    """Tags that appear in 5+ memories within the last 48h without a natural
+    resolution signal. These represent thoughts that keep resurfacing.
+    Returns a list of tag strings, most frequent first."""
+    cutoff = time.time() - window_hours * 3600
+    recent = [m for m in store if m.timestamp >= cutoff]
+    if not recent:
+        return []
+
+    tally: dict[str, int] = {}
+    for m in recent:
+        for tag in m.tags:
+            tally[tag] = tally.get(tag, 0) + 1
+
+    loops = [(tag, count) for tag, count in tally.items() if count >= threshold]
+    loops.sort(key=lambda x: x[1], reverse=True)
+    # Skip generic tags that appear everywhere and don't signal a loop
+    _NOISE = frozenset({"identity", "trait", "reflection", "impulse", "feeling",
+                        "observation", "conversation", "interest"})
+    return [tag for tag, _ in loops if tag not in _NOISE]

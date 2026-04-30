@@ -165,6 +165,26 @@ class ChloeDB:
             );
             CREATE INDEX IF NOT EXISTS idx_notes_pid  ON person_notes(person_id);
             CREATE INDEX IF NOT EXISTS idx_events_pid ON person_events(person_id);
+
+            -- ── Identity: traits and contradictions ──
+            CREATE TABLE IF NOT EXISTS traits (
+                id                  TEXT PRIMARY KEY,
+                name                TEXT NOT NULL,
+                weight              REAL NOT NULL DEFAULT 0.0,
+                behavioral_profile  TEXT NOT NULL DEFAULT '',
+                origin_memory_ids   TEXT NOT NULL DEFAULT '[]',
+                last_reinforced     REAL NOT NULL,
+                created             REAL NOT NULL,
+                is_core             INTEGER NOT NULL DEFAULT 0,
+                archived            INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS contradictions (
+                id          TEXT PRIMARY KEY,
+                trait_a_id  TEXT NOT NULL,
+                trait_b_id  TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                created     REAL NOT NULL
+            );
         """)
         self._con.commit()
         self._migrate()
@@ -172,13 +192,19 @@ class ChloeDB:
     def _migrate(self):
         """Add columns introduced after initial schema creation."""
         migrations = [
-            ("wants",    "ALTER TABLE wants    ADD COLUMN pressure       REAL NOT NULL DEFAULT 0.0"),
-            ("wants",    "ALTER TABLE wants    ADD COLUMN pressure_since REAL NOT NULL DEFAULT 0.0"),
-            ("fears",    "ALTER TABLE fears    ADD COLUMN pressure       REAL NOT NULL DEFAULT 0.0"),
-            ("goals",    "ALTER TABLE goals    ADD COLUMN pressure       REAL NOT NULL DEFAULT 0.0"),
-            ("tensions", "ALTER TABLE tensions ADD COLUMN pressure       REAL NOT NULL DEFAULT 0.0"),
+            "ALTER TABLE wants          ADD COLUMN pressure       REAL    NOT NULL DEFAULT 0.0",
+            "ALTER TABLE wants          ADD COLUMN pressure_since REAL    NOT NULL DEFAULT 0.0",
+            "ALTER TABLE wants          ADD COLUMN subtype        TEXT    NOT NULL DEFAULT 'want'",
+            "ALTER TABLE fears          ADD COLUMN pressure       REAL    NOT NULL DEFAULT 0.0",
+            "ALTER TABLE goals          ADD COLUMN pressure       REAL    NOT NULL DEFAULT 0.0",
+            "ALTER TABLE tensions       ADD COLUMN pressure       REAL    NOT NULL DEFAULT 0.0",
+            "ALTER TABLE affect_records ADD COLUMN intensity      REAL    NOT NULL DEFAULT 0.0",
+            "ALTER TABLE affect_records ADD COLUMN residue        REAL    NOT NULL DEFAULT 0.0",
+            "ALTER TABLE persons        ADD COLUMN trait_profile  TEXT    NOT NULL DEFAULT '{}'",
+            "ALTER TABLE ideas          ADD COLUMN complete       INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE memories       ADD COLUMN salience       REAL    NOT NULL DEFAULT 0.0",
         ]
-        for _, sql in migrations:
+        for sql in migrations:
             try:
                 self._con.execute(sql)
             except sqlite3.OperationalError:
@@ -189,17 +215,19 @@ class ChloeDB:
 
     def add_memory(self, m) -> None:
         self._con.execute(
-            "INSERT OR REPLACE INTO memories VALUES (?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO memories (id,text,type,tags,weight,confidence,timestamp,salience)"
+            " VALUES (?,?,?,?,?,?,?,?)",
             (m.id, m.text, m.type, json.dumps(m.tags),
-             m.weight, m.confidence, m.timestamp),
+             m.weight, m.confidence, m.timestamp, getattr(m, "salience", 0.0)),
         )
         self._con.commit()
 
     def age_memories(self) -> None:
-        """Decay all weights/confidences in a single SQL pass."""
+        """Decay all weights/confidences in a single SQL pass.
+        High-salience memories use a slower weight decay rate (1.5× half-life at salience=1.0)."""
         self._con.execute("""
             UPDATE memories SET
-                weight     = MAX(0.05, weight     * 0.997),
+                weight     = MAX(0.05, weight     * (0.997 + 0.001 * salience)),
                 confidence = MAX(0.10, confidence * 0.998)
         """)
         self._con.commit()
@@ -214,14 +242,16 @@ class ChloeDB:
             tags=json.loads(r["tags"]),
             weight=r["weight"], confidence=r["confidence"],
             timestamp=r["timestamp"],
+            salience=r["salience"] if "salience" in r.keys() else 0.0,
         ) for r in rows]
 
     # ── IDEAS ─────────────────────────────────────────────────
 
     def add_idea(self, idea) -> None:
         self._con.execute(
-            "INSERT OR REPLACE INTO ideas VALUES (?,?,?,?)",
-            (idea.id, idea.text, idea.timestamp, json.dumps(idea.tags)),
+            "INSERT OR REPLACE INTO ideas (id,text,timestamp,tags,complete) VALUES (?,?,?,?,?)",
+            (idea.id, idea.text, idea.timestamp, json.dumps(idea.tags),
+             int(getattr(idea, "complete", True))),
         )
         self._con.commit()
 
@@ -235,6 +265,7 @@ class ChloeDB:
             text=r["text"],
             timestamp=r["timestamp"],
             tags=json.loads(r["tags"]),
+            complete=bool(r["complete"]) if "complete" in r.keys() else True,
         ) for r in rows]
 
     # ── AFFECT RECORDS ────────────────────────────────────────
@@ -242,8 +273,10 @@ class ChloeDB:
     def sync_affect_records(self, records: list) -> None:
         """Upsert the full in-memory list. Called from _save() every ~5 min."""
         self._con.executemany(
-            "INSERT OR REPLACE INTO affect_records VALUES (?,?,?,?,?)",
-            [(r.id, r.mood, r.cause, json.dumps(r.tags), r.timestamp)
+            "INSERT OR REPLACE INTO affect_records (id,mood,cause,tags,timestamp,intensity,residue)"
+            " VALUES (?,?,?,?,?,?,?)",
+            [(r.id, r.mood, r.cause, json.dumps(r.tags), r.timestamp,
+              getattr(r, "intensity", 0.0), getattr(r, "residue", 0.0))
              for r in records],
         )
         self._con.commit()
@@ -257,6 +290,8 @@ class ChloeDB:
             id=r["id"], mood=r["mood"], cause=r["cause"],
             tags=json.loads(r["tags"]),
             timestamp=r["timestamp"],
+            intensity=r["intensity"] if "intensity" in r.keys() else 0.0,
+            residue=r["residue"]   if "residue"   in r.keys() else 0.0,
         ) for r in rows]
 
     # ── CHAT HISTORY ──────────────────────────────────────────
@@ -352,9 +387,9 @@ class ChloeDB:
     def sync_wants(self, wants: list) -> None:
         self._con.execute("DELETE FROM wants")
         self._con.executemany(
-            "INSERT INTO wants (id,text,tags,created_at,resolved,pressure,pressure_since) VALUES (?,?,?,?,?,?,?)",
+            "INSERT INTO wants (id,text,tags,created_at,resolved,pressure,pressure_since,subtype) VALUES (?,?,?,?,?,?,?,?)",
             [(w.id, w.text, json.dumps(w.tags), w.created_at, int(w.resolved),
-              w.pressure, w.pressure_since)
+              w.pressure, w.pressure_since, getattr(w, "subtype", "want"))
              for w in wants])
         self._con.commit()
 
@@ -362,7 +397,8 @@ class ChloeDB:
         from .inner import Want
         return [Want(id=r["id"], text=r["text"], tags=json.loads(r["tags"]),
                      created_at=r["created_at"], resolved=bool(r["resolved"]),
-                     pressure=r["pressure"], pressure_since=r["pressure_since"])
+                     pressure=r["pressure"], pressure_since=r["pressure_since"],
+                     subtype=r["subtype"] if "subtype" in r.keys() else "want")
                 for r in self._con.execute("SELECT * FROM wants ORDER BY created_at DESC")]
 
     def sync_fears(self, fears: list) -> None:
@@ -447,12 +483,15 @@ class ChloeDB:
         """Upsert every person and their sub-lists. Sub-rows are replaced wholesale."""
         for p in persons:
             self._con.execute(
-                "INSERT OR REPLACE INTO persons VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT OR REPLACE INTO persons (id,name,warmth,distance,messaging_disabled,"
+                "impression,conflict_level,conflict_note,conversation_count,last_contact,"
+                "response_hours,trait_profile) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (p.id, p.name, p.warmth, p.distance,
                  int(p.messaging_disabled), p.impression,
                  p.conflict_level, p.conflict_note,
                  p.conversation_count, p.last_contact,
-                 json.dumps(p.response_hours)),
+                 json.dumps(p.response_hours),
+                 json.dumps(getattr(p, "trait_profile", {}))),
             )
             # Replace all sub-rows for this person
             self._con.execute("DELETE FROM person_notes         WHERE person_id=?", (p.id,))
@@ -526,6 +565,7 @@ class ChloeDB:
                 response_hours=json.loads(row["response_hours"]),
                 notes=notes, events=events, moments=moments,
                 third_parties=third_parties,
+                trait_profile=json.loads(row["trait_profile"]) if "trait_profile" in row.keys() else {},
             ))
         return persons
 
@@ -591,6 +631,51 @@ class ChloeDB:
             except Exception: pass
 
         self._con.commit()
+
+    # ── TRAITS ───────────────────────────────────────────────
+
+    def sync_traits(self, traits: list) -> None:
+        """Upsert all active traits. Archived (weight<=0.05) rows kept with archived=1."""
+        self._con.executemany(
+            "INSERT OR REPLACE INTO traits VALUES (?,?,?,?,?,?,?,?,?)",
+            [(t.id, t.name, t.weight, t.behavioral_profile,
+              json.dumps(t.origin_memory_ids),
+              t.last_reinforced, t.created, int(t.is_core), 0)
+             for t in traits],
+        )
+        self._con.commit()
+
+    def archive_trait(self, trait_id: str) -> None:
+        self._con.execute("UPDATE traits SET archived=1 WHERE id=?", (trait_id,))
+        self._con.commit()
+
+    def load_traits(self) -> list:
+        from .identity import Trait
+        return [Trait(
+            id=r["id"], name=r["name"], weight=r["weight"],
+            behavioral_profile=r["behavioral_profile"],
+            origin_memory_ids=json.loads(r["origin_memory_ids"]),
+            last_reinforced=r["last_reinforced"], created=r["created"],
+            is_core=bool(r["is_core"]),
+        ) for r in self._con.execute(
+            "SELECT * FROM traits WHERE archived=0 ORDER BY weight DESC"
+        )]
+
+    def sync_contradictions(self, contradictions: list) -> None:
+        self._con.execute("DELETE FROM contradictions")
+        self._con.executemany(
+            "INSERT INTO contradictions VALUES (?,?,?,?,?)",
+            [(c.id, c.trait_a_id, c.trait_b_id, c.description, c.created)
+             for c in contradictions],
+        )
+        self._con.commit()
+
+    def load_contradictions(self) -> list:
+        from .identity import Contradiction
+        return [Contradiction(
+            id=r["id"], trait_a_id=r["trait_a_id"], trait_b_id=r["trait_b_id"],
+            description=r["description"], created=r["created"],
+        ) for r in self._con.execute("SELECT * FROM contradictions ORDER BY created DESC")]
 
     def close(self) -> None:
         self._con.close()

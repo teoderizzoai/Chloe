@@ -95,16 +95,19 @@ button, .mtab, .person-pill, .sidebar-label, .topbar-name, .topbar-stat {
 .bar-focus       { background: #6a8aaa;       box-shadow: 0 0 4px #6a8aaa; }
 .bar-inspiration { background: #c8a040;       box-shadow: 0 0 4px #c8a040; }
 
-/* Soul */
-.soul-slider { margin-bottom: 12px; }
-.soul-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
-.soul-labels { display: flex; gap: 6px; font-size: 8px; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; }
-.soul-labels span.active { color: var(--gold2); }
-.soul-val-display { font-size: 9px; color: var(--text3); }
+/* Traits */
+.trait-item { margin-bottom: 10px; }
+.trait-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+.trait-label-badge { font-size: 7px; letter-spacing: 1.5px; text-transform: uppercase; }
+.trait-weight-num { font-size: 8px; color: var(--text3); }
+.trait-name { font-family: var(--font-serif); font-size: 11px; color: var(--text2); line-height: 1.4; margin-bottom: 3px; }
+.trait-bar-track { height: 2px; background: var(--border); border-radius: 1px; }
+.trait-bar-fill { height: 100%; background: var(--text3); border-radius: 1px; transition: width 1.2s ease; }
+.trait-empty { font-size: 10px; color: var(--text3); font-style: italic; }
+/* Slider styles kept for admin panel compatibility */
 .slider-track { height: 4px; background: var(--bg3); border-radius: 2px; position: relative; cursor: pointer; }
 .slider-fill  { position: absolute; top: 0; height: 100%; border-radius: 2px; background: linear-gradient(to right, var(--gold2), var(--gold)); transition: width 1.2s ease; }
 .slider-thumb { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 8px; height: 8px; border-radius: 50%; background: var(--gold); transition: left 1.2s ease; box-shadow: 0 0 8px var(--gold); }
-.soul-desc { font-family: var(--font-serif); font-size: 13px; font-style: italic; color: var(--text2); line-height: 1.7; padding: 8px 0 2px; }
 .world-line { font-size: 11px; color: var(--text2); line-height: 1.8; }
 
 /* Interests */
@@ -186,6 +189,8 @@ button, .mtab, .person-pill, .sidebar-label, .topbar-name, .topbar-stat {
 .idea-item { padding: 8px 0; border-bottom: 1px solid var(--border); }
 .idea-text { font-size: 10px; color: #4a6a8a; line-height: 1.75; }
 .idea-text::before { content: "→ "; color: var(--text3); }
+.idea-incomplete .idea-text { color: var(--text3); font-style: italic; }
+.idea-incomplete .idea-text::before { content: "… "; }
 
 /* Mind */
 .mind-section-title { font-size: 8px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--text2); padding: 14px 0 6px; }
@@ -592,9 +597,8 @@ button, .mtab, .person-pill, .sidebar-label, .topbar-name, .topbar-stat {
     </div>
 
     <div class="section">
-      <div class="section-title">soul</div>
-      <div id="soul-sliders"></div>
-      <div class="soul-desc" id="soul-desc">—</div>
+      <div class="section-title">identity</div>
+      <div id="trait-list"><div class="trait-empty">—</div></div>
     </div>
 
     <div class="section">
@@ -717,13 +721,6 @@ const ACTIVITIES = [
   { id:'create',  icon:'✨', label:'Create'  },
 ];
 
-const TRAITS = [
-  { key:'EI', left:'E', right:'I' },
-  { key:'SN', left:'S', right:'N' },
-  { key:'TF', left:'T', right:'F' },
-  { key:'JP', left:'J', right:'P' },
-];
-
 const DEPTH_COLORS = ['#d4849a','#5aaa88','#8a5a72','#4a9870','#b06080','#8a7a6a'];
 
 // ── STATE ────────────────────────────────────────────────────
@@ -734,8 +731,7 @@ let chatOpen     = false;
 let prevMsgCount = 0;
 let expandedPersons = new Set();
 
-// Soul drift tracking — compare against value from ~30s ago to show trend arrows
-let soulHistory  = [];   // [{EI, SN, TF, JP}, ...], max 8 entries (~32s at 4s polls)
+// (soul drift tracking removed — replaced by trait system)
 
 // Person stat history — track warmth/contact per person across polls
 // { [personId]: [{warmth, contact, ts}], max 30 entries }
@@ -744,7 +740,7 @@ let expandedStatPanels = {};  // { "personId:stat": true }
 let personLogHistory   = [];  // keep last 60 log lines with timestamps for correlation
 
 // History buffer for history tab
-let historyBuffer = []; // {tick, energy, social, curiosity, focus, inspiration, mood, activity, EI, SN, TF, JP}
+let historyBuffer = []; // {tick, energy, social, curiosity, focus, inspiration, mood, activity}
 const HISTORY_MAX  = 90;
 let logFilter      = 'all';
 let memFilter      = 'all';
@@ -766,7 +762,6 @@ let panInitialized  = false;
 
 // ── INIT ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  buildSoulSliders();
   initGraph();
   poll();
   setInterval(poll, POLL_MS);
@@ -807,7 +802,8 @@ async function poll() {
 
 function applyState(s) {
   // Topbar
-  document.getElementById('mbti').textContent          = s.mbti_type;
+  const _tCount = (s.traits || []).length;
+  document.getElementById('mbti').textContent          = _tCount > 0 ? `${_tCount} trait${_tCount !== 1 ? 's' : ''}` : '—';
   document.getElementById('state-label').textContent   = s.activity;
   document.getElementById('tick-n').textContent        = s.tick;
   document.getElementById('topbar-uptime').textContent = s.uptime ?? '—';
@@ -833,7 +829,6 @@ function applyState(s) {
     inspiration:  s.vitals.inspiration ?? 55,
     mood:         s.affect?.mood || 'content',
     activity:     s.activity,
-    EI: s.soul.EI, SN: s.soul.SN, TF: s.soul.TF, JP: s.soul.JP,
   });
   if (historyBuffer.length > HISTORY_MAX) historyBuffer.shift();
 
@@ -902,9 +897,8 @@ function applyState(s) {
     }
   }
 
-  // Soul
-  updateSoulSliders(s.soul);
-  document.getElementById('soul-desc').textContent = s.soul_desc;
+  // Identity traits
+  updateTraitList(s.traits || []);
 
   // Interests
   document.getElementById('interests').innerHTML =
@@ -960,53 +954,34 @@ function setVital(key, val) {
   document.getElementById(`b-${key}`).style.width = `${pct}%`;
 }
 
-// ── SOUL SLIDERS ─────────────────────────────────────────────
-function buildSoulSliders() {
-  document.getElementById('soul-sliders').innerHTML = TRAITS.map(t => `
-    <div class="soul-slider">
-      <div class="soul-header">
-        <div class="soul-labels">
-          <span id="lbl-${t.key}-l" class="active">${t.left}</span>
-          <span id="lbl-${t.key}-r">${t.right}</span>
-        </div>
-        <span class="soul-val-display" id="sval-${t.key}">50</span>
+// ── TRAIT LIST ────────────────────────────────────────────────
+function updateTraitList(traits) {
+  const container = document.getElementById('trait-list');
+  if (!container) return;
+  if (!traits || traits.length === 0) {
+    container.innerHTML = '<div class="trait-empty">still becoming</div>';
+    return;
+  }
+  const LABEL_COLOR = {
+    core:     'var(--gold2)',
+    strong:   '#8aaa70',
+    present:  'var(--text2)',
+    emerging: 'var(--text3)',
+  };
+  container.innerHTML = traits.map(t => {
+    const pct   = Math.round(t.weight * 100);
+    const label = t.weight >= 0.75 ? 'core' : t.weight >= 0.5 ? 'strong' : t.weight >= 0.25 ? 'present' : 'emerging';
+    const lColor = LABEL_COLOR[label];
+    const barBg  = t.is_core ? 'var(--gold2)' : 'var(--text3)';
+    return `<div class="trait-item">
+      <div class="trait-header">
+        <span class="trait-label-badge" style="color:${lColor}">${label}</span>
+        <span class="trait-weight-num">${pct}%</span>
       </div>
-      <div class="slider-track">
-        <div class="slider-fill"  id="sf-${t.key}" style="width:50%"></div>
-        <div class="slider-thumb" id="st-${t.key}" style="left:50%"></div>
-      </div>
-    </div>
-  `).join('');
-}
-
-function updateSoulSliders(soul) {
-  // Push to history ring (max 8 entries ≈ 32s at 4s poll)
-  soulHistory.push({ EI: soul.EI, SN: soul.SN, TF: soul.TF, JP: soul.JP });
-  if (soulHistory.length > 8) soulHistory.shift();
-  const baseline = soulHistory.length >= 4 ? soulHistory[0] : null;
-
-  TRAITS.forEach(t => {
-    const val = soul[t.key];
-    document.getElementById(`sf-${t.key}`).style.width  = `${val}%`;
-    document.getElementById(`st-${t.key}`).style.left   = `${val}%`;
-
-    // Trend arrow — compare against oldest entry in history window
-    let arrow = '';
-    if (baseline) {
-      const delta = val - baseline[t.key];
-      if      (delta >  0.05) arrow = ' ↑';
-      else if (delta < -0.05) arrow = ' ↓';
-    }
-    document.getElementById(`sval-${t.key}`).textContent = val.toFixed(1) + arrow;
-    document.getElementById(`lbl-${t.key}-l`).classList.toggle('active', val < 50);
-    document.getElementById(`lbl-${t.key}-r`).classList.toggle('active', val >= 50);
-  });
-}
-
-function onSliderClick(e, trait) {
-  const rect = e.currentTarget.getBoundingClientRect();
-  const val  = Math.round(((e.clientX - rect.left) / rect.width) * 100);
-  fetch(`${API}/soul`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ trait, value: val }) });
+      <div class="trait-name">${t.name}</div>
+      <div class="trait-bar-track"><div class="trait-bar-fill" style="width:${pct}%;background:${barBg}"></div></div>
+    </div>`;
+  }).join('');
 }
 
 // ── PERSON STAT ROW WITH HISTORY ─────────────────────────────
@@ -1303,15 +1278,6 @@ function renderHistory() {
     </div>
   `).join('');
 
-  const SOUL_COLORS = { EI:'#d4849a', SN:'#5aaa88', TF:'#8a5a72', JP:'#4a9870' };
-  const TRAIT_LABELS = { EI:'e → i', SN:'s → n', TF:'t → f', JP:'j → p' };
-  const soulHtml = ['EI','SN','TF','JP'].map(key => `
-    <div class="history-section">
-      <div class="history-label">${TRAIT_LABELS[key]}</div>
-      ${sparklineSVG(get(key), SOUL_COLORS[key])}
-    </div>
-  `).join('');
-
   body.innerHTML = `
     <div class="history-section">
       <div class="history-label">mood  <span style="font-size:7px;color:var(--text3)">(${historyBuffer.length} samples)</span></div>
@@ -1322,7 +1288,6 @@ function renderHistory() {
       <div class="mood-timeline">${actTicks}</div>
     </div>
     ${vitalsHtml}
-    ${soulHtml}
   `;
 }
 
@@ -1341,17 +1306,26 @@ function renderPanel(s) {
       const cls = { dream:'memory-dream', creative:'memory-creative', reflection:'memory-reflection', journal:'memory-journal' }[m.type] || '';
       const lowConf = (m.confidence ?? 1) < 0.5;
       const confPct = Math.round((m.confidence ?? 1) * 100);
+      const sal = m.salience ?? 0;
+      const salDot = sal > 0.6 ? `<span title="salience ${sal.toFixed(2)}" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--rose);margin-left:5px;vertical-align:middle;box-shadow:0 0 4px var(--rose);opacity:${0.5+sal*0.5}"></span>`
+                   : sal > 0.3 ? `<span title="salience ${sal.toFixed(2)}" style="display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--gold2);margin-left:5px;vertical-align:middle;opacity:${0.4+sal*0.6}"></span>`
+                   : '';
       return `<div class="memory-item ${cls}">
-        <div class="memory-meta">${m.type} · w${m.weight.toFixed(2)} · conf ${confPct}% · ${(m.tags||[]).join(', ')}</div>
+        <div class="memory-meta">${m.type} · w${m.weight.toFixed(2)} · conf ${confPct}%${salDot} · ${(m.tags||[]).join(', ')}</div>
         <div class="memory-text${lowConf?' mem-confidence-low':''}">${m.text}</div>
       </div>`;
     }).join('') || '<div class="log-item">No memories.</div>';
     body.innerHTML = filterBar + memHtml;
 
   } else if (activeTab === 'ideas') {
-    body.innerHTML = (s.ideas || []).map(i =>
-      `<div class="idea-item"><div class="idea-text">${i}</div></div>`
-    ).join('') || '<div class="log-item">No ideas yet.</div>';
+    body.innerHTML = (s.ideas || []).map(i => {
+      const text = typeof i === 'string' ? i : i.text;
+      const incomplete = typeof i === 'object' && i.complete === false;
+      const tags = (typeof i === 'object' && i.tags?.length) ? `<div class="want-tags" style="margin-top:3px">${i.tags.join(' · ')}</div>` : '';
+      return `<div class="idea-item${incomplete?' idea-incomplete':''}">
+        <div class="idea-text">${text}</div>${tags}
+      </div>`;
+    }).join('') || '<div class="log-item">No ideas yet.</div>';
 
   } else if (activeTab === 'mind') {
     const wants     = s.wants     || [];
@@ -1446,6 +1420,29 @@ function renderPanel(s) {
             <span style="font-size:8px;color:var(--text3)">${Math.round((t.intensity||0)*100)}%</span>
           </div>
         </div>`).join('')}` : ''}
+      ${(s.recurring_loops||[]).length ? `
+      <div class="mind-section-title">recurring loops</div>
+      ${(s.recurring_loops||[]).map(loop => `
+        <div class="want-item" style="padding:5px 0">
+          <div style="font-size:10px;color:var(--text3);letter-spacing:0.5px">↩ ${loop}</div>
+        </div>`).join('')}` : ''}
+      ${(s.total_residue||0) > 0.1 ? `
+      <div class="mind-section-title">emotional residue</div>
+      <div class="want-item" style="padding:6px 0">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="belief-conf-track" style="flex:1">
+            <div style="height:100%;border-radius:1px;background:var(--rose);width:${Math.min(100,Math.round((s.total_residue||0)*100))}%;transition:width 2s ease;opacity:0.7"></div>
+          </div>
+          <span style="font-size:8px;color:var(--text3);flex-shrink:0">${(s.total_residue||0).toFixed(2)}</span>
+        </div>
+      </div>` : ''}
+      ${(wants.filter(w=>!w.resolved&&w.subtype==='curiosity_question')).length ? `
+      <div class="mind-section-title">curiosity</div>
+      ${wants.filter(w=>!w.resolved&&w.subtype==='curiosity_question').map(w => `
+        <div class="want-item" style="padding:5px 0">
+          <div style="font-size:10px;color:var(--teal);line-height:1.6">? ${w.text}</div>
+          <div class="want-tags">${(w.tags||[]).join(' · ')}</div>
+        </div>`).join('')}` : ''}
       <div class="mind-section-title">emotional history</div>
       ${recordsHtml}`;
 
@@ -1531,21 +1528,18 @@ function renderAdmin(s, body) {
             style="${m === currentMood ? `color:${MOOD_COLORS[m]}` : ''}"
             onclick="setMood('${m}')">${m}</button>`).join('');
 
-  const soul = s.soul || {};
-  const soulHtml = TRAITS.map(t => {
-    const val    = Math.round(soul[t.key] ?? 50);
-    const active = val >= 50 ? t.right : t.left;
-    return `
-      <div class="admin-soul-row">
-        <div class="admin-soul-key">${t.key}</div>
-        <div class="admin-soul-num">${val}</div>
-        <div class="slider-track" style="flex:1" onclick="onSliderClick(event,'${t.key}')">
-          <div class="slider-fill"  style="width:${val}%"></div>
-          <div class="slider-thumb" style="left:${val}%"></div>
-        </div>
-        <div style="font-size:8px;color:var(--gold2);width:14px;text-align:center">${active}</div>
-      </div>`;
-  }).join('');
+  const adminTraits = s.traits || [];
+  const traitsAdminHtml = adminTraits.length === 0
+    ? '<div class="trait-empty" style="padding:4px 0">no traits yet</div>'
+    : adminTraits.map(t => {
+        const pct   = Math.round(t.weight * 100);
+        const label = t.weight >= 0.75 ? 'core' : t.weight >= 0.5 ? 'strong' : t.weight >= 0.25 ? 'present' : 'emerging';
+        return `<div class="admin-soul-row">
+          <div class="admin-soul-key" style="width:auto;font-size:7px;letter-spacing:1px;color:var(--text3)">${label}</div>
+          <div class="admin-soul-num">${pct}%</div>
+          <div style="flex:1;font-family:var(--font-serif);font-size:10px;color:var(--text2);padding:0 6px">${t.name}</div>
+        </div>`;
+      }).join('');
 
   const currentAct = s.activity || 'rest';
   const actHtml = ACTIVITIES.map(a => `
@@ -1577,9 +1571,8 @@ function renderAdmin(s, body) {
     </div>
     <div class="admin-divider"></div>
     <div class="admin-block">
-      <div class="admin-block-title">soul</div>
-      ${soulHtml}
-      <button class="admin-reset-btn" onclick="resetSoulBaseline()">reset baseline</button>
+      <div class="admin-block-title">identity</div>
+      ${traitsAdminHtml}
     </div>`;
 }
 
@@ -1598,13 +1591,6 @@ async function setMood(mood) {
 async function setActivity(id) {
   await fetch(`${API}/activity`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ activity_id: id }) });
   await poll();
-}
-
-function resetSoulBaseline() {
-  const defaults = { EI:58, SN:62, TF:56, JP:67 };
-  Promise.all(Object.entries(defaults).map(([trait, value]) =>
-    fetch(`${API}/soul`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ trait, value }) })
-  )).then(() => poll());
 }
 
 async function toggleTestingMode() {
