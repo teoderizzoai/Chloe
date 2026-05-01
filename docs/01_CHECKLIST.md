@@ -6,13 +6,13 @@ Cross off items when done. Implementation detail in 05_FEATURES.md; history in 0
 
 ## Cognition
 
-- [ ] **C2** — Failure consequences on traits: goal/want failure → trait weight penalty + `setback_note`; repeated failures → suppression belief ("I don't seem to be the kind of person who X")
+- [x] **C2** — Failure consequences on traits: goal/want failure → trait weight penalty + `setback_note`; repeated failures → suppression belief ("I don't seem to be the kind of person who X")
 - [ ] **F2** — Competing impulses: two high-pressure states target incompatible activities; probabilistic resolution; loser leaves residue memory ("wanted to X but didn't") feeding recurring loops
 - [ ] **G2** — Narrative self-model: weekly Haiku generates Chloe's own—possibly inaccurate—self-story as a belief; inaccuracy tracked against actual trait list
 
 ## Relationships
 
-- [ ] **C5** — Attachment patterns: per-person style derived from warmth/outreach/conflict history → Haiku-generated, stored in `persons`; influences risk tolerance and trait activation
+- [x] **C5** — Attachment patterns: per-person style derived from warmth/outreach/conflict history → Haiku-generated, stored in `persons`; influences risk tolerance and trait activation
 - [ ] **D2** — Tone register becomes trait-aware: warmth tier determines which traits are emphasised, not just access level; warmth > 78 → full trait expression including contradictions
 
 ## Self-History

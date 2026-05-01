@@ -25,6 +25,8 @@ class Trait:
     last_reinforced: float     # unix timestamp
     created: float             # unix timestamp
     is_core: bool = False      # weight >= 0.75 sustained for 7+ days
+    setback_count: int = 0     # times a related goal/want failed
+    setback_notes: list = field(default_factory=list)  # brief notes, capped at 5
 
     def to_dict(self) -> dict:
         return {
@@ -36,6 +38,8 @@ class Trait:
             "last_reinforced": self.last_reinforced,
             "created": self.created,
             "is_core": self.is_core,
+            "setback_count": self.setback_count,
+            "setback_notes": self.setback_notes,
         }
 
     @classmethod
@@ -49,6 +53,8 @@ class Trait:
             last_reinforced=float(d.get("last_reinforced", d.get("created", time.time()))),
             created=float(d.get("created", time.time())),
             is_core=bool(d.get("is_core", False)),
+            setback_count=int(d.get("setback_count", 0)),
+            setback_notes=d.get("setback_notes", []),
         )
 
 
@@ -234,6 +240,38 @@ def update_identity_momentum(
     prev = identity.identity_momentum.get(trait_id, 0.0)
     identity.identity_momentum[trait_id] = prev + alpha * (delta - prev)
     return identity
+
+
+def traits_matching_tags(identity: "Identity", tags: list) -> list:
+    """Find active traits whose name or behavioral_profile overlap with the given tags.
+    Returns up to 2 traits sorted by weight descending."""
+    if not tags:
+        return []
+    tag_words = {w.lower() for t in tags for w in t.replace("-", " ").split()}
+    matched = []
+    for t in active_traits(identity):
+        profile_words = set((t.name + " " + t.behavioral_profile).lower().split())
+        if tag_words & profile_words:
+            matched.append(t)
+    return sorted(matched, key=lambda t: t.weight, reverse=True)[:2]
+
+
+def penalize_trait(
+    identity: "Identity",
+    trait_id: str,
+    note: str,
+    penalty: float = 0.07,
+) -> tuple:
+    """Reduce a trait's weight and record a setback note.
+    Returns (updated Identity, should_suppress: bool).
+    should_suppress is True when setback_count reaches 3."""
+    for t in identity.traits:
+        if t.id == trait_id:
+            t.weight = max(0.0, t.weight - penalty)
+            t.setback_count += 1
+            t.setback_notes = (t.setback_notes + [note])[-5:]
+            return identity, t.setback_count >= 3
+    return identity, False
 
 
 def add_contradiction(

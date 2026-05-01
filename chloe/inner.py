@@ -247,6 +247,7 @@ class Goal:
     threshold: int       = _GOAL_DEFAULT_THRESHOLD   # progress needed to resolve
     id:        str       = field(default_factory=lambda: str(uuid.uuid4())[:8])
     pressure:  float     = 0.0
+    failed:    bool      = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -261,6 +262,7 @@ class Goal:
             threshold=int(d.get("threshold", _GOAL_DEFAULT_THRESHOLD)),
             id=d.get("id", str(uuid.uuid4())[:8]),
             pressure=float(d.get("pressure", 0.0)),
+            failed=bool(d.get("failed", False)),
         )
 
 
@@ -302,6 +304,28 @@ def goals_to_dicts(goals: list[Goal]) -> list[dict]:
 
 def goals_from_dicts(data: list[dict]) -> list[Goal]:
     return [Goal.from_dict(d) for d in data]
+
+
+_GOAL_STALE_DAYS = 14
+
+
+def fail_stale_goals(goals: list[Goal]) -> tuple:
+    """Mark goals that have stalled as failed.
+    A goal fails if it is old, had meaningful pressure, but made less than half its progress.
+    Returns (updated goals, newly_failed goals)."""
+    now = time.time()
+    cutoff = _GOAL_STALE_DAYS * 24 * 3600
+    updated, newly_failed = [], []
+    for g in goals:
+        if (not g.resolved and not g.failed
+                and (now - g.created_at) > cutoff
+                and g.pressure >= 0.5
+                and g.progress < g.threshold // 2):
+            updated.append(Goal(**{**g.to_dict(), "failed": True}))
+            newly_failed.append(g)
+        else:
+            updated.append(g)
+    return updated, newly_failed
 
 
 # ── AFFECT RECORDS ────────────────────────────────────────────

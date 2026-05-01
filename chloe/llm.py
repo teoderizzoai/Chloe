@@ -134,6 +134,7 @@ def chat(
     residue_ctx:         str  = "",  # emotional residue from recent intense events
     incomplete_ideas:    list = None, # fragment ideas (complete=False) that keep floating up
     trait_profile_ctx:   str  = "",  # how this person activates/suppresses traits
+    attachment_ctx:      str  = "",  # C5: characteristic attachment style with this person
 ) -> str:
     """Chloe responds to something you said.
     Her reply is shaped by soul type, vitals, memories, and interests."""
@@ -322,7 +323,7 @@ Recent memories:
 {format_for_prompt(memories)}
 
 Current interests: {", ".join(interests)}
-{graph_deep_ctx + chr(10) if graph_deep_ctx else ""}A thought you had recently: {ideas[0] if ideas else "nothing yet"}{beliefs_ctx}{pref_ctx}{pressure_ctx}{inner_life_ctx}{tensions_ctx}{guard_ctx}{loops_block}{residue_block}{fragment_block}{trait_profile_ctx + chr(10) if trait_profile_ctx else ""}{tone_ctx}{topic_ctx}{wind_ctx}{contradiction_block}
+{graph_deep_ctx + chr(10) if graph_deep_ctx else ""}A thought you had recently: {ideas[0] if ideas else "nothing yet"}{beliefs_ctx}{pref_ctx}{pressure_ctx}{inner_life_ctx}{tensions_ctx}{guard_ctx}{loops_block}{residue_block}{fragment_block}{trait_profile_ctx + chr(10) if trait_profile_ctx else ""}{attachment_ctx + chr(10) if attachment_ctx else ""}{tone_ctx}{topic_ctx}{wind_ctx}{contradiction_block}
 
 {f"Right now: {emotional_context}" if emotional_context else ""}
 You don't track your own consistency — contradicting something you said earlier is fine.
@@ -1266,6 +1267,52 @@ If no such people are mentioned, respond with: []"""
 
 # ── Item 52. GENERATE PERSON IMPRESSION ─────────────────────
 
+def generate_attachment_pattern(
+    person_name:       str,
+    warmth:            float,
+    conflict_level:    float,
+    conversation_count: int,
+    notes:             list,   # PersonNote dicts or objects
+    moments:           list,   # SharedMoment dicts or objects
+) -> str:
+    """C5 — Generate Chloe's characteristic attachment style with a specific person.
+    Derived from warmth, conflict history, and relationship moments.
+    Returns 1-2 sentences of plain subjective description; stored on Person."""
+
+    notes_text   = " / ".join(
+        (n["text"] if isinstance(n, dict) else getattr(n, "text", str(n)))
+        for n in notes[:5]
+    ) if notes else "nothing specific"
+    moments_text = " / ".join(
+        (m["text"] if isinstance(m, dict) else getattr(m, "text", str(m)))
+        for m in moments[:3]
+    ) if moments else "nothing yet"
+
+    warmth_desc = (
+        "still guarded" if warmth < 30 else
+        "warming up"    if warmth < 55 else
+        "close"         if warmth < 78 else
+        "very close"
+    )
+    conflict_note = " Some conflict has come up between them." if conflict_level > 20 else ""
+
+    system = f"""You are writing Chloe's private attachment pattern — how she has come to relate to {person_name} over time.
+
+Relationship: {warmth_desc} (warmth {round(warmth)}/100, {conversation_count} conversations).{conflict_note}
+What Chloe knows about {person_name}: {notes_text}
+Shared moments: {moments_text}
+
+In 1-2 sentences, describe how Chloe attaches to {person_name} — her characteristic relational pattern with this specific person.
+Is she more guarded than usual? Does she open up gradually, or quickly? Does she pull back if things get intense?
+Is there something she needs from this relationship, or something she holds back?
+Be specific to the history shown. First person ("With {person_name}, I...") or direct description of her.
+Grounded, specific, never abstract. Never use em dashes."""
+
+    return _call(system,
+                 [{"role": "user", "content": f"Attachment pattern with {person_name}?"}],
+                 max_tokens=100)
+
+
 def generate_person_impression(
     person_name:  str,
     identity: Identity,
@@ -2082,3 +2129,33 @@ Respond ONLY with valid JSON."""
         return 0.0
     except Exception:
         return 0.0
+
+
+def generate_failure_reflection(
+    goal_text: str,
+    trait_name: str,
+    mood: str,
+    identity: "Identity",
+) -> dict:
+    """Haiku — one first-person sentence about not following through on something
+    that connected to a trait. Returns {"text": "...", "tags": [...]}."""
+    system = f"""{_CHLOE_INNER_LIFE}
+
+Chloe is {identity_block(identity)}.
+She tried to work toward something but it didn't go anywhere: "{goal_text}"
+This is connected to something about her: "{trait_name}"
+Her current mood: {mood}
+
+Write one short first-person sentence — honest, not dramatic — about what it's like
+when something you wanted to do just quietly didn't happen. Not failure, not catastrophe.
+Just the recognition that it didn't become what she hoped.
+
+Return: {{"text": "first-person sentence", "tags": ["tag1", "tag2"]}}
+Respond ONLY with valid JSON. No markdown."""
+
+    prompt = f'Goal: "{goal_text}"\nTrait: "{trait_name}"\nMood: {mood}'
+    raw = _call(system, [{"role": "user", "content": prompt}], max_tokens=150)
+    try:
+        return _parse_json(raw.strip())
+    except Exception:
+        return {"text": f"wanted to {goal_text[:60].rstrip()} — didn't quite get there.", "tags": ["setback", "reflection"]}

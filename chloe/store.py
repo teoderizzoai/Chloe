@@ -204,6 +204,10 @@ class ChloeDB:
             "ALTER TABLE persons        ADD COLUMN trait_profile  TEXT    NOT NULL DEFAULT '{}'",
             "ALTER TABLE ideas          ADD COLUMN complete       INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE memories       ADD COLUMN salience       REAL    NOT NULL DEFAULT 0.0",
+            "ALTER TABLE traits         ADD COLUMN setback_count  INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE traits         ADD COLUMN setback_notes  TEXT    NOT NULL DEFAULT '[]'",
+            "ALTER TABLE goals          ADD COLUMN failed         INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE persons        ADD COLUMN attachment_pattern TEXT NOT NULL DEFAULT ''",
         ]
         for sql in migrations:
             try:
@@ -446,9 +450,10 @@ class ChloeDB:
     def sync_goals(self, goals: list) -> None:
         self._con.execute("DELETE FROM goals")
         self._con.executemany(
-            "INSERT INTO goals (id,text,tags,created_at,resolved,progress,threshold,pressure) VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO goals (id,text,tags,created_at,resolved,progress,threshold,pressure,failed) VALUES (?,?,?,?,?,?,?,?,?)",
             [(g.id, g.text, json.dumps(g.tags), g.created_at,
-              int(g.resolved), g.progress, g.threshold, g.pressure) for g in goals])
+              int(g.resolved), g.progress, g.threshold, g.pressure,
+              int(getattr(g, "failed", False))) for g in goals])
         self._con.commit()
 
     def load_goals(self) -> list:
@@ -456,7 +461,8 @@ class ChloeDB:
         return [Goal(id=r["id"], text=r["text"], tags=json.loads(r["tags"]),
                      created_at=r["created_at"], resolved=bool(r["resolved"]),
                      progress=r["progress"], threshold=r["threshold"],
-                     pressure=r["pressure"])
+                     pressure=r["pressure"],
+                     failed=bool(r["failed"]) if "failed" in r.keys() else False)
                 for r in self._con.execute("SELECT * FROM goals ORDER BY created_at DESC")]
 
     def sync_tensions(self, tensions: list) -> None:
@@ -486,13 +492,14 @@ class ChloeDB:
             self._con.execute(
                 "INSERT OR REPLACE INTO persons (id,name,warmth,distance,messaging_disabled,"
                 "impression,conflict_level,conflict_note,conversation_count,last_contact,"
-                "response_hours,trait_profile) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "response_hours,trait_profile,attachment_pattern) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (p.id, p.name, p.warmth, p.distance,
                  int(p.messaging_disabled), p.impression,
                  p.conflict_level, p.conflict_note,
                  p.conversation_count, p.last_contact,
                  json.dumps(p.response_hours),
-                 json.dumps(getattr(p, "trait_profile", {}))),
+                 json.dumps(getattr(p, "trait_profile", {})),
+                 getattr(p, "attachment_pattern", "")),
             )
             # Replace all sub-rows for this person
             self._con.execute("DELETE FROM person_notes         WHERE person_id=?", (p.id,))
@@ -567,6 +574,7 @@ class ChloeDB:
                 notes=notes, events=events, moments=moments,
                 third_parties=third_parties,
                 trait_profile=json.loads(row["trait_profile"]) if "trait_profile" in row.keys() else {},
+                attachment_pattern=row["attachment_pattern"] if "attachment_pattern" in row.keys() else "",
             ))
         return persons
 
@@ -638,10 +646,14 @@ class ChloeDB:
     def sync_traits(self, traits: list) -> None:
         """Upsert all active traits. Archived (weight<=0.05) rows kept with archived=1."""
         self._con.executemany(
-            "INSERT OR REPLACE INTO traits VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO traits"
+            " (id,name,weight,behavioral_profile,origin_memory_ids,last_reinforced,created,is_core,archived,setback_count,setback_notes)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             [(t.id, t.name, t.weight, t.behavioral_profile,
               json.dumps(t.origin_memory_ids),
-              t.last_reinforced, t.created, int(t.is_core), 0)
+              t.last_reinforced, t.created, int(t.is_core), 0,
+              getattr(t, "setback_count", 0),
+              json.dumps(getattr(t, "setback_notes", [])))
              for t in traits],
         )
         self._con.commit()
@@ -658,6 +670,8 @@ class ChloeDB:
             origin_memory_ids=json.loads(r["origin_memory_ids"]),
             last_reinforced=r["last_reinforced"], created=r["created"],
             is_core=bool(r["is_core"]),
+            setback_count=int(r["setback_count"]) if "setback_count" in r.keys() else 0,
+            setback_notes=json.loads(r["setback_notes"]) if "setback_notes" in r.keys() else [],
         ) for r in self._con.execute(
             "SELECT * FROM traits WHERE archived=0 ORDER BY weight DESC"
         )]

@@ -14,7 +14,7 @@
 import time
 import uuid
 import random
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, replace
 from datetime import date, timedelta
 from typing import Optional
 
@@ -144,6 +144,8 @@ class Person:
     response_hours:     dict        = field(default_factory=dict)
     # D1 — which of Chloe's traits are activated/suppressed around this person
     trait_profile:      dict        = field(default_factory=dict)  # {"activated": [...], "suppressed": [...]}
+    # C5 — Haiku-generated attachment style for this relationship
+    attachment_pattern: str         = ""
 
     def to_dict(self) -> dict:
         return {
@@ -163,6 +165,7 @@ class Person:
             "last_contact":       self.last_contact,
             "response_hours":     self.response_hours,
             "trait_profile":      self.trait_profile,
+            "attachment_pattern": self.attachment_pattern,
         }
 
     @classmethod
@@ -184,6 +187,7 @@ class Person:
             last_contact=d.get("last_contact"),
             response_hours=d.get("response_hours", {}),
             trait_profile=d.get("trait_profile", {}),
+            attachment_pattern=d.get("attachment_pattern", ""),
         )
 
 
@@ -305,24 +309,16 @@ def pending_followups(person: Person) -> list[PersonNote]:
 
 def tick_distance(persons: list[Person]) -> list[Person]:
     """Called every AGE_EVERY ticks. Distance drifts up slowly when no contact.
-    Item 49: unresolved conflict accelerates distance drift."""
+    Item 49: unresolved conflict accelerates distance drift.
+    C5: bonded relationships (high warmth + attachment pattern) resist distance drift."""
     result = []
     for p in persons:
-        # Conflict makes distance grow faster — strained relationships drift apart
         drift = 0.4 + (p.conflict_level / 100.0) * 0.6
+        # C5: established attachment with high warmth slows drift
+        if p.attachment_pattern and p.warmth >= 70:
+            drift *= 0.5
         new_distance = min(100.0, p.distance + drift)
-        result.append(Person(
-            id=p.id, name=p.name,
-            warmth=p.warmth, distance=new_distance,
-            notes=p.notes,
-            events=p.events,
-            moments=p.moments,
-            conflict_level=p.conflict_level,
-            conflict_note=p.conflict_note,
-            conversation_count=p.conversation_count,
-            last_contact=p.last_contact,
-            response_hours=p.response_hours,
-        ))
+        result.append(replace(p, distance=new_distance))
     return result
 
 
@@ -672,17 +668,7 @@ def tick_conflict(persons: list[Person]) -> list[Person]:
     for p in persons:
         new_level = max(0.0, p.conflict_level - 0.4)   # ~0.4/min — 100→0 in ~4h at rest
         new_note = p.conflict_note if new_level > 10.0 else ""
-        result.append(Person(
-            id=p.id, name=p.name,
-            warmth=p.warmth, distance=p.distance,
-            notes=p.notes, events=p.events,
-            moments=p.moments,
-            conflict_level=new_level,
-            conflict_note=new_note,
-            conversation_count=p.conversation_count,
-            last_contact=p.last_contact,
-            response_hours=p.response_hours,
-        ))
+        result.append(replace(p, conflict_level=new_level, conflict_note=new_note))
     return result
 
 
@@ -849,6 +835,28 @@ def format_trait_profile_context(person: Person) -> str:
     for name in (profile.get("suppressed") or [])[:1]:
         lines.append(f'Around {person.name}, you tend to be less "{name}".')
     return ("\n" + " ".join(lines)) if lines else ""
+
+
+def format_attachment_context(person: Person) -> str:
+    """C5: inject attachment pattern into LLM prompt when it exists."""
+    if not person.attachment_pattern:
+        return ""
+    return f"\nHow you tend to attach to {person.name}: {person.attachment_pattern}"
+
+
+def attachment_risk_modifier(person: Person) -> float:
+    """C5: baseline risk tolerance modifier derived from relationship history.
+    High warmth with established pattern → more open. Conflict or early stage → more guarded."""
+    modifier = 1.0
+    if person.warmth >= 70:
+        modifier += 0.15
+    elif person.warmth < 35:
+        modifier -= 0.15
+    if person.conflict_level > 40:
+        modifier -= 0.1
+    if not person.attachment_pattern:
+        modifier -= 0.05  # no pattern yet — still reading them
+    return max(0.5, min(1.5, modifier))
 
 
 def format_shared_moments(moments: list[SharedMoment], max_items: int = 5) -> str:

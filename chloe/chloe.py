@@ -22,7 +22,8 @@ from typing import Callable, Optional
 from .soul     import Soul, drift, consolidate, content_drift, content_affect, seasonal_drift, update_soul_momentum, mbti_type, describe  # DEPRECATED — kept for heart.py compat only
 from .identity import (Identity, identity_block, add_trait, reinforce_trait,
                        decay_traits, check_core_promotion, traits_snapshot,
-                       snapshot_diff, add_contradiction, update_identity_momentum)
+                       snapshot_diff, add_contradiction, update_identity_momentum,
+                       traits_matching_tags, penalize_trait)
 from .heart  import (Vitals, ACTIVITIES, tick_vitals, auto_decide,
                      should_fire_event, circadian_phase, day_name)
 from .memory import Memory, seed_memories, add, age, get_vivid, derive_interests, derive_fringe_interests, to_dicts, MemoryIndex, Idea, MAX_IDEAS, ideas_to_dicts, find_recurring_loops
@@ -39,7 +40,7 @@ from .inner  import (Want, Belief, Goal, AffectRecord, Fear, Aversion,
                      add_fear, fears_to_dicts,
                      add_aversion, aversions_to_dicts,
                      add_or_reinforce_belief, decay_beliefs, beliefs_to_dicts,
-                     add_goal, resolve_goals, goals_to_dicts,
+                     add_goal, resolve_goals, goals_to_dicts, fail_stale_goals,
                      add_affect_record, affect_records_to_dicts,
                      derive_preferences,
                      outreach_risk_score,
@@ -55,7 +56,8 @@ from .persons import (Person, PersonNote, PersonEvent, SharedMoment,
                       add_conflict, reduce_conflict, tick_conflict, format_conflict_context,
                       upsert_third_party, format_third_party_context,
                       format_cross_person_context, set_impression,
-                      format_trait_profile_context)
+                      format_trait_profile_context,
+                      format_attachment_context, attachment_risk_modifier)
 from . import llm
 from . import feeds
 from . import weather as wthr
@@ -402,10 +404,14 @@ class Chloe:
         return bool(words & _closing)
 
     def _get_risk_tolerance(self, person_id: str) -> float:
-        """Item 73: current risk tolerance for a person. Returns 1.0 if expired or unset."""
+        """Item 73: current risk tolerance for a person.
+        C5: baseline derived from attachment pattern when no ephemeral override."""
         rt = self._risk_tolerance.get(person_id)
         if rt and time.time() < rt.get("expires", 0):
             return rt["value"]
+        person = get_person(self.persons, person_id)
+        if person:
+            return attachment_risk_modifier(person)
         return 1.0
 
     def _reduce_risk_tolerance(self, person_id: str, by: float = 0.25, hours: float = 24.0):
@@ -614,6 +620,7 @@ class Chloe:
                 residue_ctx=f"emotional weight {total_residue(self.affect_records):.2f}" if total_residue(self.affect_records) > 0.3 else "",
                 incomplete_ideas=[i for i in self.ideas[:10] if not getattr(i, "complete", True)] or None,
                 trait_profile_ctx=format_trait_profile_context(person) if person else "",
+                attachment_ctx=format_attachment_context(person) if person else "",
             )
         except Exception as e:
             print(f"[chat error] {type(e).__name__}: {e}")
@@ -712,6 +719,7 @@ class Chloe:
                 graph_deep_ctx=graph_knowledge_context(self.graph),
                 loops_ctx=", ".join(self.recurring_loops[:3]) if self.recurring_loops else "",
                 trait_profile_ctx=format_trait_profile_context(person) if person else "",
+                attachment_ctx=format_attachment_context(person) if person else "",
             )
         except Exception as e:
             print(f"[voice chat error] {type(e).__name__}: {e}")
@@ -1088,6 +1096,32 @@ class Chloe:
                         self.persons[i] = _replace(p, trait_profile=trait_profile)
                         break
                 self._log(f'trait profile for {person.name}: +{trait_profile.get("activated",[])} -{trait_profile.get("suppressed",[])}')
+
+            # C5: regenerate attachment pattern alongside impression
+            await self._update_attachment_pattern(person_id)
+        except Exception:
+            pass
+
+    async def _update_attachment_pattern(self, person_id: str):
+        """C5 — Regenerate Chloe's attachment pattern for a person via Haiku.
+        Called whenever the impression is refreshed (every 5 conversations)."""
+        try:
+            person = get_person(self.persons, person_id)
+            if not person or person.conversation_count < 3:
+                return
+            pattern = await asyncio.to_thread(
+                llm.generate_attachment_pattern,
+                person.name, person.warmth, person.conflict_level,
+                person.conversation_count,
+                [n.to_dict() for n in person.notes],
+                [m.to_dict() for m in person.moments],
+            )
+            from dataclasses import replace as _replace
+            for i, p in enumerate(self.persons):
+                if p.id == person_id:
+                    self.persons[i] = _replace(p, attachment_pattern=pattern)
+                    break
+            self._log(f'attachment pattern for {person.name}: {pattern[:60]}…')
         except Exception:
             pass
 
@@ -1416,6 +1450,18 @@ class Chloe:
                     _w.tags,
                 )
                 self._remember(f"wanted to {_w.text} but it hasn't gone anywhere", "feeling", _w.tags, salience=0.6)
+                # C2: light trait penalty for frustrated wants
+                for _t in traits_matching_tags(self.identity, _w.tags):
+                    self.identity, _ = penalize_trait(
+                        self.identity, _t.id,
+                        f"wanted to {_w.text[:60]} — never happened",
+                        penalty=0.04,
+                    )
+
+            # C2: detect stale goals and apply trait consequences
+            self.goals, _failed_goals = fail_stale_goals(self.goals)
+            for _g in _failed_goals:
+                asyncio.create_task(self._on_goal_failed(_g))
 
             # Item 36 — isolation drift: days without contact
             if self.persons and all(p.distance > 70 for p in self.persons):
@@ -1943,6 +1989,46 @@ class Chloe:
             self._log(f'goal resolved ({mood_nudge}): "{feeling["text"]}…"')
         except Exception as e:
             self._log(f"completion feeling error: {e}")
+
+    # ── C2: Goal failure consequences ────────────────────────
+
+    async def _on_goal_failed(self, goal):
+        """C2: When a goal stalls out, penalise matching traits and potentially
+        form a suppression belief if the same trait has failed repeatedly."""
+        try:
+            matched = traits_matching_tags(self.identity, goal.tags)
+            for trait in matched:
+                note = f"didn't follow through on: {goal.text[:80]}"
+                self.identity, suppress = penalize_trait(
+                    self.identity, trait.id, note, penalty=0.08,
+                )
+                self._log(f'C2 trait penalty: "{trait.name}" (setback #{trait.setback_count})')
+
+                # Generate a memory about the gap
+                try:
+                    ref = await asyncio.to_thread(
+                        llm.generate_failure_reflection,
+                        goal.text, trait.name, self.affect.mood, self.identity,
+                    )
+                    self._remember(ref["text"], "feeling", ref.get("tags", []) + ["setback"], salience=0.6)
+                except Exception as e:
+                    self._log(f"failure reflection error: {e}")
+
+                # Suppression belief when the same trait fails 3+ times
+                if suppress:
+                    belief_text = f"I don't seem to be the kind of person who {trait.name}"
+                    self.beliefs = add_or_reinforce_belief(
+                        self.beliefs, belief_text, 0.45,
+                        ["setback", "identity"] + goal.tags[:2],
+                    )
+                    self._log(f'C2 suppression belief: "{belief_text}"')
+
+            self._remember(
+                f"wanted to {goal.text[:80]} — it just didn't happen",
+                "feeling", goal.tags + ["setback"], salience=0.55,
+            )
+        except Exception as e:
+            self._log(f"goal failed handler error: {e}")
 
     # ── GRAPH INTELLIGENCE ───────────────────────────────────
 
