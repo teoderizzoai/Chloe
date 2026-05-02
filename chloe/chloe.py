@@ -83,11 +83,12 @@ DREAM_RECURRENCE_MIN       = 3        # tag must appear in this many dreams
 # tick, `should_fire_event` rolls could feel spammy if Haiku returns fast and the
 # user keeps her in high-chance activities (create/read). This floor guarantees a
 # minimum quiet gap between *starting* two background events (user chat is unchanged).
-MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS = 90.0
+MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS = 24 * 3600
 
 # Standalone outreach — fires independently of activity-based events
-OUTREACH_INTERVAL         = 2 * 3600   # normal: attempt outreach at most once per 2h
-OUTREACH_INTERVAL_TESTING = 5 * 60     # testing mode: once per 5 min
+OUTREACH_INTERVAL         = 24 * 3600  # normal: attempt outreach at most once per 24h
+OUTREACH_INTERVAL_TESTING = 10 * 60    # testing mode: once per 10 min
+QUIET_AFTER_BUSY          = 24 * 3600  # suppress unprompted outreach for 24h after a busy/ will-text request
 IGNORED_THRESHOLD         = 4 * 3600   # item 51: after 4h with no reply, she feels ignored
 IGNORED_THRESHOLD_TESTING = 10 * 60    # testing mode: 10 min
 
@@ -221,6 +222,7 @@ class Chloe:
         # Item 51 — pending autonomous messages waiting for a reply
         # [{person_id, sent_at (float), person_name}]
         self._pending_outreach: list[dict] = []
+        self._quiet_until: dict[str, float] = {}   # silence unprompted outreach for a person
 
         # ── Sleep / messaging ──
         self.pending_messages: list[dict] = []   # messages received during deep sleep
@@ -265,6 +267,25 @@ class Chloe:
         self.db.add_memory(self.memories[0])
         if self.identity.traits and random.random() < 0.10:
             asyncio.create_task(self._maybe_reinforce_traits(self.memories[0]))
+
+    def _is_quiet(self, person_id: str) -> bool:
+        return time.time() < self._quiet_until.get(person_id, 0.0)
+
+    def _set_quiet(self, person_id: str, duration: float) -> None:
+        self._quiet_until[person_id] = time.time() + duration
+        self._log(f"quiet outreach mode activated for {person_id} for {duration // 3600}h")
+
+    def _matches_quiet_request(self, message: str) -> bool:
+        msg = message.lower()
+        quiet_phrases = [
+            "don't text", "dont text", "stop texting", "stop text", "do not text",
+            "i'm busy", "im busy", "i am busy", "too busy", "busy right now",
+            "can't talk", "cant talk", "not available", "not available right now",
+            "i'll text you", "i will text you", "will text you", "text you later",
+            "message you later", "talk later", "i'll message you", "i will message you",
+            "i'll get back to you", "i will get back to you", "get back to you later",
+        ]
+        return any(phrase in msg for phrase in quiet_phrases)
 
     async def _maybe_reinforce_traits(self, memory) -> None:
         """10% chance on any memory add: check if the memory reinforces a random active trait."""
@@ -503,6 +524,8 @@ class Chloe:
         self._pending_outreach = [o for o in self._pending_outreach
                                    if o["person_id"] != person_id]
         self._log(f"message from {person_id}: \"{message}\"")
+        if self._matches_quiet_request(message):
+            self._set_quiet(person_id, QUIET_AFTER_BUSY)
 
         person = get_person(self.persons, person_id)
         person_name  = person.name if person else "Teo"
@@ -1802,7 +1825,10 @@ class Chloe:
                 # Choose who to reach out to — item 25: pass current hour
                 t_msg = time.localtime()
                 msg_hour = t_msg.tm_hour
-                target = choose_reach_out_target(self.persons, self.affect.mood, hour=msg_hour)
+                target = choose_reach_out_target(
+                    [p for p in self.persons if not self._is_quiet(p.id)],
+                    self.affect.mood, hour=msg_hour
+                )
                 if target:
                     p_name  = target.name
                     p_notes = [n.to_dict() for n in target.notes]
@@ -1839,19 +1865,12 @@ class Chloe:
                         )
                         self._log(f"chloe reached out to {p_name} unprompted")
                 else:
-                    prefs = derive_preferences(self.affect_records)
-                    msg = await asyncio.to_thread(
-                        llm.generate_autonomous_message,
-                        identity, self.vitals, vivid, interests, [i.text for i in self.ideas],
-                        self.weather, season, self.affect.mood,
-                        preferences=prefs,
-                        tensions=tensions_to_dicts(self.tensions),
-                        graph_deep_ctx=graph_knowledge_context(self.graph),
-                    )
-                    self._log("chloe reached out unprompted")
+                    self._log("chloe skipped autonomous outreach because no non-quiet target was available")
+                    self._busy = False
+                    return
 
-                target_id   = target.id   if target else "teo"
-                target_name = target.name if target else "Teo"
+                target_id   = target.id
+                target_name = target.name
                 self._add_chat("chloe", msg, autonomous=True, person_id=target_id)
                 # Item 51 — track this outreach
                 self._pending_outreach = [
@@ -1886,7 +1905,10 @@ class Chloe:
             vivid      = self.memory_index.query(_out_q, self.memories, 4)
             prefs      = derive_preferences(self.affect_records)
 
-            target = choose_reach_out_target(self.persons, self.affect.mood, hour=hour)
+            target = choose_reach_out_target(
+                [p for p in self.persons if not self._is_quiet(p.id)],
+                self.affect.mood, hour=hour
+            )
             if not target:
                 self._busy = False
                 return

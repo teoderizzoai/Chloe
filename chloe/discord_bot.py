@@ -47,7 +47,7 @@ _AVATAR_COOLDOWN    = 330     # 5.5 min between avatar changes
 _IMAGES_ROOT        = Path(__file__).resolve().parent / "images"
 
 # ── Timing constants ──────────────────────────────────────────
-_DEBOUNCE_SECS      = 1.5    # wait after last message before processing
+_DEBOUNCE_SECS      = 2.2    # wait after last message before processing
 _DEBOUNCE_FOLLOWUP  = 0.8    # shorter debounce when restarting after a reply
 _THINK_MIN          = 0.8    # min think time (silent reading pause)
 _THINK_MAX          = 2.5    # max think time
@@ -68,7 +68,7 @@ _INTERRUPT_MAX      = 4.5    # pause duration max
 
 # Message fragmentation: she splits one reply into rapid-fire short messages.
 # Pause is the gap between *sending* one fragment and *starting to type* the next.
-_FRAG_INTER_PAUSE   = (1.5, 3.5)  # (min, max) seconds between fragments
+_FRAG_INTER_PAUSE   = (2.0, 4.5)  # (min, max) seconds between fragments
 
 
 class ChloeDiscordBot:
@@ -303,14 +303,14 @@ class ChloeDiscordBot:
         has_newline        = '\n' in text
         has_comma_list     = bool(re.search(r',\s+\w', text))
 
-        if len(text) > 90 and (has_multi_sentence or has_newline):
-            frag_prob = 0.72
-        elif len(text) > 60 and (has_multi_sentence or has_newline):
-            frag_prob = 0.55
-        elif has_comma_list and len(text) > 55:
-            frag_prob = 0.40
-        elif len(text) > 50:
+        if len(text) > 110 and (has_multi_sentence or has_newline):
+            frag_prob = 0.48
+        elif len(text) > 75 and (has_multi_sentence or has_newline):
+            frag_prob = 0.28
+        elif has_comma_list and len(text) > 65:
             frag_prob = 0.18
+        elif len(text) > 60:
+            frag_prob = 0.08
         else:
             frag_prob = 0.0
 
