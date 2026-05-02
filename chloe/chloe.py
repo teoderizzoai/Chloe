@@ -23,7 +23,7 @@ from .soul     import Soul, drift, consolidate, content_drift, content_affect, s
 from .identity import (Identity, identity_block, add_trait, reinforce_trait,
                        decay_traits, check_core_promotion, traits_snapshot,
                        snapshot_diff, add_contradiction, update_identity_momentum,
-                       traits_matching_tags, penalize_trait)
+                       traits_matching_tags, penalize_trait, active_traits)
 from .heart  import (Vitals, ACTIVITIES, tick_vitals, auto_decide,
                      should_fire_event, circadian_phase, day_name)
 from .memory import Memory, seed_memories, add, age, get_vivid, derive_interests, derive_fringe_interests, to_dicts, MemoryIndex, Idea, MAX_IDEAS, ideas_to_dicts, find_recurring_loops
@@ -64,7 +64,7 @@ from . import weather as wthr
 from .store import ChloeDB, DB_FILE
 from .weather import WeatherState
 
-TICK_SECONDS   = 5       # one heartbeat
+TICK_SECONDS   = 30      # one heartbeat
 AGE_EVERY      = 12     # age memories every N ticks (~1 min)
 SAVE_EVERY     = 60     # persist state every N ticks (~5 min)
 WEATHER_EVERY  = 720    # refresh weather every N ticks (~1 hour)
@@ -86,10 +86,12 @@ DREAM_RECURRENCE_MIN       = 3        # tag must appear in this many dreams
 MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS = 24 * 3600
 
 # Standalone outreach — fires independently of activity-based events
-OUTREACH_INTERVAL         = 24 * 3600  # normal: attempt outreach at most once per 24h
+OUTREACH_INTERVAL         = 48 * 3600  # normal: attempt outreach at most once per 2 days
 OUTREACH_INTERVAL_TESTING = 10 * 60    # testing mode: once per 10 min
 QUIET_AFTER_BUSY          = 24 * 3600  # suppress unprompted outreach for 24h after a busy/ will-text request
 IGNORED_THRESHOLD         = 4 * 3600   # item 51: after 4h with no reply, she feels ignored
+MAX_ACTIVE_TRAITS         = 10         # cap on active traits; skip proposals when at limit
+TRAIT_PROPOSE_EVERY       = 3          # only propose new traits every N reflect cycles
 IGNORED_THRESHOLD_TESTING = 10 * 60    # testing mode: 10 min
 
 
@@ -204,6 +206,7 @@ class Chloe:
         self.tensions: list[Tension]    = []   # item 68: active internal conflicts
         self.arc: Optional[Arc]         = None # item 74: current long-term mood arc
         self._reflect_mood_history: list[str] = []  # item 74: last N moods at reflect time
+        self._reflect_count: int = 0               # how many reflect cycles have run
         self._risk_tolerance: dict      = {}   # item 73: {person_id: {value, expires}}
         self.recurring_loops: list[str] = []   # B3: tag clusters that keep resurfacing
 
@@ -1441,7 +1444,7 @@ class Chloe:
                 and outreach_due
                 and not _recent_contact
                 and self.activity not in ("sleep", "dream")
-                and self.vitals.social_battery > 35
+                and self.vitals.social_battery > 60
                 and self.on_message):  # only fire if someone is listening
             self._last_outreach_time = time.time()
             asyncio.create_task(self._send_autonomous_outreach())
@@ -1727,7 +1730,7 @@ class Chloe:
                             self.weather, season, _arc_desc, _tensions_ctx,
                         )
                         _new_idea = Idea(text=idea_d["text"], complete=idea_d.get("complete", True))
-                        self.ideas = [_new_idea, *self.ideas]
+                        self.ideas = [_new_idea, *self.ideas][:MAX_IDEAS]
                         self.db.add_idea(_new_idea)
                         self._log(f'idea: "{idea_d["text"]}…"')
                 else:
@@ -1778,7 +1781,7 @@ class Chloe:
                             self.weather, season, _arc_desc, _tensions_ctx,
                         )
                         _new_idea2 = Idea(text=idea_d2["text"], complete=idea_d2.get("complete", True))
-                        self.ideas = [_new_idea2, *self.ideas]
+                        self.ideas = [_new_idea2, *self.ideas][:MAX_IDEAS]
                         self.db.add_idea(_new_idea2)
                         self._log(f'idea: "{idea_d2["text"]}…"')
 
@@ -2143,7 +2146,7 @@ class Chloe:
             )
             if idea_text:
                 _idea = Idea(text=idea_text)
-                self.ideas = [_idea, *self.ideas]
+                self.ideas = [_idea, *self.ideas][:MAX_IDEAS]
                 self.db.add_idea(_idea)
                 self._log(f'dream→idea: "{idea_text[:60]}…"')
         except Exception as e:
@@ -2331,11 +2334,22 @@ class Chloe:
             _r_sea  = f"{wthr.describe_season(_r_t.tm_mon)}, {circadian_phase(_r_t.tm_hour)}"
             _reflect_q    = f"{_r_arc} {self.affect.mood}".strip() if _r_arc else self.affect.mood
             _reflect_bias = llm._REFLECTION_BIAS.get(self.affect.mood, "")
+
+            # Topic rotation: find tags that have appeared 2+ times in recent reflections
+            # and pass them as "don't revisit" so the loop can't compound on itself.
+            _recent_refs = [m for m in self.memories[:40] if m.type == "reflection"][:5]
+            _tag_freq: dict[str, int] = {}
+            for _m in _recent_refs:
+                for _t in _m.tags:
+                    _tag_freq[_t] = _tag_freq.get(_t, 0) + 1
+            _overused = [t for t, c in _tag_freq.items() if c >= 2][:5]
+
             mem = await asyncio.to_thread(
                 llm.generate_reflection,
                 self.memory_index.query(_reflect_q, self.memories, 6), [i.text for i in self.ideas],
                 beliefs_to_dicts(self.beliefs), self.identity, self.affect.mood,
                 self.weather, _r_sea, _r_arc, _r_tens, _reflect_bias,
+                recent_topics=_overused,
             )
             self._remember(mem["text"], "reflection", mem.get("tags", []))
             self._log(f'reflection: "{mem["text"]}…"')
@@ -2355,7 +2369,10 @@ class Chloe:
                 self._identity_snapshot = traits_snapshot(self.identity)
 
             # 20. Trait emergence — propose new traits from recent experience
-            asyncio.create_task(self._propose_and_update_traits())
+            self._reflect_count += 1
+            _at_trait_cap = len(active_traits(self.identity)) >= MAX_ACTIVE_TRAITS
+            if self._reflect_count % TRAIT_PROPOSE_EVERY == 0 and not _at_trait_cap:
+                asyncio.create_task(self._propose_and_update_traits())
 
             # G3: surface orphan tags → new graph nodes
             await self._surface_orphan_tags()
@@ -2407,12 +2424,12 @@ class Chloe:
                             salience=0.5,
                         )
                     elif self.arc and self.arc.active and arc_type == self.arc.type:
-                        # Deepen the current arc slightly
+                        # Deepen the current arc slightly — hard caps prevent runaway loops
                         self.arc = Arc(
                             type=self.arc.type,
                             start_time=self.arc.start_time,
-                            duration_hours=min(self.arc.duration_hours + 4, 72.0),
-                            intensity=min(0.95, self.arc.intensity + 0.05),
+                            duration_hours=min(self.arc.duration_hours + 2, 36.0),
+                            intensity=min(0.70, self.arc.intensity + 0.03),
                             id=self.arc.id,
                         )
 

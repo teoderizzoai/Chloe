@@ -47,7 +47,9 @@
       "WebFetch(domain:docs.fish.audio)",
       "Bash(chmod +x *)",
       "Bash(mv /workspaces/Chloe/chloe/images/Actions/* /workspaces/Chloe/assets/images/actions/)",
-      "Bash(mv /workspaces/Chloe/chloe/images/Emotions/* /workspaces/Chloe/assets/images/emotions/)"
+      "Bash(mv /workspaces/Chloe/chloe/images/Emotions/* /workspaces/Chloe/assets/images/emotions/)",
+      "Bash(git -C /workspaces/Chloe show --stat b3efc6c)",
+      "Bash(git -C /workspaces/Chloe show b3efc6c -- chloe/chloe.py)"
     ]
   }
 }

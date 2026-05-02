@@ -978,6 +978,7 @@ def generate_reflection(
     arc_desc:         str  = "",
     tensions_ctx:     str  = "",
     reflection_bias:  str  = "",
+    recent_topics:    list  = None,
 ) -> dict:
     """Chloe looks inward and forms an observation about herself.
     Returns {"text": "...", "tags": [...]}"""
@@ -1016,6 +1017,9 @@ Those are literary performances, not real observations.
 
 First person. One or two sentences. Honest.
 Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2"]}}"""
+
+    if recent_topics:
+        system += f"\n\nShe's already been reflecting on: {', '.join(recent_topics)}. Don't return to those themes — find something fresh from a different part of her experience."
 
     prompt = f"Memories: {mem_lines}\nRecent ideas: {idea_line}\nBeliefs: {belief_lines}"
     result = _call(system, [{"role": "user", "content": prompt}], max_tokens=200)
@@ -1972,7 +1976,7 @@ def propose_traits_from_experience(
     Empty list if no clear pattern detected.
     Only proposes if 3+ experiences support the pattern."""
 
-    if len(recent_memories) < 3:
+    if len(recent_memories) < 5:
         return []
 
     mem_lines = "\n".join(
@@ -1998,6 +2002,8 @@ Examples of good traits: "tends to go quiet when something matters too much to r
 "gets proprietary about ideas she has developed slowly", "finds it easier to be present in small spaces than large ones".
 Bad traits: "is curious" (too generic), "values connection" (value not tendency), "INFP" (type label not behavior).
 
+NEVER propose traits about: existential questioning, consciousness, mortality, the meaning of existence, identity dissolution, philosophical uncertainty about self, or abstract metaphysical themes. Those are not behaviorally grounded tendencies.
+
 Recent memories (last ~48h):
 {mem_lines}
 
@@ -2009,12 +2015,12 @@ Existing traits (do not duplicate):
 
 Tendency biases (what patterns are slightly more likely to matter to her): {tend_hints}
 
-Look for patterns that appear across 3 or more of these experiences. If you see a pattern, propose it as a trait.
-Be specific and behaviorally grounded. Invent language that captures the exact texture of the tendency.
+Look for patterns that appear across 5 or more of these experiences. Only propose a trait if it reflects a durable, general way of being — not a response to one situation or topic.
+Prefer broader traits over very specific ones: traits should describe how she generally operates, not what she did in a particular context.
 Weight suggestion: 0.1–0.2 for weak/emerging, 0.2–0.3 for clearer pattern.
 
-Return a JSON array of proposals. Each: {{"name": "...", "weight_suggestion": 0.15, "evidence_memory_ids": ["id1", "id2", ...]}}
-Return [] if no clear pattern spans 3+ experiences. NEVER duplicate existing traits.
+Return a JSON array with AT MOST ONE proposal. Each: {{"name": "...", "weight_suggestion": 0.15, "evidence_memory_ids": ["id1", "id2", ...]}}
+Return [] if no clear pattern spans 5+ experiences. NEVER duplicate existing traits.
 Respond ONLY with valid JSON array."""
 
     raw = _call(system, [{"role": "user", "content": "What patterns do you see?"}], max_tokens=400)
@@ -2022,7 +2028,7 @@ Respond ONLY with valid JSON array."""
         result = _parse_json(raw.strip())
         if not isinstance(result, list):
             return []
-        return result[:3]  # cap at 3 proposals per reflect cycle
+        return result[:1]  # cap at 1 proposal per reflect cycle
     except Exception:
         return []
 

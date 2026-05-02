@@ -44,7 +44,7 @@ class Idea:
         )
 
 
-MAX_IDEAS = 20  # kept for reference; cap no longer applied (SQLite is unbounded)
+MAX_IDEAS = 10  # hard cap on in-memory idea list; older ideas are dropped
 
 def ideas_to_dicts(ideas: list["Idea"]) -> list[dict]:
     return [i.to_dict() for i in ideas]
