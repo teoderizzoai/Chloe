@@ -30,6 +30,6 @@ Cross off items when done. Implementation detail in 05_FEATURES.md; history in 0
 ## Infrastructure
 
 - [x] VPS (Hetzner) deployed — 178.104.205.170
-- [ ] systemd service (server restarts automatically)
+- [x] systemd service — `chloe.service`, enabled, auto-starts on boot
 - [ ] Frontend auth + mobile-friendly dashboard
 - [ ] SQLite backup strategy (currently only JSON is backed up at 23:00)

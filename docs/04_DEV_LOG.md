@@ -72,6 +72,23 @@ Session 28 (2026-04-30) — Priority 6: All remaining cognition features.
 - B5 Curiosity Engine: generate_curiosity_question(node_label, interests, identity) in llm.py. Returns {"text": str, "tags": list}. Called in think activity with 15% probability when sparse graph node found. Result added as Want with subtype="curiosity_question". add_want() updated to accept subtype param.
 - D1 Relationship-driven trait expression: trait_profile: dict on Person (keys "activated" and "suppressed", each a list of trait names). format_trait_profile_context(person) in persons.py generates prompt text. generate_person_trait_profile() in llm.py — Haiku classifies which traits are activated/suppressed around this person. Called from _update_person_impression() as background task. Injected into llm.chat() as trait_profile_ctx. SQLite migrated.
 
+Session 32 (2026-05-03) — API cost optimisation: prompt caching, combined extractions, expressed inner states.
+
+Root cause of €25/day: old settings (TICK_SECONDS=5, MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS=90) → ~960 _fire_event calls/day; each event fired 2–4 Haiku calls; article text uncapped (8000+ chars). Fixed in prior session by raising MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS to 3600 (≤16/day), TRAIT_PROPOSE_EVERY to 6, ORPHAN_CHECK_EVERY to 240, article text cap at 4000 chars.
+
+This session: additional per-call and per-chat reductions.
+
+**Prompt caching** — `_call()` in `llm.py` gains a `cache_prefix: str = ""` parameter. When set, the prefix is sent as a separate `{"type": "text", "cache_control": {"type": "ephemeral"}}` block before the dynamic system string. All 10 background generation functions (`generate_memory_from_article`, `generate_memory`, `generate_idea`, `generate_curiosity_question`, `generate_reflection`, `generate_continuity_note`, `generate_goal`, `generate_journal`, `generate_creative`, `generate_want`) now pass `_CHLOE_INNER_LIFE` (~150 tokens) as `cache_prefix` and remove it from their system strings. Anthropic caches the block for 5 minutes: writes cost 25% more, reads cost 90% less. Sequential events within the same 5-minute window pay for one write and read at near-zero cost.
+
+**Combined exchange extraction** — replaced 4 separate per-chat Haiku calls (`extract_notable`, `extract_event`, `extract_third_party_mentions`, `extract_shared_moment`) with a single `extract_from_exchange()` call that returns all 7 fields in one response: notable note, future event, third-party mentions, shared moment, expressed want, expressed fear, expressed aversion. The want/fear/aversion fields look at Chloe's outgoing reply (already present in the exchange) — this wires up the previously dead expressed-want/fear/aversion pipeline. Existing lists are passed to avoid duplicates. `_extract_from_exchange_bg()` in `chloe.py` is the single background task now spawned on both regular and voice chat paths. `max_tokens` budget for the combined call is 500.
+
+**Minor per-tick reductions**:
+- Trait reinforcement probability: 10% → 5% in `_remember()`.
+- Impression update cadence: every 5 conversations → every 10.
+- Emotion read skipped for messages shorter than 15 characters (greetings, "ok", single words).
+
+**Dead code removed**: `_extract_and_store_note`, `_extract_and_store_event`, `_extract_and_store_moment`, `_extract_and_store_third_parties` methods in `chloe.py`; `extract_expressed_want`, `extract_expressed_fear`, `extract_expressed_aversion` functions in `llm.py` (these were defined but never called — the expressed-state extraction is now handled inside `extract_from_exchange`).
+
 Session 30 (2026-05-01) — C5: Attachment patterns.
 - persons.py: `attachment_pattern: str = ""` field on Person. `format_attachment_context(person)` formats it for prompt injection. `attachment_risk_modifier(person)` derives a 0.5–1.5 baseline risk tolerance from warmth, conflict level, and whether a pattern exists. `tick_distance` and `tick_conflict` rewritten to use `dataclasses.replace()` — fixes a pre-existing bug where fields including `trait_profile` were silently dropped every tick; as a side effect C5 distance resistance is clean: drift is halved when `attachment_pattern` is set and warmth ≥ 70. `replace` imported at module level.
 - store.py: migration adds `attachment_pattern TEXT NOT NULL DEFAULT ''` to persons table. `sync_persons` and `load_persons` include the new field.
@@ -98,3 +115,11 @@ Anti-escalation (feedback loop prevention): (1) Reflection topic rotation — _r
 3-stage RAG pipeline (live conversations only): Previously: query=message, n=5, single ChromaDB call. Now: (1) _build_memory_query() static method constructs rich query from message + last 5 chat turns + mood. (2) memory_index.query(rich_query, memories, n=20) — 3× candidate fetch (60) reranked to 20. (3) grade_memories() new Haiku function in llm.py reads 20 candidates + conversation context, returns IDs of 4-5 most genuinely relevant. Both chat() and _voice_chat() paths use the full 3-stage pipeline. Background events (_fire_event, _reflect, _write_journal, _send_autonomous_outreach) unchanged — still use direct reranking. active_traits imported at module level in chloe.py (was inline import only).
 
 Deployment: Chloe running on Hetzner VPS at 178.104.205.170.
+
+Session 33 (2026-05-03) — Migrated from Anthropic SDK to Google Gemini.
+- `llm.py`: replaced `anthropic` import with `google-genai` SDK (`from google import genai; from google.genai import types`). `_client` is now `genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))`. `_call()` rewritten to use `_client.models.generate_content()` with `types.Content`/`types.Part` message format and `types.GenerateContentConfig(system_instruction=..., max_output_tokens=...)`. Message role `"assistant"` mapped to `"model"` (Gemini convention). `response.text` replaces `response.content[0].text`.
+- `cache_prefix` behaviour: Anthropic's ephemeral cache block dropped; prefix is now simply prepended to the system string. No functional change — just loses the 90%-cheaper cache reads.
+- Model constants: `MODEL_CHAT = "gemini-2.5-pro"` (was `claude-sonnet-4-6`), `MODEL_FAST = "gemini-2.5-flash"` (was `claude-haiku-4-5-20251001`).
+- `requirements.txt`: `anthropic>=0.25.0` → `google-genai>=1.0.0`. Set `GOOGLE_API_KEY` in `.env`.
+
+API cost fix: Running with old settings (TICK_SECONDS=5, MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS=90) cost €25/day — ~960 _fire_event calls/day × 2-4 Haiku calls each, plus 72 reflect cycles/day, 24 trait-proposal invokes/day, and uncapped article text (8000+ chars). Fixed: MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS→3600 (≤16 events/day), ORPHAN_CHECK_EVERY→240 (2h), TRAIT_PROPOSE_EVERY→6 (every 12h), article text capped at 4000 chars. Target cost €1–3/day. The intermediate value of 24h was too restrictive (1 event/day, effectively dormant).

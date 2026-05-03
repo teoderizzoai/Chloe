@@ -11,9 +11,9 @@ Chloe is a persistent AI entity running as a continuously ticking Python process
 
 The goal is an autonomous, developing mind. All of her history shapes who she is right now.
 
-**Owner:** Teo — Windows, Amsterdam, beginner–intermediate Python.
-**Runtime:** localhost (VPS migration planned).
-**Stack:** Python 3.13, FastAPI, Anthropic Sonnet (chat) + Haiku (background), ChromaDB, SQLite, HTML dashboard.
+**Owner:** Teo — dev from Codespace, Amsterdam.
+**Runtime:** Hetzner VPS `178.104.205.170`, systemd service `chloe.service`.
+**Stack:** Python 3.13, FastAPI, Gemini 2.5 Pro (chat) + Gemini 2.5 Flash (background), ChromaDB, SQLite, HTML dashboard.
 
 ---
 
@@ -35,23 +35,26 @@ The goal is an autonomous, developing mind. All of her history shapes who she is
 
 ### What is built and working
 
-- Tick loop (5s), fully async — vitals, mood, soul drift, activity selection, background events
-- Two-tier LLM: Sonnet for chat and outreach, Haiku for all background/structured work
-- Layered state: Vitals → Mood → Arc → Soul (seconds to weeks timescale separation)
-- Memory system: ChromaDB semantic index + SQLite, append-only, weight decay, recency reranking
-- Inner life: Wants, Beliefs, Goals, Fears, Aversions, Tensions, Arcs — all persisted to SQLite
-- Person model: warmth, distance, conflict, tone register, impressions, shared moments, third parties
+- Tick loop (30s), fully async — vitals, mood, activity selection, background events
+- Two-tier LLM: Sonnet 4.6 for chat and outreach, Haiku 4.5 for all background/structured work
+- Prompt caching: `_CHLOE_INNER_LIFE` cached as ephemeral prefix block in all 10 background generation functions
+- Layered state: Vitals → Mood → Arc → Identity (seconds to weeks timescale separation)
+- Memory system: ChromaDB semantic index + SQLite, append-only, weight decay, 3-stage graded RAG for live chat
+- Inner life: Wants, Beliefs, Goals, Fears, Aversions, Tensions, Arcs — all persisted to SQLite; pressure accumulation on all four; expressed wants/fears/aversions extracted from Chloe's own replies
+- Person model: warmth, distance, conflict, tone register, impressions, attachment patterns, shared moments, third parties, trait profiles
 - Interest graph: nodes + edges, hit-count reinforcement, auto-expansion, orphan surfacing
-- Autonomous behavior: outreach, dreaming, reading, thinking, creating
-- Reflection loop: runs every ~20 min, generates continuity checks, goals, tensions, arc updates
-- Persistence: SQLite (write-through) + JSON (5min saves) + daily backups
+- Autonomous behavior: outreach, dreaming, reading, thinking, creating — ≤16 events/day (MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS=3600)
+- Social risk model: outreach suppressed when risk > tolerance; accumulated longing (pressure > 0.85) overrides
+- Reflection loop: runs every ~2h, generates continuity checks, goals, tensions, arc updates; topic rotation prevents feedback loops
+- Trait system: emergent, experience-driven; max 10 active; proposals every ~12h; failure consequences (setbacks, suppression beliefs)
+- Persistence: SQLite (write-through) + JSON (30min saves) + daily backups; deployed on Hetzner VPS under systemd
 - Dashboard: HTML polling `/snapshot` every 4s
 - Voice: optional separate process (Fish Speech + Whisper, Python 3.11)
 - Discord: optional DM bridge
 
-### Identity — trait system (Session 26)
+### Identity — trait system (Sessions 26–27)
 
-The MBTI soul system has been replaced by a generative trait system. `identity.py` holds `Trait`, `Contradiction`, `Tendencies`, `Identity`. Traits emerge from experience via Haiku — no predefined list. `identity_block()` injects the current trait profile into all LLM prompts. `soul.py` is kept frozen for `heart.py` compatibility (MBTI activity affinity still used in `tick_vitals`/`auto_decide`) but no longer drifts. Do not extend `soul.py`.
+The MBTI soul system has been replaced by a generative trait system. `identity.py` holds `Trait`, `Contradiction`, `Tendencies`, `Identity`. Traits emerge from experience via Haiku — no predefined list. `identity_block()` injects the current trait profile into all LLM prompts. `soul.py` is kept frozen but no longer referenced by active code. Do not extend `soul.py`.
 
 ---
 
@@ -99,7 +102,7 @@ The MBTI soul system has been replaced by a generative trait system. `identity.p
 
 ### Priority 5 — Trait system completion ✓ DONE (Session 27)
 
-- **Trait reinforcement on memory add** — `_remember()` fires `_maybe_reinforce_traits(memory)` as a background task with 10% probability. Picks a random top-5 active trait, calls `classify_trait_reinforcement()` via Haiku, bumps weight + syncs to SQLite if matched.
+- **Trait reinforcement on memory add** — `_remember()` fires `_maybe_reinforce_traits(memory)` as a background task with 5% probability. Picks a random top-5 active trait, calls `classify_trait_reinforcement()` via Haiku, bumps weight + syncs to SQLite if matched.
 - **`heart.py` fully migrated to identity** — `soul_activity_affinity()` removed. `tick_vitals` and `auto_decide` now take `identity=` instead of `soul=`. `trait_personality_scalars(identity)` and `trait_activity_affinity(identity, activity_id)` added to `identity.py` — derive (ei, sn, tf, jp) scalars from Tendencies biases + active trait keyword signals. Both call sites in `chloe.py` updated.
 - **Dashboard traits panel** — sidebar "soul" section replaced with "identity" section showing active traits: label (core/strong/present/emerging), weight %, name, mini bar. MBTI pill shows trait count. History tab soul sparklines removed. Admin panel soul block replaced with read-only trait list. All broken `s.soul.*` references fixed.
 
@@ -116,11 +119,31 @@ The MBTI soul system has been replaced by a generative trait system. `identity.p
 
 ---
 
+### Priority: Sessions 29–31 — Failure consequences, attachment patterns, pacing ✓ DONE
+
+**Session 29 — C2 Failure consequences**: `setback_count` + `setback_notes` on `Trait`. `traits_matching_tags()` + `penalize_trait()` in `identity.py`. Frustrated wants apply −0.04 penalty; failed goals −0.08. Three setbacks on same trait generates suppression belief. `fail_stale_goals()` in AGE tick. Haiku generates honest failure reflection as feeling memory.
+
+**Session 30 — C5 Attachment patterns**: `attachment_pattern: str` on `Person`. `generate_attachment_pattern()` in `llm.py`. `format_attachment_context()` and `attachment_risk_modifier()` in `persons.py`. Called from `_update_person_impression()`. `tick_distance` rewritten with `dataclasses.replace()` to avoid silently dropping new fields.
+
+**Session 31 — Pacing + 3-stage RAG**: TICK_SECONDS 5→30. OUTREACH_INTERVAL 2h→48h. MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS 90s→3600s (≤16 events/day, was 960). Quiet mode (`_matches_quiet_request`). Trait proposal controls: max 10 traits, every 6th reflect, 1 per cycle, 5+ memories required. Anti-escalation: reflection topic rotation, arc caps (max 0.70 intensity, 36h duration). 3-stage RAG: rich query → 20 ChromaDB candidates → Haiku grader → 4-5 genuinely relevant.
+
+---
+
+### Priority: Session 32 — API cost optimisation ✓ DONE
+
+- **Prompt caching**: `_call()` gains `cache_prefix` param; `_CHLOE_INNER_LIFE` (~150 tokens) cached as ephemeral block in all 10 background generation functions. Cache TTL 5 min; reads cost 90% less.
+- **Combined extraction**: 4 per-chat Haiku calls merged into `extract_from_exchange()` returning 7 fields: notable, event, third_parties, shared_moment, expressed_want, expressed_fear, expressed_aversion. Single `_extract_from_exchange_bg()` task on both chat paths.
+- **Expressed inner states wired up**: want/fear/aversion extraction from Chloe's replies was previously defined but never called — now active via the combined function.
+- **Minor reductions**: trait reinforcement 10%→5%, impression cadence 5→10 conversations, emotion read skipped for messages < 15 chars.
+
+---
+
 ## What's next
 
-- **VPS (Hetzner) + systemd deployment**
-- **Frontend auth + mobile-friendly dashboard**
+- **D2 — Tone register becomes trait-aware**: `tone_context()` selects which traits are emphasised per warmth tier, not just access level (see `05_FEATURES.md`)
 - **Dashboard for new features** — residue indicator, loop display, curiosity queue
+- **Frontend auth + mobile-friendly dashboard**
+- **SQLite backup strategy** (currently only JSON is backed up at 23:00)
 
 ---
 
@@ -129,13 +152,15 @@ The MBTI soul system has been replaced by a generative trait system. `identity.p
 These are load-bearing. Changing them breaks the system's coherence in non-obvious ways.
 
 - **The tick loop never blocks on the network.** All LLM calls are `asyncio.create_task`. Any synchronous LLM call in the tick blocks the heartbeat.
-- **The timescale layers stay separate.** Mood does not track vitals tick-by-tick. Soul/identity does not lurch on a single event. Arc exists as a distinct layer above mood.
+- **The timescale layers stay separate.** Mood does not track vitals tick-by-tick. Identity does not lurch on a single event. Arc exists as a distinct layer above mood.
 - **Memory is append-only.** No edits, no deletes. Weight decays, confidence can be low, but the record stays.
 - **ChromaDB and SQLite memories must stay in sync.** All adds go through `_remember()`. Never add directly to one store.
 - **`self._busy` gates background events.** Chat does not set `_busy`. Do not change this gating.
 - **Two LLM tiers are intentional.** Sonnet for anything a human reads. Haiku for everything structural. Do not add Sonnet calls to the tick loop.
 - **The eight mood labels are fixed.** Do not add moods. Do not rename them. The label set is hardcoded biology.
-- **Do not extend `soul.py`.** It is retired. Its Soul object is frozen and no longer used by `heart.py`. New identity work goes into `identity.py`.
+- **Do not extend `soul.py`.** It is retired and frozen. New identity work goes into `identity.py`.
+- **Per-chat extraction is one combined Haiku call.** `extract_from_exchange()` handles 7 fields. Do not add separate per-chat extraction calls — extend the combined function instead.
+- **Prompt caching prefix is separate from the dynamic system string.** Pass `_CHLOE_INNER_LIFE` (or any static prefix) as `cache_prefix=`, not embedded in the `system` string.
 
 ---
 
@@ -168,7 +193,7 @@ Chloe/
     persons.py      — Person + warmth/distance/conflict + tone_context
     inner.py        — Want, Belief, Goal, Fear, Aversion, Tension, Arc, AffectRecord
     graph.py        — interest graph: nodes, edges, expansion, resonance
-    llm.py          — every Anthropic call (~25 functions)
+    llm.py          — every Gemini call (~25 functions)
     feeds.py        — RSS, web fetch, web search
     weather.py      — Open-Meteo client
     store.py        — ChloeDB SQLite write-through

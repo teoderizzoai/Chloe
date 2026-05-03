@@ -81,7 +81,6 @@ It may be inaccurate. The inaccuracy is intentional and tracked against the actu
 
 ## Infrastructure
 
-- systemd service on Hetzner VPS (server deployed; auto-restart not yet configured)
 - Frontend auth + mobile-friendly dashboard
 - SQLite backup strategy (currently only JSON is backed up daily at 23:00)
 

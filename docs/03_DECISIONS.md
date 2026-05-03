@@ -83,6 +83,20 @@ Different people activate different versions of Chloe -- not just different warm
 
 Outreach used to fire on conditions and intervals. Now pressure accumulation, social risk model, impulse interrupt, and recurring loops crystallising into tension make outreach and activity selection feel like they come from something building rather than a dice roll.
 
+### Per-chat extraction is one combined call (Session 32)
+
+The original design had 4 separate Haiku calls per chat turn (notable note, future event, third-party mentions, shared moment), with 3 more defined but never wired (expressed want, fear, aversion). This was restructured into a single `extract_from_exchange()` call returning all 7 fields.
+
+The design rule: any new per-chat extraction task should extend the combined function's system prompt and return structure rather than spawn a new API call. The cost difference between "one call with a larger response" and "N calls" is dramatic at scale — especially with Haiku, where latency is low and per-call overhead dominates.
+
+Expressed wants, fears, and aversions from Chloe's own replies are now extracted in the same call by looking at the last "Chloe:" entry in the exchange (already present at the point the background task runs).
+
+### Prompt caching for static context (Session 32)
+
+`_CHLOE_INNER_LIFE` — Chloe's ~150-token character description — appears in all 10 background generation functions. It is static across any given session. It is passed as `cache_prefix=` to `_call()`, which prepends it to the system string, keeping it out of every individual function's system definition.
+
+The rule: any text that is (a) static within a session and (b) >50 tokens is a `cache_prefix` candidate. Dynamic context (identity block, vitals, mood) changes per-call and belongs inside the function's own system string.
+
 ---
 
 ## Remaining committed direction

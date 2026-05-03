@@ -93,6 +93,21 @@ Identity evolves from the `_reflect()` cycle (~every 2 hours): Haiku reviews rec
 
 Full mechanics: `docs/00_ARCHITECTURE.md`. Feature roadmap: `docs/05_FEATURES.md`. Upcoming work: `docs/01_CHECKLIST.md`.
 
+## Deployment
+
+Chloe runs on a Hetzner VPS (`178.104.205.170`). The SSH key lives at `~/.ssh/chloe_hetzner`.
+
+```bash
+# Deploy a changed file
+scp -i ~/.ssh/chloe_hetzner chloe/chloe.py root@178.104.205.170:/opt/chloe/app/chloe/chloe.py
+ssh -i ~/.ssh/chloe_hetzner root@178.104.205.170 "systemctl restart chloe"
+
+# Watch logs
+ssh -i ~/.ssh/chloe_hetzner root@178.104.205.170 "journalctl -u chloe -f"
+```
+
+Full deployment guide (SSH recovery, rsync, service management, cost tuning): `docs/00_ARCHITECTURE.md` § 15.
+
 ## Key invariants
 
 - The tick loop never blocks on the network

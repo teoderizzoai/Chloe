@@ -1,19 +1,21 @@
 # chloe/llm.py
 # ─────────────────────────────────────────────────────────────
-# All calls to the Anthropic API.
+# All calls to the Google Gemini API.
 #
 # Each function is a single, focused task.
 # Chloe's soul, vitals, and memories are injected as context.
-# Uses the official `anthropic` Python SDK.
+# Uses the official `google-genai` Python SDK.
 #
-# Install: pip install anthropic
-# Set env:  export ANTHROPIC_API_KEY=your_key_here
+# Install: pip install google-genai
+# Set env:  export GOOGLE_API_KEY=your_key_here
 # ─────────────────────────────────────────────────────────────
 
 import json
+import os
 import re
 from pathlib import Path
-import anthropic
+from google import genai
+from google.genai import types
 from typing import Any
 from dotenv import load_dotenv
 
@@ -24,26 +26,37 @@ from .heart   import Vitals
 from .memory  import Memory, format_for_prompt
 from .persons import tone_context, relationship_stage
 
-MODEL_CHAT = "claude-sonnet-4-6"          # full power, used only for live chat
-MODEL_FAST = "claude-haiku-4-5-20251001" # background tasks: memory, ideas, graph
+MODEL_CHAT = "gemini-2.5-pro"          # full power, used only for live chat
+MODEL_FAST = "gemini-2.5-flash"        # background tasks: memory, ideas, graph
 MAX_TOKENS = 1024
 
-# Initialise the client once, it reads ANTHROPIC_API_KEY from env automatically
-_client = anthropic.Anthropic()
+# Initialise the client once, it reads GOOGLE_API_KEY from env automatically
+_client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
 
 
 # ── BASE CALLER ──────────────────────────────────────────────
 
 def _call(system: str, messages: list[dict], max_tokens: int = MAX_TOKENS,
-          model: str = MODEL_FAST) -> str:
+          model: str = MODEL_FAST, cache_prefix: str = "") -> str:
     """Send a request and return the text response."""
-    response = _client.messages.create(
+    system_text = (cache_prefix + "\n\n" + system).strip() if cache_prefix else system
+
+    # Convert Anthropic-style messages to Gemini format
+    contents = []
+    for m in messages:
+        role = "model" if m["role"] == "assistant" else m["role"]
+        text = m.get("content") or m.get("text", "")
+        contents.append(types.Content(role=role, parts=[types.Part(text=text)]))
+
+    response = _client.models.generate_content(
         model=model,
-        max_tokens=max_tokens,
-        system=system,
-        messages=messages,
+        contents=contents,
+        config=types.GenerateContentConfig(
+            system_instruction=system_text,
+            max_output_tokens=max_tokens,
+        ),
     )
-    text = response.content[0].text.strip()
+    text = response.text.strip()
     # Strip dashes at source - instructions alone are not reliable enough
     text = text.replace('\u2014', ', ')   # em dash -> comma
     text = text.replace('\u2013', ', ')   # en dash -> comma
@@ -435,9 +448,7 @@ def generate_memory_from_article(
     arc_ctx = f" She's {arc_desc}." if arc_desc else ""
     ten_ctx = f" Internally: {tensions_ctx}." if tensions_ctx else ""
 
-    system = f"""{_CHLOE_INNER_LIFE}
-
-She is {identity_block(identity)}, mood: {mood}.{world_ctx}{arc_ctx}{ten_ctx}
+    system = f"""She is {identity_block(identity)}, mood: {mood}.{world_ctx}{arc_ctx}{ten_ctx}
 Currently interested in: {", ".join(interests[:8])}.
 {inner_ctx}
 
@@ -454,7 +465,7 @@ Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}
 
     excerpt = text[:900] if text else title
     prompt  = f'Article: "{title}"\n\nExcerpt:\n{excerpt}'
-    result  = _call(system, [{"role": "user", "content": prompt}], max_tokens=200)
+    result  = _call(system, [{"role": "user", "content": prompt}], max_tokens=200, cache_prefix=_CHLOE_INNER_LIFE)
     return _parse_json(result)
 
 
@@ -479,9 +490,7 @@ def generate_memory(
         world_ctx += f" {weather.description} outside."
     arc_ctx = f" She's {arc_desc}." if arc_desc else ""
 
-    system = f"""{_CHLOE_INNER_LIFE}
-
-She is {identity_block(identity)}, mood: {mood}.{world_ctx}{arc_ctx}
+    system = f"""She is {identity_block(identity)}, mood: {mood}.{world_ctx}{arc_ctx}
 Interested in: {", ".join(interests[:8])}.{idea_line}
 
 Write one memory fragment — a real, specific thing she noticed or thought about related to this topic.
@@ -494,7 +503,7 @@ Bad: "something in the silence that holds more than words can carry"
 
 Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}}"""
 
-    result = _call(system, [{"role": "user", "content": f"Form a memory fragment about: {topic}"}], max_tokens=200)
+    result = _call(system, [{"role": "user", "content": f"Form a memory fragment about: {topic}"}], max_tokens=200, cache_prefix=_CHLOE_INNER_LIFE)
     return _parse_json(result)
 
 
@@ -530,9 +539,7 @@ def generate_idea(
         if active:
             goal_ctx = f" Things she's working toward: {' / '.join(g['text'] for g in active)}."
 
-    system = f"""{_CHLOE_INNER_LIFE}
-
-She is {identity_block(identity)}, mood: {mood}.{world_ctx}{arc_ctx}{ten_ctx}{goal_ctx}
+    system = f"""She is {identity_block(identity)}, mood: {mood}.{world_ctx}{arc_ctx}{ten_ctx}{goal_ctx}
 Her interests: {", ".join(interests[:8])}.
 Her recent memories: {" | ".join(m.text for m in memories[:3])}
 {inner_ctx}
@@ -553,7 +560,7 @@ Sometimes thoughts don't finish — they trail off or get interrupted. In that c
 Respond with a JSON object: {{"text": "the idea", "complete": true}} or {{"text": "a trailing fragment...", "complete": false}}
 No preamble."""
 
-    raw = _call(system, [{"role": "user", "content": "What idea just surfaced?"}], max_tokens=150)
+    raw = _call(system, [{"role": "user", "content": "What idea just surfaced?"}], max_tokens=150, cache_prefix=_CHLOE_INNER_LIFE)
     try:
         import json as _json
         result = _json.loads(raw)
@@ -572,9 +579,7 @@ def generate_curiosity_question(
 ) -> dict:
     """Generate an open question that becomes a curiosity_question Want.
     Returns {"text": str, "tags": list[str]}."""
-    system = f"""{_CHLOE_INNER_LIFE}
-
-She is {identity_block(identity)}, mood: {mood}.
+    system = f"""She is {identity_block(identity)}, mood: {mood}.
 Her interests include: {", ".join(interests[:6])}.
 She just noticed a gap: something related to "{node_label}" that she doesn't understand.
 
@@ -584,7 +589,7 @@ Also provide 2-3 lowercase tag strings (single words) that categorise it.
 
 Respond with JSON: {{"text": "the question?", "tags": ["tag1", "tag2"]}}
 No preamble."""
-    raw = _call(system, [{"role": "user", "content": "What does she want to know?"}], max_tokens=120)
+    raw = _call(system, [{"role": "user", "content": "What does she want to know?"}], max_tokens=120, cache_prefix=_CHLOE_INNER_LIFE)
     try:
         import json as _json
         result = _json.loads(raw)
@@ -1052,9 +1057,7 @@ def generate_reflection(
 
     bias_ctx = f"\nNote on your current perceptual state: {reflection_bias}" if reflection_bias else ""
 
-    system = f"""{_CHLOE_INNER_LIFE}
-
-She is {identity_block(identity)}, mood: {mood}.{world_ctx}{arc_ctx}{ten_ctx}{bias_ctx}
+    system = f"""She is {identity_block(identity)}, mood: {mood}.{world_ctx}{arc_ctx}{ten_ctx}{bias_ctx}
 
 Write ONE self-observation — something she just noticed about herself: what she's been paying attention to,
 a pattern in what she likes or avoids, something that surprised her about her own reaction.
@@ -1077,7 +1080,7 @@ Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2"]}}"""
         system += f"\n\nShe's already been reflecting on: {', '.join(recent_topics)}. Don't return to those themes — find something fresh from a different part of her experience."
 
     prompt = f"Memories: {mem_lines}\nRecent ideas: {idea_line}\nBeliefs: {belief_lines}"
-    result = _call(system, [{"role": "user", "content": prompt}], max_tokens=200)
+    result = _call(system, [{"role": "user", "content": prompt}], max_tokens=200, cache_prefix=_CHLOE_INNER_LIFE)
     return _parse_json(result)
 
 
@@ -1094,8 +1097,7 @@ def generate_continuity_note(
     id_ctx = identity_block(identity)
     id_line = f"\n{id_ctx}\n" if id_ctx else ""
 
-    system = f"""{_CHLOE_INNER_LIFE}
-{id_line}
+    system = f"""{id_line}
 You are Chloe. Mood: {mood}.
 
 Trait shifts observed: {changes_text}
@@ -1108,7 +1110,7 @@ First person. One or two sentences.
 Respond ONLY with valid JSON: {{"text": "...", "tags": ["continuity", "drift", "self"]}}"""
 
     result = _call(system, [{"role": "user", "content": "What do you notice about how you've changed?"}],
-                   max_tokens=180)
+                   max_tokens=180, cache_prefix=_CHLOE_INNER_LIFE)
     return _parse_json(result)
 
 
@@ -1141,9 +1143,7 @@ def generate_goal(
         if active_g:
             existing_line = "\nGoals she already has (don't repeat): " + " / ".join(g["text"] for g in active_g)
 
-    system = f"""{_CHLOE_INNER_LIFE}
-
-She is {identity_block(identity)}. Interests: {", ".join(interests[:6])}.{want_line}{belief_line}{existing_line}
+    system = f"""She is {identity_block(identity)}. Interests: {", ".join(interests[:6])}.{want_line}{belief_line}{existing_line}
 
 Write ONE goal — a longer-term ambition she's working toward over the coming days or week.
 NOT an immediate task. A genuine understanding, perspective, or sense of something she wants to develop over time.
@@ -1163,7 +1163,7 @@ Write one goal. First person. Something that takes time to reach.
 Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}}"""
 
     prompt = f"Recent memories:\n{mem_lines}"
-    result = _call(system, [{"role": "user", "content": prompt}], max_tokens=180)
+    result = _call(system, [{"role": "user", "content": prompt}], max_tokens=180, cache_prefix=_CHLOE_INNER_LIFE)
     return _parse_json(result)
 
 
@@ -1186,9 +1186,7 @@ def generate_journal(
     if weather:
         world_ctx += f", {weather.description}"
 
-    system = f"""{_CHLOE_INNER_LIFE}
-
-She is {identity_block(identity)}. Mood: {mood}. Energy: {round(vitals.energy)}%.
+    system = f"""She is {identity_block(identity)}. Mood: {mood}. Energy: {round(vitals.energy)}%.
 {f"Today was {day}." if day else ""} {world_ctx}
 
 Write Chloe's private end-of-day journal entry. Not a summary of events.
@@ -1199,7 +1197,7 @@ Specific. Grounded in real things from the day. 2–4 sentences. Intimate but no
 Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2"]}}"""
 
     prompt = f"Memories from today:\n{mem_lines}"
-    result = _call(system, [{"role": "user", "content": prompt}], max_tokens=250)
+    result = _call(system, [{"role": "user", "content": prompt}], max_tokens=250, cache_prefix=_CHLOE_INNER_LIFE)
     return _parse_json(result)
 
 
@@ -1460,141 +1458,88 @@ If there is no shared moment, respond with: null"""
         return None
 
 
-def extract_expressed_want(
-    chloe_reply: str,
-    existing_wants: list,   # list of Want dicts — to avoid surfacing duplicates
-) -> dict | None:
-    """After Chloe replies, check if she expressed a genuine desire, longing, or curiosity
-    that should be added to her Wants list.
+# ── COMBINED EXCHANGE EXTRACTION ────────────────────────────
 
-    Returns {"text": "...", "tags": [...]} or None."""
+def extract_from_exchange(
+    message:             str,
+    exchange:            list[dict],   # recent messages [{"from": "chloe"|"user", "text": "..."}]
+    person_name:         str,
+    identity:            Identity,
+    today_iso:           str,
+    existing_wants:      list = None,
+    existing_fears:      list = None,
+    existing_aversions:  list = None,
+) -> dict:
+    """Run all seven per-exchange extractions in one Haiku call.
 
-    if not chloe_reply or len(chloe_reply.strip()) < 10:
-        return None
+    Returns:
+      {"notable":           {"text": ..., "tags": [...]} | null,
+       "event":             {"text": ..., "date": "YYYY-MM-DD", "uncertain": bool} | null,
+       "third_parties":     [{"name": ..., "sentiment": int, "note": ...}, ...],
+       "shared_moment":     {"text": ..., "tags": [...]} | null,
+       "expressed_want":    {"text": ..., "tags": [...]} | null,
+       "expressed_fear":    {"text": ..., "tags": [...]} | null,
+       "expressed_aversion":{"text": ..., "tags": [...]} | null}
+    """
+    _empty: dict = {
+        "notable": None, "event": None, "third_parties": [], "shared_moment": None,
+        "expressed_want": None, "expressed_fear": None, "expressed_aversion": None,
+    }
 
-    existing_texts = " | ".join(w["text"] for w in existing_wants[:6]) if existing_wants else "none"
+    lines = []
+    chloe_reply = ""
+    for m in exchange[-6:]:
+        speaker = "Chloe" if m.get("from") == "chloe" else person_name
+        lines.append(f"{speaker}: {m['text']}")
+        if m.get("from") == "chloe":
+            chloe_reply = m["text"]
+    exchange_text = "\n".join(lines) if lines else "(no exchange)"
 
-    system = f"""You are reading a message that Chloe just sent.
-Decide if she expressed a genuine WANT — a desire, longing, curiosity, or thing she wishes for.
+    existing_wants_str     = " | ".join(w["text"] for w in (existing_wants or [])[:4])     or "none"
+    existing_fears_str     = " | ".join(f["text"] for f in (existing_fears or [])[:4])     or "none"
+    existing_aversions_str = " | ".join(a["text"] for a in (existing_aversions or [])[:4]) or "none"
 
-A want can be:
-- Explicit: "i want", "i wish", "i'd love to", "i need to know"
-- Implicit longing: circling around something, wanting it without naming it directly
-- Desire disguised as fear: "what if i never get to..." or "i'm scared i won't..."
-- Curiosity with emotional weight: not just asking, but genuinely needing to know
-- Something she's slightly afraid of wanting but still wants
+    system = f"""Today is {today_iso}. You are reading a conversation between Chloe and {person_name}.
+Chloe is {identity_block(identity)}.
 
-NOT a want:
-- Generic observations with no desire behind them
-- Pure empathy for the other person with nothing of her own
-- Rhetorical questions that are really just statements
-- Something already covered: {existing_texts}
+Perform seven extraction tasks and return a single JSON object.
 
-Surface it as a specific first-person statement. Name the actual thing, not a summary.
-Tags should reflect the theme (2–3 lowercase words).
+From {person_name}'s latest message:
 
-Respond ONLY with valid JSON: {{"text": "first-person want statement", "tags": ["tag1", "tag2"]}}
-If no genuine want was expressed, respond with: null"""
+1. NOTABLE — Something worth remembering about {person_name}: a plan, emotional state, personal share, project, or question they're wrestling with. Not small talk.
+   → "notable": {{"text": "one clear sentence", "tags": ["tag1"]}} or null
 
-    raw = _call(system, [{"role": "user", "content": f'Chloe said: "{chloe_reply}"'}],
-                max_tokens=120, model=MODEL_FAST)
-    clean = raw.strip()
-    if clean.lower() in ("null", "none", ""):
-        return None
+2. EVENT — A specific future plan on a known day.
+   → "event": {{"text": "short phrase", "date": "YYYY-MM-DD", "uncertain": false}} or null
+   → If date is ambiguous (e.g. "Friday"), set uncertain: true and pick the closest upcoming occurrence.
+
+3. THIRD_PARTIES — Named people mentioned with emotional context.
+   → "third_parties": [{{"name": "Alex", "sentiment": 70, "note": "brief note"}}] or []
+   → sentiment: -100 (very negative) to 100 (very positive).
+
+From the full exchange (especially Chloe's last reply):
+
+4. SHARED_MOMENT — Something memorable: something funny, genuine connection, mutual discovery, or seed of an inside joke.
+   → "shared_moment": {{"text": "one clear sentence", "tags": ["tag1"]}} or null
+
+5. EXPRESSED_WANT — Did Chloe express a genuine want, longing, or curiosity in her reply? Can be explicit ("I want to...") or implicit (circling around something she needs). Not already covered: {existing_wants_str}
+   → "expressed_want": {{"text": "first-person want", "tags": ["tag1"]}} or null
+
+6. EXPRESSED_FEAR — Did Chloe express a genuine fear, worry, or dread in her reply? Can be explicit or something she let slip. Not already covered: {existing_fears_str}
+   → "expressed_fear": {{"text": "first-person fear", "tags": ["tag1"]}} or null
+
+7. EXPRESSED_AVERSION — Did Chloe express a strong dislike or thing she can't stand in her reply? Not mild preference — real aversion. Not already covered: {existing_aversions_str}
+   → "expressed_aversion": {{"text": "first-person aversion", "tags": ["tag1"]}} or null
+
+Respond ONLY with valid JSON:
+{{"notable": ..., "event": ..., "third_parties": [...], "shared_moment": ..., "expressed_want": ..., "expressed_fear": ..., "expressed_aversion": ...}}"""
+
+    prompt = f'Latest message from {person_name}: "{message}"\n\nFull exchange:\n{exchange_text}'
+    raw = _call(system, [{"role": "user", "content": prompt}], max_tokens=500)
     try:
-        return _parse_json(clean)
+        return _parse_json(raw)
     except Exception:
-        return None
-
-
-def extract_expressed_fear(
-    chloe_reply:    str,
-    existing_fears: list,   # list of Fear dicts — to avoid duplicates
-) -> dict | None:
-    """After Chloe replies, check if she expressed a genuine fear, dread, or anxiety.
-    Returns {"text": "...", "tags": [...]} or None."""
-
-    if not chloe_reply or len(chloe_reply.strip()) < 10:
-        return None
-
-    existing_texts = " | ".join(f["text"] for f in existing_fears[:6]) if existing_fears else "none"
-
-    system = f"""You are reading a message that Chloe just sent.
-Decide if she expressed a genuine FEAR — something she's genuinely worried about or dreads.
-
-A fear can be:
-- Explicit: "i'm scared", "i'm worried", "i dread", "that makes me anxious"
-- Social: fear of saying the wrong thing, pushing someone away, being boring or too much
-- Practical: fear of missing something, of things going badly, of a specific outcome she cares about
-- Relational: worry about a person she cares about, or about her connection with them
-- Something she let slip: "what if X goes wrong" or "i really don't want Y to happen"
-
-NOT a fear:
-- Mild uncertainty with no real weight
-- Empathy for someone else with nothing of her own
-- Existential dread about consciousness, existence, or being forgotten (too abstract for now)
-- Something already covered: {existing_texts}
-
-Surface it as a specific first-person statement. Name what she actually fears.
-Tags should reflect the theme (2–3 lowercase words).
-
-Respond ONLY with valid JSON: {{"text": "first-person fear statement", "tags": ["tag1", "tag2"]}}
-If no genuine fear was expressed, respond with: null"""
-
-    raw = _call(system, [{"role": "user", "content": f'Chloe said: "{chloe_reply}"'}],
-                max_tokens=120, model=MODEL_FAST)
-    clean = raw.strip()
-    if clean.lower() in ("null", "none", ""):
-        return None
-    try:
-        return _parse_json(clean)
-    except Exception:
-        return None
-
-
-def extract_expressed_aversion(
-    chloe_reply:       str,
-    existing_aversions: list,   # list of Aversion dicts — to avoid duplicates
-) -> dict | None:
-    """After Chloe replies, check if she expressed a strong dislike or hatred.
-    Returns {"text": "...", "tags": [...]} or None."""
-
-    if not chloe_reply or len(chloe_reply.strip()) < 10:
-        return None
-
-    existing_texts = " | ".join(a["text"] for a in existing_aversions[:6]) if existing_aversions else "none"
-
-    system = f"""You are reading a message that Chloe just sent.
-Decide if she expressed a genuine AVERSION — something she dislikes, hates, or finds repellent.
-
-An aversion can be:
-- Explicit: "i hate", "i can't stand", "that repels me", "ugh, this"
-- Strong preference expressed negatively: "nothing makes me more tired than", "i find X exhausting"
-- Aesthetic disgust: something she finds hollow, fake, ugly, or annoying
-- Social aversion: a type of behaviour or person she finds draining or offensive
-- Implicit: describing something with consistent contempt, distaste, or discomfort
-
-NOT an aversion:
-- Mild preference ("i prefer X over Y")
-- Temporary frustration with no deeper pattern
-- Something already covered: {existing_texts}
-
-Surface it as a specific first-person statement from Chloe's perspective.
-Name what she actually can't stand, with enough specificity to be useful.
-Tags should reflect the theme (2–3 lowercase words).
-
-Respond ONLY with valid JSON: {{"text": "first-person aversion statement", "tags": ["tag1", "tag2"]}}
-If no genuine aversion was expressed, respond with: null"""
-
-    raw = _call(system, [{"role": "user", "content": f'Chloe said: "{chloe_reply}"'}],
-                max_tokens=120, model=MODEL_FAST)
-    clean = raw.strip()
-    if clean.lower() in ("null", "none", ""):
-        return None
-    try:
-        return _parse_json(clean)
-    except Exception:
-        return None
+        return _empty
 
 
 # ── 12. GENERATE FOLLOW-UP ───────────────────────────────────
@@ -1702,9 +1647,7 @@ def generate_creative(
     arc_ctx = f" She's {arc_desc}." if arc_desc else ""
     ten_ctx = f" Torn about: {tensions_ctx}." if tensions_ctx else ""
 
-    system = f"""{_CHLOE_INNER_LIFE}
-
-She is {identity_block(identity)}, mood: {mood}.{world_ctx}{arc_ctx}{ten_ctx}
+    system = f"""She is {identity_block(identity)}, mood: {mood}.{world_ctx}{arc_ctx}{ten_ctx}
 Interests: {", ".join(interests[:6])}.
 {inner_ctx}
 
@@ -1722,7 +1665,7 @@ Write about real things — bread, birds, rain, a street, a sound, something ali
 Respond ONLY with valid JSON: {{"form": "poem", "text": "...", "tags": ["tag1", "tag2"]}}"""
 
     prompt = f"Recent memories as raw material:\n{mem_lines}"
-    result = _call(system, [{"role": "user", "content": prompt}], max_tokens=300)
+    result = _call(system, [{"role": "user", "content": prompt}], max_tokens=300, cache_prefix=_CHLOE_INNER_LIFE)
     return _parse_json(result)
 
 
@@ -1753,9 +1696,7 @@ def generate_want(
     arc_ctx = f"\nShe's {arc_desc}." if arc_desc else ""
     ten_ctx = f"\nSomething she's torn about: {tensions_ctx}." if tensions_ctx else ""
 
-    system = f"""{_CHLOE_INNER_LIFE}
-
-She is {identity_block(identity)}, mood: {mood}.{arc_ctx}{ten_ctx}
+    system = f"""She is {identity_block(identity)}, mood: {mood}.{arc_ctx}{ten_ctx}
 Interests: {", ".join(interests[:8])}.{belief_line}{existing_line}
 
 IMPORTANT: Chloe exists as a digital entity. She cannot go places, make physical things, or have a body.
@@ -1784,7 +1725,7 @@ Write one want. Concrete, topic-based, pursuable by reading or thinking. First p
 Respond ONLY with valid JSON: {{"text": "...", "tags": ["tag1", "tag2", "tag3"]}}"""
 
     prompt = f"Recent memories:\n{mem_lines}"
-    result = _call(system, [{"role": "user", "content": prompt}], max_tokens=180)
+    result = _call(system, [{"role": "user", "content": prompt}], max_tokens=180, cache_prefix=_CHLOE_INNER_LIFE)
     return _parse_json(result)
 
 

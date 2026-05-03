@@ -34,17 +34,19 @@ Don't collapse the layers — that's why mood doesn't follow vitals tick-by-tick
 ### Python 3.13 main app
 `uvicorn server:app --port 8000` boots FastAPI which constructs the `Chloe` instance, calls `await chloe.start()` to kick off the heartbeat, and serves HTTP endpoints for the dashboard. Deployed on a Hetzner VPS.
 
-### Anthropic LLM (two tiers)
-- `MODEL_CHAT = "claude-sonnet-4-6"` — only used for live chat (`chat()`, `_voice_chat()`) and autonomous outreach (`generate_autonomous_message`). The stuff a human reads.
-- `MODEL_FAST = "claude-haiku-4-5-20251001"` — everything else: emotion reading, memory grading, memory generation, idea generation, dream generation, person impressions, third-party detection, belief extraction, search query writing, tension detection, shared moment detection, trait proposals, behavioral profile generation. Anything that's structured or background.
+### Google Gemini LLM (two tiers)
+- `MODEL_CHAT = "gemini-2.5-pro"` — only used for live chat (`chat()`, `_voice_chat()`) and autonomous outreach (`generate_autonomous_message`). The stuff a human reads.
+- `MODEL_FAST = "gemini-2.5-flash"` — everything else: emotion reading, memory grading, memory generation, idea generation, dream generation, person impressions, third-party detection, belief extraction, search query writing, tension detection, shared moment detection, trait proposals, behavioral profile generation. Anything that's structured or background.
 
-All calls go through `_call(system, messages, max_tokens, model)` in `llm.py`. The `_call` wrapper does em-dash stripping at the source so the dashes never reach the user.
+All calls go through `_call(system, messages, max_tokens, model, cache_prefix)` in `llm.py`. The `_call` wrapper does em-dash stripping at the source so the dashes never reach the user.
+
+**`cache_prefix`**: an optional string that, when set, is prepended to the system prompt. The ~150-token `_CHLOE_INNER_LIFE` character description is passed as `cache_prefix` in all 10 background generation functions (`generate_memory`, `generate_idea`, `generate_reflection`, `generate_journal`, etc.) so it isn't repeated inline in every system string.
 
 ### ChromaDB (semantic memory index)
 A persistent client at `<state_file_dir>/memory_index/` embeds every memory's text. At live chat time, a three-stage pipeline runs:
 1. Rich query constructed from the current message + last 5 conversation turns + mood
 2. ChromaDB returns 20 candidates, reranked by `similarity × freshness × salience_boost`
-3. Haiku grader (`grade_memories()`) filters to the 4-5 most genuinely relevant
+3. Flash grader (`grade_memories()`) filters to the 4-5 most genuinely relevant
 
 Background events (reflection, dreaming, outreach) use a simpler single-step retrieval with activity-specific query seeds. Falls back to recency-only (`get_vivid`) if ChromaDB is unavailable.
 
@@ -90,7 +92,7 @@ Chloe/
     persons.py      — Person + warmth/distance/conflict + tone_context (voice register)
     inner.py        — Want, Belief, Goal, Fear, Aversion, Tension, Arc, AffectRecord
     graph.py        — interest graph: nodes, edges, expansion, resonance
-    llm.py          — every Anthropic call lives here (~27 functions)
+    llm.py          — every Gemini call lives here (~27 functions)
     feeds.py        — RSS, web fetch, web search
     weather.py      — Open-Meteo client
     store.py        — ChloeDB SQLite write-through
@@ -194,11 +196,12 @@ Every 30 seconds. Strict order:
    - Want+goal nudge: pressure-scaled probability; highest-pressure items prioritised
 
 6a. Maybe fire a background LLM event
-   Conditions: not busy, gap >= 24h since last event, no recent contact (5 min window)
+   Conditions: not busy, gap >= 1h since last event, no recent contact (5 min window)
    - Normal path: dice roll passes for current activity (event_chance scaled to tick_seconds)
    - Activity "message" bypasses dice roll — always fires if gap is met
    - Pressure path: any inner state pressure >0.9 forces event regardless of dice roll
    → asyncio.create_task(_fire_event())
+   Note: old value was 90s (960 events/day, €25/day). Current 3600s → ≤16 events/day.
 
 6b. Maybe send autonomous outreach
    Conditions: not busy, last outreach > 48h ago (10min in testing), social_battery > 60,
@@ -231,7 +234,7 @@ Every 30 seconds. Strict order:
    - Every 3rd reflect cycle AND fewer than 10 active traits:
      asyncio.create_task(_propose_and_update_traits())
 
-8b. Every ORPHAN_CHECK_EVERY ticks (~36 min): _surface_orphan_tags()
+8b. Every ORPHAN_CHECK_EVERY ticks (~2 h): _surface_orphan_tags()
 
 9. At 22:00 once per day: _write_journal()
 
@@ -252,10 +255,10 @@ The *only* synchronous LLM call in the tick is none — all LLM calls are spawne
 
 Identity is not a set of sliders. Traits emerge from experience, accumulate weight, and decay without reinforcement.
 
-### Trait emergence — `_propose_and_update_traits()` (async, every 3rd `_reflect()`)
+### Trait emergence — `_propose_and_update_traits()` (async, every 6th `_reflect()`)
 
 Only fires when:
-- `_reflect_count % 3 == 0` (every 3rd cycle, so at most every ~6 hours)
+- `_reflect_count % 6 == 0` (every 6th cycle, so at most every ~12 hours)
 - Active trait count < `MAX_ACTIVE_TRAITS` (10)
 
 A Haiku call reviews the last 48 hours of memories and affect_records. If a coherent pattern spans **5+ experiences**, it proposes at most **1 trait**: `{name, weight_suggestion, evidence_memory_ids}`.
@@ -349,17 +352,17 @@ persons = on_contact(persons, person_id, hour)
 clear pending_outreach for this person
 if message matches quiet_request: _set_quiet(person_id, 24h)
 
-# ─── BACKGROUND EXTRACTION (async) ────────────────────────
-asyncio.create_task(_extract_and_store_note(...))
-asyncio.create_task(_extract_and_store_event(...))
-asyncio.create_task(_extract_and_store_third_parties(...))
-if conversation_count % 5 == 0: asyncio.create_task(_update_person_impression(...))
+# ─── IMPRESSION UPDATE (async, periodic) ──────────────────
+if conversation_count % 10 == 0 (or first time with notes):
+    asyncio.create_task(_update_person_impression(...))
 
 # ─── SYNCHRONOUS EMOTION READ ─────────────────────────────
-emotion_data = await llm.read_person_emotion(message, name, last_6_messages)
-emotion_data = bias_emotion_toward_mood(emotion_data, mood)
-_apply_emotion_reaction(emotion_data, person_id, name)
-   # MUTATES STATE: warmth, conflict, mood possibly forced, memory added, affect_records logged
+# Skipped for short messages (< 15 chars) — saves a Haiku call on greetings/oks
+if not voice and len(message) >= 15:
+    emotion_data = await llm.read_person_emotion(message, name, last_6_messages)
+    emotion_data = bias_emotion_toward_mood(emotion_data, mood)
+    _apply_emotion_reaction(emotion_data, person_id, name)
+       # MUTATES STATE: warmth, conflict, mood possibly forced, memory added, affect_records logged
 
 # ─── BUILD CONTEXT ────────────────────────────────────────
 chat_ctx = current session history (up to 10) or last 6 from history
@@ -391,13 +394,17 @@ add reply to chat history
 _remember(f'Said: "{reply}"', "conversation", conv_tags)
 
 # 15% chance — extract belief (Haiku, async)
-# Always — check for shared moment (Haiku, async)
+# Combined extraction (Haiku, async) — ONE call handling 7 fields:
+#   from the incoming message: notable note, future event, third-party mentions
+#   from the full exchange:    shared moment
+#   from Chloe's reply:        expressed want, expressed fear, expressed aversion
+asyncio.create_task(_extract_from_exchange_bg(message, exchange, person_id, name))
 # Reinforce graph nodes: _check_graph_resonance(conv_tags)
 
 return reply
 ```
 
-The voice path (`_voice_chat`) uses the same 3-stage memory retrieval but defers emotion reading and all extraction to background tasks, and caps replies at 200 tokens.
+The voice path (`_voice_chat`) uses the same 3-stage memory retrieval, defers emotion reading to a separate background task, passes the same combined `_extract_from_exchange_bg` call, and caps replies at 200 tokens.
 
 ---
 
@@ -530,11 +537,17 @@ Copies `data/chloe_state.json` → `backups/chloe_YYYY-MM-DD.json`.
 
 - **Tick loop never blocks on the network.** All LLM calls are `asyncio.create_task`. If you add a synchronous LLM call to the tick, you'll block the heartbeat.
 - **`self._busy` gates background events.** Chat does NOT set `_busy` — chat can run concurrently with background events.
-- **`MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS = 24h`** is a floor on `_fire_event`. Even if she drifts into "message" activity, she can only fire an event once per 24h.
+- **`MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS = 3600s (1h)`** is a floor on `_fire_event`. She fires at most once per waking hour (~16 events/day). The old value was 90s (960/day, €25/day in API costs); 24h was tried as an emergency fix but made her essentially dormant.
 - **`OUTREACH_INTERVAL = 48h`** for standalone outreach. Separate timer from `_fire_event`.
 - **Quiet mode**: "I'm busy" / "don't text" / "I'll text you" suppresses outreach to that person for 24h.
 - **Mood is sticky.** `update_mood` only re-evaluates with 10% probability per tick.
 - **Trait cap at 10 active traits.** Proposals skipped when at cap. At most 1 new trait per proposal cycle. 5+ supporting memories required.
+- **Trait reinforcement probability: 5%** per `_remember()` call. Was 10%; halved to reduce cost while preserving the signal over high volumes.
+- **Impression update every 10 conversations** (was 5). First-time update still fires as soon as there are notes.
+- **Emotion read skipped for short messages** (`< 15 chars`). Greetings, "ok", "lol" don't warrant a Haiku call.
+- **Per-chat extraction is one combined Haiku call** (`extract_from_exchange`). It covers 7 fields: notable note, future event, third-party mentions, shared moment, expressed want, expressed fear, expressed aversion. This replaces 4 separate calls that existed previously. Existing want/fear/aversion lists are passed to avoid surfacing duplicates.
+- **Prompt caching on all 10 background generation functions.** `_CHLOE_INNER_LIFE` (~150 tokens) is sent as a cached prefix block. Cache TTL is 5 minutes.
+- **Article text capped at 4000 characters** before passing to `generate_memory_from_article`. Full article fetches were 8000–10000 chars; each extra char costs tokens at Haiku rates.
 - **Ideas capped at 10 in memory.** Oldest drop when prepending at the limit.
 - **Arc caps**: max intensity 0.70, max deepening 36h total, +0.03/+2h per reflect cycle.
 - **Reflection topic rotation**: overused tags (2+ appearances in last 5 reflections) are passed as "don't revisit" to break feedback loops.
@@ -553,7 +566,7 @@ Copies `data/chloe_state.json` → `backups/chloe_YYYY-MM-DD.json`.
 | Reply feels off-character | `llm.chat()` system prompt; check `identity_block()` output |
 | Wrong memories retrieved | `grade_memories()` in `llm.py`; check `_build_memory_query()` output |
 | Mood not shifting after strong message | `_apply_emotion_reaction()` |
-| Traits not emerging after extended use | `_propose_and_update_traits()`; check `_reflect_count % 3` and trait cap |
+| Traits not emerging after extended use | `_propose_and_update_traits()`; check `_reflect_count % 6` and trait cap |
 | Traits not persisting across restarts | `store.py sync_traits()` / `load_traits()`; check `chloe.db traits` |
 | Existential / looping theme in reflections | `_overused` tags in `_reflect()`; check arc intensity and `_reflect_count` |
 | Impulses not firing | `impulse_check()` in `_tick_once()`; check pressure > 0.75 |
@@ -565,6 +578,97 @@ Copies `data/chloe_state.json` → `backups/chloe_YYYY-MM-DD.json`.
 | Discord typing forever | `discord_bot.py` send pipeline; check async task exceptions |
 | Voice reply too long | `voice=True` cap of 200 tokens in `llm.chat` |
 | Slow chat replies | Haiku grader adds ~300-500ms; expected and acceptable |
+
+---
+
+---
+
+## 15. Deployment — Hetzner VPS
+
+### Server
+
+| | |
+|---|---|
+| Provider | Hetzner Cloud |
+| IP | `178.104.205.170` |
+| OS | Ubuntu 24.04 |
+| User | `root` |
+| App path | `/opt/chloe/app/` |
+| Venv | `/opt/chloe/venv/` |
+| Port | `8000` (uvicorn) |
+| Service | `chloe.service` (systemd, enabled, auto-starts on boot) |
+| State | `/opt/chloe/app/data/` |
+| Backups | `/opt/chloe/app/backups/` |
+
+### SSH access
+
+The deploy key lives in `~/.ssh/chloe_hetzner` (ed25519). If working from a new machine, generate a new key and add it to `/root/.ssh/authorized_keys` on the server — either via the Hetzner web console or by SSHing in from a machine that already has access.
+
+```bash
+# Test connection
+ssh -i ~/.ssh/chloe_hetzner root@178.104.205.170 "whoami"
+```
+
+If the host key has changed (e.g. after a password reset or rescue boot):
+```bash
+ssh-keygen -f ~/.ssh/known_hosts -R 178.104.205.170
+```
+
+### Deploying a code change
+
+Only `chloe/chloe.py` and other source files need to be copied — the venv and data directory stay untouched.
+
+```bash
+# Copy a single changed file
+scp -i ~/.ssh/chloe_hetzner chloe/chloe.py root@178.104.205.170:/opt/chloe/app/chloe/chloe.py
+
+# Or sync the whole package (safe — doesn't touch data/)
+rsync -av --exclude='data/' --exclude='backups/' --exclude='__pycache__/' \
+  -e "ssh -i ~/.ssh/chloe_hetzner" \
+  /workspaces/Chloe/ root@178.104.205.170:/opt/chloe/app/
+
+# Restart the service to pick up changes
+ssh -i ~/.ssh/chloe_hetzner root@178.104.205.170 "systemctl restart chloe"
+
+# Watch live logs
+ssh -i ~/.ssh/chloe_hetzner root@178.104.205.170 "journalctl -u chloe -f"
+```
+
+### Service management
+
+```bash
+# Status
+ssh -i ~/.ssh/chloe_hetzner root@178.104.205.170 "systemctl status chloe"
+
+# Stop / start
+ssh -i ~/.ssh/chloe_hetzner root@178.104.205.170 "systemctl stop chloe"
+ssh -i ~/.ssh/chloe_hetzner root@178.104.205.170 "systemctl start chloe"
+
+# Last 100 log lines
+ssh -i ~/.ssh/chloe_hetzner root@178.104.205.170 "journalctl -u chloe -n 100"
+```
+
+### If you lose the SSH key
+
+1. Go to [console.hetzner.cloud](https://console.hetzner.cloud)
+2. Select the server → **Access** tab → **Reset root password** (no current password needed)
+3. Use the Hetzner web console with the new password to add a fresh public key:
+   ```bash
+   mkdir -p ~/.ssh && echo "<your_pub_key>" >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys
+   ```
+4. Rescue mode (if web console is unavailable): Enable **Rescue** → reboot → mount `/dev/sda1` at `/mnt` → edit `/mnt/root/.ssh/authorized_keys` → reboot again.
+
+### API cost targets
+
+| Constant | Value | Effect |
+|---|---|---|
+| `MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS` | `3600` | ≤16 background events/day |
+| `REFLECT_EVERY` | `240` ticks (2h) | 12 reflect cycles/day |
+| `ORPHAN_CHECK_EVERY` | `240` ticks (2h) | 12 orphan checks/day |
+| `TRAIT_PROPOSE_EVERY` | `6` | trait proposals every ~12h |
+| Article text cap | `4000` chars | limits token cost per read event |
+
+Expected: **€1–3/day** for background + moderate chat. Old settings (90s gap) cost €25/day. If costs are too high, increase `MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS`. If she feels too quiet, decrease it (1800 = 30 min is a reasonable middle ground).
 
 ---
 

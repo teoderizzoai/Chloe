@@ -68,8 +68,8 @@ TICK_SECONDS   = 30      # one heartbeat
 AGE_EVERY      = 12     # age memories every N ticks (~1 min)
 SAVE_EVERY     = 60     # persist state every N ticks (~5 min)
 WEATHER_EVERY  = 720    # refresh weather every N ticks (~1 hour)
-REFLECT_EVERY  = 240    # self-reflection + continuity check every N ticks (~20 min)
-ORPHAN_CHECK_EVERY = 72 # orphan tag surfacing every N ticks (~6 min) — separate from full reflect
+REFLECT_EVERY  = 240    # self-reflection + continuity check every N ticks (~2 h at 30 s/tick)
+ORPHAN_CHECK_EVERY = 240 # orphan tag surfacing every N ticks (~2 h) — matches reflect cadence
 STATE_FILE     = Path("data/chloe_state.json")
 STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
 
@@ -83,7 +83,9 @@ DREAM_RECURRENCE_MIN       = 3        # tag must appear in this many dreams
 # tick, `should_fire_event` rolls could feel spammy if Haiku returns fast and the
 # user keeps her in high-chance activities (create/read). This floor guarantees a
 # minimum quiet gap between *starting* two background events (user chat is unchanged).
-MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS = 24 * 3600
+# 3600 s = 1 event per hour max during waking time (~16 events/day). Old value of
+# 90 s drove ~960 events/day and €25/day in API costs.
+MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS = 3600
 
 # Standalone outreach — fires independently of activity-based events
 OUTREACH_INTERVAL         = 48 * 3600  # normal: attempt outreach at most once per 2 days
@@ -91,7 +93,7 @@ OUTREACH_INTERVAL_TESTING = 10 * 60    # testing mode: once per 10 min
 QUIET_AFTER_BUSY          = 24 * 3600  # suppress unprompted outreach for 24h after a busy/ will-text request
 IGNORED_THRESHOLD         = 4 * 3600   # item 51: after 4h with no reply, she feels ignored
 MAX_ACTIVE_TRAITS         = 10         # cap on active traits; skip proposals when at limit
-TRAIT_PROPOSE_EVERY       = 3          # only propose new traits every N reflect cycles
+TRAIT_PROPOSE_EVERY       = 6          # only propose new traits every N reflect cycles (~12 h)
 IGNORED_THRESHOLD_TESTING = 10 * 60    # testing mode: 10 min
 
 
@@ -268,7 +270,7 @@ class Chloe:
         self.memories = add(self.memories, text, type, tags, salience=salience)
         self.memory_index.add(self.memories[0])
         self.db.add_memory(self.memories[0])
-        if self.identity.traits and random.random() < 0.10:
+        if self.identity.traits and random.random() < 0.05:
             asyncio.create_task(self._maybe_reinforce_traits(self.memories[0]))
 
     def _is_quiet(self, person_id: str) -> bool:
@@ -550,22 +552,19 @@ class Chloe:
         person_name  = person.name if person else "Teo"
         person_notes = [n.to_dict() for n in (person.notes if person else [])]
 
-        asyncio.create_task(self._extract_and_store_note(message, person_id, person_name))
-        asyncio.create_task(self._extract_and_store_event(message, person_id, person_name))
-        asyncio.create_task(self._extract_and_store_third_parties(message, person_id, person_name))
-        # Item 52 — refresh impression every 5 conversations (or first time once there are notes)
+        # Item 52 — refresh impression every 10 conversations (or first time once there are notes)
         _p_for_impression = get_person(self.persons, person_id)
         if _p_for_impression:
             _cc = _p_for_impression.conversation_count
             _has_notes = bool(_p_for_impression.notes)
-            if (_cc > 0 and _cc % 5 == 0) or (not _p_for_impression.impression and _has_notes):
+            if (_cc > 0 and _cc % 10 == 0) or (not _p_for_impression.impression and _has_notes):
                 asyncio.create_task(self._update_person_impression(person_id))
 
         # Items 43 + 44 — read Teo's emotional state from message + conversation context.
         # Runs before the reply so the mood change affects the current response.
         emotional_context = ""
         emotion_data = {"emotion": "neutral", "intensity": 0.5, "directed_at_chloe": True, "tags": []}
-        if not voice:
+        if not voice and len(message.strip()) >= 15:
             try:
                 _recent = [m for m in self.chat_history if m.get("person_id") == person_id][-6:]
                 emotion_data = await asyncio.to_thread(
@@ -723,9 +722,9 @@ class Chloe:
                 message, reply, person_name,
             ))
 
-        # Item 46 — check if this exchange contained a shared moment worth keeping
+        # Combined extraction: notable note, event, third parties, shared moment
         _full_exchange = [m for m in self.chat_history if m.get("person_id") == person_id][-6:]
-        asyncio.create_task(self._extract_and_store_moment(_full_exchange, person_id, person_name))
+        asyncio.create_task(self._extract_from_exchange_bg(message, _full_exchange, person_id, person_name))
 
         # Conversations shape the graph — reinforce nodes matched by the exchange.
         self._check_graph_resonance(_conv_tags)
@@ -787,11 +786,9 @@ class Chloe:
         self._log(f"message from {person_id}: \"{message}\"")
 
         # All extraction deferred to background
-        asyncio.create_task(self._extract_and_store_note(message, person_id, person_name))
-        asyncio.create_task(self._extract_and_store_event(message, person_id, person_name))
         asyncio.create_task(self._voice_emotion_background(message, person_id, person_name))
         _full_exchange = [m for m in self.chat_history if m.get("person_id") == person_id][-6:]
-        asyncio.create_task(self._extract_and_store_moment(_full_exchange, person_id, person_name))
+        asyncio.create_task(self._extract_from_exchange_bg(message, _full_exchange, person_id, person_name))
         _conv_tags = interests or []
         self._remember(f'Said: "{reply}"', "conversation", _conv_tags)
 
@@ -1006,28 +1003,30 @@ class Chloe:
         except Exception:
             pass
 
-    async def _extract_and_store_note(self, message: str, person_id: str, person_name: str):
-        """Background task: check if message contains something worth remembering."""
-        try:
-            notable = await asyncio.to_thread(
-                llm.extract_notable, message, person_name, self.identity
-            )
-            if notable:
-                self.persons = add_note(
-                    self.persons, person_id,
-                    notable["text"], notable.get("tags", [])
-                )
-                self._log(f'noted about {person_name}: "{notable["text"]}…"')
-        except Exception:
-            pass
-
-    async def _extract_and_store_event(self, message: str, person_id: str, person_name: str):
-        """Background task: check if message mentions a future event with a date."""
+    async def _extract_from_exchange_bg(
+        self,
+        message:     str,
+        exchange:    list[dict],
+        person_id:   str,
+        person_name: str,
+    ):
+        """Combined background extraction: notable, event, third parties, shared moment, want, fear, aversion."""
         try:
             today_iso = time.strftime("%Y-%m-%d")
-            event = await asyncio.to_thread(
-                llm.extract_event, message, person_name, today_iso
+            result = await asyncio.to_thread(
+                llm.extract_from_exchange,
+                message, exchange, person_name, self.identity, today_iso,
+                wants_to_dicts(self.wants),
+                fears_to_dicts(self.fears),
+                aversions_to_dicts(self.aversions),
             )
+
+            notable = result.get("notable")
+            if notable and notable.get("text"):
+                self.persons = add_note(self.persons, person_id, notable["text"], notable.get("tags", []))
+                self._log(f'noted about {person_name}: "{notable["text"]}…"')
+
+            event = result.get("event")
             if event and event.get("date"):
                 pe = PersonEvent(
                     text=event["text"],
@@ -1037,84 +1036,35 @@ class Chloe:
                 self.persons = add_event(self.persons, person_id, pe)
                 flag = " (uncertain date)" if pe.uncertain else ""
                 self._log(f'event noted: "{pe.text}" on {pe.date}{flag}')
-        except Exception:
-            pass
 
-    async def _extract_and_store_moment(self, exchange: list[dict], person_id: str, person_name: str):
-        """Item 46 — background task: check if this exchange contains a shared moment."""
-        try:
-            moment = await asyncio.to_thread(
-                llm.extract_shared_moment, exchange, person_name
-            )
-            if moment:
-                self.persons = add_moment(
-                    self.persons, person_id,
-                    moment["text"], moment.get("tags", [])
-                )
-                self._log(f'shared moment with {person_name}: "{moment["text"]}"')
-        except Exception:
-            pass
-
-    async def _extract_and_store_expressed_want(self, chloe_reply: str):
-        """Background task: check if Chloe expressed a genuine want in her reply
-        and surface it in her wants list."""
-        try:
-            result = await asyncio.to_thread(
-                llm.extract_expressed_want,
-                chloe_reply,
-                wants_to_dicts(self.wants),
-            )
-            if result and result.get("text"):
-                self.wants = add_want(self.wants, result["text"], result.get("tags", []))
-                self._log(f'want from reply: "{result["text"]}"')
-        except Exception:
-            pass
-
-    async def _extract_and_store_expressed_fear(self, chloe_reply: str):
-        """Background task: check if Chloe expressed a genuine fear in her reply."""
-        try:
-            result = await asyncio.to_thread(
-                llm.extract_expressed_fear,
-                chloe_reply,
-                fears_to_dicts(self.fears),
-            )
-            if result and result.get("text"):
-                self.fears = add_fear(self.fears, result["text"], result.get("tags", []))
-                self._log(f'fear from reply: "{result["text"]}"')
-        except Exception:
-            pass
-
-    async def _extract_and_store_expressed_aversion(self, chloe_reply: str):
-        """Background task: check if Chloe expressed a strong dislike in her reply."""
-        try:
-            result = await asyncio.to_thread(
-                llm.extract_expressed_aversion,
-                chloe_reply,
-                aversions_to_dicts(self.aversions),
-            )
-            if result and result.get("text"):
-                self.aversions = add_aversion(self.aversions, result["text"], result.get("tags", []))
-                self._log(f'aversion from reply: "{result["text"]}"')
-        except Exception:
-            pass
-
-
-    async def _extract_and_store_third_parties(self, message: str, person_id: str, person_name: str):
-        """Background task: detect named people mentioned in the message and their vibe."""
-        try:
-            mentions = await asyncio.to_thread(
-                llm.extract_third_party_mentions, message, person_name
-            )
-            for m in mentions:
+            for m in result.get("third_parties", []):
                 name      = m.get("name", "").strip()
                 sentiment = float(m.get("sentiment", 0))
                 note      = m.get("note", "").strip()
                 if name and note:
-                    self.persons = upsert_third_party(
-                        self.persons, person_id, name, sentiment, note
-                    )
+                    self.persons = upsert_third_party(self.persons, person_id, name, sentiment, note)
                     vibe = "positive" if sentiment > 15 else "negative" if sentiment < -15 else "neutral"
                     self._log(f'third party noted: {name} ({vibe})')
+
+            moment = result.get("shared_moment")
+            if moment and moment.get("text"):
+                self.persons = add_moment(self.persons, person_id, moment["text"], moment.get("tags", []))
+                self._log(f'shared moment with {person_name}: "{moment["text"]}"')
+
+            want = result.get("expressed_want")
+            if want and want.get("text"):
+                self.wants = add_want(self.wants, want["text"], want.get("tags", []))
+                self._log(f'want from reply: "{want["text"]}"')
+
+            fear = result.get("expressed_fear")
+            if fear and fear.get("text"):
+                self.fears = add_fear(self.fears, fear["text"], fear.get("tags", []))
+                self._log(f'fear from reply: "{fear["text"]}"')
+
+            aversion = result.get("expressed_aversion")
+            if aversion and aversion.get("text"):
+                self.aversions = add_aversion(self.aversions, aversion["text"], aversion.get("tags", []))
+                self._log(f'aversion from reply: "{aversion["text"]}"')
         except Exception:
             pass
 
@@ -1635,7 +1585,7 @@ class Chloe:
                     if self.vitals.curiosity > 65:
                         full = await feeds.fetch_article_text(article.url)
                         if full:
-                            text = full
+                            text = full[:4000]  # cap to ~1000 tokens; full articles can be 10k+ chars
                     mem = await asyncio.to_thread(
                         llm.generate_memory_from_article,
                         article.title, text, read_interests, identity,

@@ -49,7 +49,15 @@
       "Bash(mv /workspaces/Chloe/chloe/images/Actions/* /workspaces/Chloe/assets/images/actions/)",
       "Bash(mv /workspaces/Chloe/chloe/images/Emotions/* /workspaces/Chloe/assets/images/emotions/)",
       "Bash(git -C /workspaces/Chloe show --stat b3efc6c)",
-      "Bash(git -C /workspaces/Chloe show b3efc6c -- chloe/chloe.py)"
+      "Bash(git -C /workspaces/Chloe show b3efc6c -- chloe/chloe.py)",
+      "Bash(awk '/async def _fire_event/,/^    async def [^_]/' /workspaces/Chloe/chloe/chloe.py)",
+      "Bash(awk '/async def _reflect/,/^    async def [^_]/' /workspaces/Chloe/chloe/chloe.py)",
+      "Bash(ssh-keygen *)",
+      "Bash(ssh *)",
+      "Bash(ssh-copy-id *)",
+      "Bash(scp *)",
+      "Bash(pip list *)",
+      "Bash(pip install *)"
     ]
   }
 }
