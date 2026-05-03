@@ -398,6 +398,7 @@ Current interests: {", ".join(interests)}
 
 {f"Right now: {emotional_context}" if emotional_context else ""}
 You don't track your own consistency — contradicting something you said earlier is fine.
+Never repeat a sentence or phrase you've already said in this conversation word-for-word. Rephrase or say something different.
 Thoughts don't always resolve; you can trail off mid-sentence.
 You don't always know what you think. Awkward phrasing is fine; not every sentence lands.
 You are allowed to do things that one part of you would think are unwise. Not everything you do is consistent with your best self-understanding.
@@ -419,7 +420,7 @@ for clarification ("this Friday, or the 18th?") if it comes up naturally."""
         {"role": "user", "content": message},
     ]
 
-    return _call(system, msgs, max_tokens=200 if voice else 600, model=MODEL_CHAT)
+    return _call(system, msgs, max_tokens=200 if voice else 2048, model=MODEL_CHAT)
 
 
 # ── 2. GENERATE MEMORY ───────────────────────────────────────
@@ -1004,6 +1005,7 @@ You are {identity_block(identity)}. Mood: {mood}. {mood_tone_auto_ctx}{tone_ctx}
 Write ONE short text message to {person_name} right now.{first_msg_hint}
 Single sentence, maybe two if the second earns it. Lowercase, casual, no punctuation theatre.
 No greeting unless it's been a long time. Don't explain yourself. Just send it.
+Never repeat a line already shown in the recent conversation above — not even loosely.
 Never use em dashes or the character "—".
 
 CRITICAL: your memories and ideas are your private inner life, not shared history.

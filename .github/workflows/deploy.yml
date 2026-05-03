@@ -1,0 +1,22 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Hetzner
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 178.104.205.170
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/chloe/app
+            git pull origin master
+            /opt/chloe/venv/bin/pip install -q -r requirements.txt
+            systemctl restart chloe
+            systemctl is-active chloe
