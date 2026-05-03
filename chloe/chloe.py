@@ -409,6 +409,22 @@ class Chloe:
         return min(1.0, max(0.0, base + mood_adj.get(mood, 0)))
 
     @staticmethod
+    def _build_memory_query(message: str, history: list[dict], mood: str) -> str:
+        """Build a rich semantic query from conversation context for memory retrieval.
+        Combines the current message with recent turns and mood signal."""
+        turns = " ".join(
+            m.get("text", "")[:100]
+            for m in history[-5:]
+            if m.get("text")
+        )
+        parts = [message]
+        if turns.strip():
+            parts.append(turns)
+        if mood and mood not in ("content", "serene"):
+            parts.append(mood)
+        return " ".join(parts)
+
+    @staticmethod
     def _is_closing_message(text: str) -> bool:
         """True if this message looks like it's wrapping up — a short goodbye or acknowledgement.
         Used to skip replying after Chloe has already wound down the conversation."""
@@ -601,6 +617,13 @@ class Chloe:
         if self.vitals.social_battery >= 35:
             self._closing.pop(person_id, None)
 
+        # Memory retrieval: rich query → 20 candidates → Haiku grader → 5 relevant
+        _mem_q          = self._build_memory_query(message, chat_ctx, self.affect.mood)
+        _mem_candidates = self.memory_index.query(_mem_q, self.memories, 20)
+        _graded_mems    = await asyncio.to_thread(
+            llm.grade_memories, _mem_candidates, message, chat_ctx, self.affect.mood
+        )
+
         try:
             reply = await asyncio.to_thread(
                 llm.chat,
@@ -608,7 +631,7 @@ class Chloe:
                 history=chat_ctx,
                 identity=self.identity,
                 vitals=self.vitals,
-                memories=self.memory_index.query(message, self.memories, 5),
+                memories=_graded_mems,
                 interests=interests,
                 ideas=[i.text for i in self.ideas],
                 uptime=self._uptime_human(),
@@ -721,14 +744,21 @@ class Chloe:
         season  = f"{wthr.describe_season(t_now.tm_mon)}, {circadian_phase(hour)}"
         interests = derive_interests(self.memories)
 
+        _voice_history  = [m for m in self.chat_history if m.get("person_id") == person_id][-6:]
+        _mem_q_v        = self._build_memory_query(message, _voice_history, self.affect.mood)
+        _mem_cands_v    = self.memory_index.query(_mem_q_v, self.memories, 20)
+        _graded_mems_v  = await asyncio.to_thread(
+            llm.grade_memories, _mem_cands_v, message, _voice_history, self.affect.mood
+        )
+
         try:
             reply = await asyncio.to_thread(
                 llm.chat,
                 message=message,
-                history=[m for m in self.chat_history if m.get("person_id") == person_id][-6:],
+                history=_voice_history,
                 identity=self.identity,
                 vitals=self.vitals,
-                memories=self.memory_index.query(message, self.memories, 5),
+                memories=_graded_mems_v,
                 interests=interests,
                 ideas=[i.text for i in self.ideas],
                 uptime=self._uptime_human(),

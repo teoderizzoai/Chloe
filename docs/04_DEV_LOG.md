@@ -84,3 +84,17 @@ Session 29 (2026-05-01) — C2: Failure consequences on traits.
 - llm.py: generate_failure_reflection(goal_text, trait_name, mood, identity) — Haiku generates one honest first-person sentence about something that quietly didn't happen.
 - store.py: _migrate() adds setback_count and setback_notes columns to traits table; adds failed column to goals table. sync_traits/load_traits/sync_goals/load_goals updated.
 - chloe.py: AGE tick — frustrated wants now apply a light trait penalty (−0.04 via penalize_trait) to any matching traits. AGE tick also calls fail_stale_goals and fires _on_goal_failed as a background task for each newly stalled goal. _on_goal_failed: penalises matching traits (−0.08), generates a Haiku failure reflection as a feeling memory, and adds a suppression belief ("I don't seem to be the kind of person who X") when the same trait accumulates 3+ setbacks.
+
+Session 31 (2026-05-02) — Pacing, outreach reduction, anti-escalation, and 3-stage RAG.
+
+Tick rate: TICK_SECONDS 5→30. All tick-based intervals scale accordingly: reflect ~2h (was 20min), age ~6min (was 1min), save ~30min (was 5min), weather ~6h (was 1h), orphan check ~36min (was 6min).
+
+Outreach reduction: OUTREACH_INTERVAL 2h→48h. MIN_SECONDS_BETWEEN_AUTONOMOUS_EVENTS 90s→24h. social_battery threshold for standalone outreach 35→60. OUTREACH_INTERVAL_TESTING 5min→10min. Added quiet mode: _is_quiet(), _set_quiet(), _matches_quiet_request() — detects "I'm busy" / "don't text" / "I'll text you" phrases in incoming messages and suppresses outreach to that person for QUIET_AFTER_BUSY=24h. Both message paths (_fire_event and _send_autonomous_outreach) filter by quiet_until.
+
+Trait formation controls: MAX_ACTIVE_TRAITS=10 cap (proposals skipped when at limit). TRAIT_PROPOSE_EVERY=3 (proposals run every 3rd reflect cycle). llm.propose_traits_from_experience: minimum memories raised 3→5, proposals capped 3→1 per cycle, prompt changed to require broader durable tendencies (not situational), explicit prohibition on existential/metaphysical traits added.
+
+Anti-escalation (feedback loop prevention): (1) Reflection topic rotation — _reflect() collects tags from last 5 reflection memories, finds those appearing 2+ times, passes as recent_topics to generate_reflection(); llm.generate_reflection gains recent_topics param, appends "don't revisit these" instruction. (2) Arc caps — deepening step: duration +4h→+2h, max 72h→36h; intensity +0.05→+0.03, max 0.95→0.70. (3) Ideas cap enforced — MAX_IDEAS 20→10 and [:MAX_IDEAS] slice applied at all three prepend sites. (4) Existential trait filter added to propose_traits_from_experience prompt.
+
+3-stage RAG pipeline (live conversations only): Previously: query=message, n=5, single ChromaDB call. Now: (1) _build_memory_query() static method constructs rich query from message + last 5 chat turns + mood. (2) memory_index.query(rich_query, memories, n=20) — 3× candidate fetch (60) reranked to 20. (3) grade_memories() new Haiku function in llm.py reads 20 candidates + conversation context, returns IDs of 4-5 most genuinely relevant. Both chat() and _voice_chat() paths use the full 3-stage pipeline. Background events (_fire_event, _reflect, _write_journal, _send_autonomous_outreach) unchanged — still use direct reranking. active_traits imported at module level in chloe.py (was inline import only).
+
+Deployment: Chloe running on Hetzner VPS at 178.104.205.170.

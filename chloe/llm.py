@@ -88,6 +88,61 @@ NEVER generate:
 Generate: specific things, sensory details, genuine curiosity about how the world works."""
 
 
+# ── 0. MEMORY GRADER ─────────────────────────────────────────
+# Used only on the live conversation path. Haiku filters a larger candidate
+# set down to the memories that are genuinely relevant to what's being discussed.
+
+def grade_memories(
+    candidates: list[Memory],
+    message:    str,
+    history:    list[dict],
+    mood:       str,
+    keep:       int = 5,
+) -> list[Memory]:
+    """Haiku grades retrieved memories for genuine relevance to the current conversation.
+    Returns up to `keep` memories. Falls back to top candidates on any error."""
+    if not candidates:
+        return []
+    if len(candidates) <= keep:
+        return candidates
+
+    history_text = "\n".join(
+        f"{m.get('from', '')}: {m.get('text', '')[:150]}"
+        for m in history[-5:]
+        if m.get("text")
+    ) or "no prior context"
+
+    mem_lines = "\n".join(
+        f'[{m.id}] ({m.type}) "{m.text[:150]}"'
+        for m in candidates
+    )
+
+    system = f"""You are helping Chloe — a young woman in her early twenties — find which of her memories are genuinely useful for her current conversation.
+
+A memory is useful if it would meaningfully shape how she thinks, feels, or responds right now — not just if it's vaguely on topic.
+
+Conversation so far (most recent last):
+{history_text}
+
+The person just said: "{message}"
+Chloe's mood: {mood}
+
+Candidate memories:
+{mem_lines}
+
+Return the IDs of the {keep} most relevant. Fewer if fewer are genuinely useful.
+Respond ONLY with a JSON array of IDs: ["id1", "id2", ...]"""
+
+    try:
+        raw    = _call(system, [{"role": "user", "content": "Which memories matter here?"}],
+                       max_tokens=100)
+        ids    = set(_parse_json(raw.strip()))
+        graded = [m for m in candidates if m.id in ids]
+        return graded[:keep] if graded else candidates[:keep]
+    except Exception:
+        return candidates[:keep]
+
+
 # ── 1. CHAT ──────────────────────────────────────────────────
 
 def chat(

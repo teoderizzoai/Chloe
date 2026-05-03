@@ -29,6 +29,7 @@ Cross off items when done. Implementation detail in 05_FEATURES.md; history in 0
 
 ## Infrastructure
 
-- [ ] VPS (Hetzner) + systemd deployment
+- [x] VPS (Hetzner) deployed — 178.104.205.170
+- [ ] systemd service (server restarts automatically)
 - [ ] Frontend auth + mobile-friendly dashboard
 - [ ] SQLite backup strategy (currently only JSON is backed up at 23:00)

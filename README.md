@@ -4,13 +4,13 @@ Chloe is a persistent AI entity — not a task assistant. She runs continuously 
 
 ## What she is
 
-- **Autonomous loop** — ticks every 5 seconds, independently decides what to do (read, dream, think, create, sleep, reach out)
+- **Autonomous loop** — ticks every 30 seconds, independently decides what to do (read, dream, think, create, sleep, reach out)
 - **Layered inner life** — vitals, mood, arcs, identity, memories, beliefs, wants, fears, tensions, relationships
 - **Emergent personality** — traits arise from experience via Haiku; no predefined list. She starts with no traits and develops them from what happens to her
-- **Persistent memory** — ChromaDB semantic index + SQLite, append-only, weight decay, recency reranking
+- **Persistent memory** — ChromaDB semantic index + SQLite, append-only, weight decay, recency reranking. Live conversations use a three-stage RAG pipeline: rich query → 20 candidates → Haiku grader → 5 most relevant
 - **Relational model** — warmth, distance, conflict, shared moments, tone registers per person
 - **Interest graph** — nodes expand from her own reading and thinking, not from a seed list
-- **Discord integration** — optional DM bridge; she initiates contact when something is building
+- **Discord integration** — optional DM bridge; she initiates contact at most once every 2 days when something is building
 
 ## Stack
 
@@ -24,6 +24,7 @@ Chloe is a persistent AI entity — not a task assistant. She runs continuously 
 | Dashboard | Plain HTML/JS, no build step |
 | Voice | Fish Speech 1.5 + faster-whisper (Python 3.11, separate process) |
 | Messaging | Discord DMs |
+| Deployment | Hetzner VPS |
 
 ## Project structure
 
@@ -38,10 +39,14 @@ assets/images/      activity and mood portraits served by the dashboard
 server.py           FastAPI endpoints
 index.html          dashboard (polls /snapshot every 4s)
 cli.py              terminal client (thin CLI, requires server running)
-  bin/start-server.sh Linux server launcher
+bin/start-server.sh Linux server launcher
 ```
 
 State files (`data/chloe_state.json`, `data/chloe.db`, `data/memory_index/`) are created at first run.
+
+## Running
+
+```bash
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
@@ -80,11 +85,11 @@ Set `REF_AUDIO` to a 5-15s clean voice sample (default: `voice/sample.wav`).
 
 ## How it works
 
-Every 5 seconds Chloe runs one tick: updates vitals, re-evaluates mood, checks for impulses, decides what activity to be in, and possibly fires a background LLM event (read an article, dream, think, create something, send a message). All LLM calls in the tick are async — the heartbeat never blocks.
+Every 30 seconds Chloe runs one tick: updates vitals, re-evaluates mood, checks for impulses, decides what activity to be in, and possibly fires a background LLM event (read an article, dream, think, create something, send a message). All LLM calls in the tick are async — the heartbeat never blocks.
 
-Chat happens on a separate path: incoming message -> emotion read -> context assembly (memories, graph, inner state, relationship, traits) -> Sonnet reply -> background extraction (belief, moment, note, trait reinforcement).
+Chat happens on a separate path: incoming message → emotion read → rich memory query (last 5 turns + mood) → 20 ChromaDB candidates → Haiku grader selects 5 relevant memories → Sonnet reply → background extraction (belief, moment, note, trait reinforcement).
 
-Identity evolves from the `_reflect()` cycle (~every 20 min): Haiku reviews recent memories and affect records, proposes traits when a coherent pattern spans 3+ experiences. Traits have weight, can contradict each other, and affect tone and activity selection through a generated behavioral profile.
+Identity evolves from the `_reflect()` cycle (~every 2 hours): Haiku reviews recent memories and affect records, proposes traits when a coherent pattern spans 5+ experiences. Trait proposals run every 3rd reflect cycle, cap at 10 active traits, and produce at most 1 new trait per cycle. Traits must be broad behavioral tendencies — not situational reactions, not existential themes.
 
 Full mechanics: `docs/00_ARCHITECTURE.md`. Feature roadmap: `docs/05_FEATURES.md`. Upcoming work: `docs/01_CHECKLIST.md`.
 
@@ -94,3 +99,4 @@ Full mechanics: `docs/00_ARCHITECTURE.md`. Feature roadmap: `docs/05_FEATURES.md
 - Memory is append-only — no edits, no deletes
 - Sonnet for anything a human reads; Haiku for all background/structured work
 - The eight mood labels are fixed; the trait system is not
+- Live conversation uses a 3-stage graded RAG pipeline; background events use direct reranking
