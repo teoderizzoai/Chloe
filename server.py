@@ -17,7 +17,7 @@ load_dotenv(Path(__file__).parent / ".env", override=True)
 from fastapi import FastAPI, HTTPException, Response
 from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import json
@@ -79,6 +79,10 @@ class AffectRequest(BaseModel):
     mood: str
 
 # ── Routes ───────────────────────────────────────────────────
+
+@app.get("/")
+def dashboard():
+    return FileResponse(Path(__file__).parent / "index.html")
 
 @app.get("/snapshot")
 def snapshot(response: Response):

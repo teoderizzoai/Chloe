@@ -57,7 +57,13 @@
       "Bash(ssh-copy-id *)",
       "Bash(scp *)",
       "Bash(pip list *)",
-      "Bash(pip install *)"
+      "Bash(pip install *)",
+      "Bash(git -C /workspaces/Chloe remote -v)",
+      "Read(//home/codespace/.ssh/**)",
+      "Bash(rsync -az -e 'ssh -i ~/.ssh/chloe_hetzner' --exclude=__pycache__ '--exclude=*.pyc' --exclude=data/ --exclude=backups/ --exclude=.git/ '--exclude=*.wav' --exclude=.fishvenv/ --exclude=legacy/ ./ root@178.104.205.170:/opt/chloe/app/)",
+      "Bash(git *)",
+      "Bash(rsync -az --exclude=__pycache__ '--exclude=*.pyc' --exclude=data/ --exclude=backups/ --exclude=.git/ '--exclude=*.wav' --exclude=.fishvenv/ --exclude=legacy/ -e 'ssh -i ~/.ssh/chloe_hetzner -o StrictHostKeyChecking=no' ./ root@178.104.205.170:/opt/chloe/app/)",
+      "Bash(rsync -av --exclude='data/' --exclude='__pycache__/' --exclude='*.pyc' chloe/ teo@178.104.205.170:/opt/chloe/chloe/)"
     ]
   }
 }

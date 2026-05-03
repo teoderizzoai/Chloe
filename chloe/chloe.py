@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .soul     import Soul, drift, consolidate, content_drift, content_affect, seasonal_drift, update_soul_momentum, mbti_type, describe  # DEPRECATED — kept for heart.py compat only
-from .identity import (Identity, identity_block, add_trait, reinforce_trait,
+from .identity import (Identity, Tendencies, identity_block, add_trait, reinforce_trait,
                        decay_traits, check_core_promotion, traits_snapshot,
                        snapshot_diff, add_contradiction, update_identity_momentum,
                        traits_matching_tags, penalize_trait, active_traits)
@@ -202,6 +202,7 @@ class Chloe:
         self._activity_streak:  int                = 0   # consecutive ticks in current activity
 
         # ── Layer 11: Identity (replaces MBTI soul momentum) ──
+        self.identity = Identity(tendencies=Tendencies.default())
         # Trait weights tracked in self.identity.identity_momentum
 
         # ── Layer 13: Friction & Inner Depth ──
