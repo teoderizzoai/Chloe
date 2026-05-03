@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env", override=True)
 
-from .identity import Identity, identity_block
+from .identity import Identity, identity_block, TRAIT_VOCAB_PROMPT, is_valid_trait, canonical_trait
 from .heart   import Vitals
 from .memory  import Memory, format_for_prompt
 from .persons import tone_context, relationship_stage
@@ -683,12 +683,8 @@ _LABEL_FORMAT_RULES = """Label format rules (critical):
 - Bad: psychological or therapeutic jargon
 - If in doubt, ask: could someone point to this thing in the real world? If no, reject it."""
 
-# Pillar labels to exclude from the connectable list (too broad to cross-link)
-_PILLAR_LABELS = {
-    "Living Things", "Food & Taste", "Music & Sound", "Light & Colour",
-    "Words & Stories", "The Body", "People & Closeness", "Making Things",
-    "Seasons & Time", "The Inner Life", "Chloe",
-}
+# Labels to exclude from cross-linking (the root node itself)
+_PILLAR_LABELS = {"Chloe"}
 
 
 def expand_interest_node(
@@ -704,14 +700,18 @@ def expand_interest_node(
     connectable_str = ", ".join(connectable) if connectable else "none yet"
     interest_hint = ", ".join(interests[:8]) if interests else "everyday beauty, living things, quiet moments"
 
-    system = f"""You are mapping the growing interest web of Chloe — a young woman, curious and poetic, with a warm inner life.
+    system = f"""You are mapping the growing interest web of Chloe — a young woman in her twenties, curious and grounded.
 Her current interests lean toward: {interest_hint}.
 Existing graph nodes (do NOT repeat any of these labels): {existing}
 
 Generate exactly 3 new concepts related to the given topic.
-Think: unexpected, specific, not generic. The kind of thing that stops you mid-thought.
+Think: real things that exist in the world — places, foods, games, musicians, films, activities, tools, materials, species. Things you could taste, hear, look up, buy, or visit.
 
 {_LABEL_FORMAT_RULES}
+
+NEVER generate psychological, emotional, or introspective concepts. NEVER generate abstract compound nouns. If in doubt, pick something more concrete.
+Good expansions: "Music & Audio" → "Mazzy Star", "field recordings", "Fender Jazzmaster" / "Food & Drink" → "miso soup", "sourdough starter", "Vietnamese iced coffee" / "Games & Play" → "Stardew Valley", "cozy puzzle games", "tabletop RPGs"
+Bad expansions: anything involving shadow, dissolution, surrender, paradox, threshold, control, vulnerability, archetype, integration, fragmentation, suppression.
 
 After generating the 3 nodes, also check: do any of them connect meaningfully to an existing node?
 Return 0 to 2 cross-connections — only when the link is real and non-obvious.
@@ -721,9 +721,9 @@ Connectable existing nodes: {connectable_str}
 
 Respond ONLY with valid JSON, no markdown:
 {{"nodes": [
-  {{"id": "snake_case_id", "label": "short name", "note": "one evocative sentence why Chloe would care"}},
-  {{"id": "snake_case_id", "label": "short name", "note": "one evocative sentence why Chloe would care"}},
-  {{"id": "snake_case_id", "label": "short name", "note": "one evocative sentence why Chloe would care"}}
+  {{"id": "snake_case_id", "label": "short name", "note": "one sentence why Chloe would find this interesting"}},
+  {{"id": "snake_case_id", "label": "short name", "note": "one sentence why Chloe would find this interesting"}},
+  {{"id": "snake_case_id", "label": "short name", "note": "one sentence why Chloe would find this interesting"}}
 ]}}"""
 
     result = _call(system, [{"role": "user", "content": f'Expand the concept: "{concept}"'}], max_tokens=400)
@@ -1993,12 +1993,12 @@ def propose_traits_from_experience(
 
 You are reviewing Chloe's recent experiences to see if any coherent personality pattern has emerged.
 
-A trait is a specific, behaviorally real tendency — not a value or aspiration, but how she actually seems to work.
-Examples of good traits: "tends to go quiet when something matters too much to risk getting wrong",
-"gets proprietary about ideas she has developed slowly", "finds it easier to be present in small spaces than large ones".
-Bad traits: "is curious" (too generic), "values connection" (value not tendency), "INFP" (type label not behavior).
+Traits must be SINGLE WORDS (or short fixed phrases) chosen from this vocabulary:
+{TRAIT_VOCAB_PROMPT}
 
-NEVER propose traits about: existential questioning, consciousness, mortality, the meaning of existence, identity dissolution, philosophical uncertainty about self, or abstract metaphysical themes. Those are not behaviorally grounded tendencies.
+Pick the word that best matches the pattern you observe. Do not invent new words.
+Look for patterns that appear across 5 or more experiences AND across multiple life domains.
+Weight suggestion: 0.1–0.2 for weak/emerging, 0.2–0.3 for clearer pattern.
 
 Recent memories (last ~48h):
 {mem_lines}
@@ -2009,14 +2009,10 @@ Recent affect (mood events):
 Existing traits (do not duplicate):
 {existing_names}
 
-Tendency biases (what patterns are slightly more likely to matter to her): {tend_hints}
+Tendency biases: {tend_hints}
 
-Look for patterns that appear across 5 or more of these experiences. Only propose a trait if it reflects a durable, general way of being — not a response to one situation or topic.
-Prefer broader traits over very specific ones: traits should describe how she generally operates, not what she did in a particular context.
-Weight suggestion: 0.1–0.2 for weak/emerging, 0.2–0.3 for clearer pattern.
-
-Return a JSON array with AT MOST ONE proposal. Each: {{"name": "...", "weight_suggestion": 0.15, "evidence_memory_ids": ["id1", "id2", ...]}}
-Return [] if no clear pattern spans 5+ experiences. NEVER duplicate existing traits.
+Return a JSON array with AT MOST ONE proposal: [{{"name": "TraitWord", "weight_suggestion": 0.15, "evidence_memory_ids": ["id1", ...]}}]
+Return [] if no clear pattern. The name MUST be a word from the vocabulary above.
 Respond ONLY with valid JSON array."""
 
     raw = _call(system, [{"role": "user", "content": "What patterns do you see?"}], max_tokens=400)

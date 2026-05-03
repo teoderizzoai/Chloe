@@ -31,7 +31,7 @@ from .graph  import (Graph, seed_graph, expand, clear_new_flags, get_labels,
                      reinforce_node, match_nodes_by_tags, get_leaf_nodes,
                      mark_auto_expanded, find_node_by_label,
                      pick_think_expansion_target, graph_knowledge_context,
-                     match_deep_nodes_for_message)
+                     match_deep_nodes_for_message, decay_graph, graph_interests)
 from .affect import Affect, update_mood, force_mood
 from .avatar import portrait_meta
 from .inner  import (Want, Belief, Goal, AffectRecord, Fear, Aversion,
@@ -64,12 +64,12 @@ from . import weather as wthr
 from .store import ChloeDB, DB_FILE
 from .weather import WeatherState
 
-TICK_SECONDS   = 30      # one heartbeat
-AGE_EVERY      = 12     # age memories every N ticks (~1 min)
-SAVE_EVERY     = 60     # persist state every N ticks (~5 min)
-WEATHER_EVERY  = 720    # refresh weather every N ticks (~1 hour)
-REFLECT_EVERY  = 240    # self-reflection + continuity check every N ticks (~2 h at 30 s/tick)
-ORPHAN_CHECK_EVERY = 240 # orphan tag surfacing every N ticks (~2 h) — matches reflect cadence
+TICK_SECONDS   = 300     # one heartbeat (5 min)
+AGE_EVERY      = 1      # age memories every tick (~5 min)
+SAVE_EVERY     = 1      # persist state every tick (~5 min)
+WEATHER_EVERY  = 12     # refresh weather every N ticks (~1 hour)
+REFLECT_EVERY  = 24     # self-reflection + continuity check every N ticks (~2 h)
+ORPHAN_CHECK_EVERY = 24 # orphan tag surfacing every N ticks (~2 h) — matches reflect cadence
 STATE_FILE     = Path("data/chloe_state.json")
 STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
 
@@ -445,6 +445,14 @@ class Chloe:
         words = set(_re.sub(r'[^\w\s]', ' ', t).split())
         return bool(words & _closing)
 
+    def _build_interests(self) -> list[str]:
+        """Merge memory-derived interests with top graph nodes.
+        Graph nodes represent things she's genuinely built up — they take priority."""
+        mem = derive_interests(self.memories)
+        top = graph_interests(self.graph)
+        seen = {t.lower() for t in top}
+        return top + [t for t in mem if t.lower() not in seen]
+
     def _get_risk_tolerance(self, person_id: str) -> float:
         """Item 73: current risk tolerance for a person.
         C5: baseline derived from attachment pattern when no ephemeral override."""
@@ -593,7 +601,7 @@ class Chloe:
         conflict_ctx    = format_conflict_context(person) if person else ""
         third_party_ctx   = format_third_party_context(person, message) if person else ""
         cross_person_ctx  = format_cross_person_context(self.persons, person_id, message)
-        interests       = derive_interests(self.memories)
+        interests       = self._build_interests()
         prefs           = derive_preferences(self.affect_records)
 
         # Topic resonance: does this message touch something she cares about or dislikes?
@@ -741,7 +749,7 @@ class Chloe:
         person  = get_person(self.persons, person_id)
         person_name = person.name if person else "Teo"
         season  = f"{wthr.describe_season(t_now.tm_mon)}, {circadian_phase(hour)}"
-        interests = derive_interests(self.memories)
+        interests = self._build_interests()
 
         _voice_history  = [m for m in self.chat_history if m.get("person_id") == person_id][-6:]
         _mem_q_v        = self._build_memory_query(message, _voice_history, self.affect.mood)
@@ -1167,6 +1175,12 @@ class Chloe:
 
         self._busy = False
 
+    def _snapshot_graph(self, max_nodes: int = 300) -> dict:
+        top = sorted(self.graph.nodes, key=lambda n: n.hit_count, reverse=True)[:max_nodes]
+        ids = {n.id for n in top}
+        edges = [e for e in self.graph.edges if e.from_id in ids and e.to_id in ids]
+        return {"nodes": [n.to_dict() for n in top], "edges": [e.to_dict() for e in edges]}
+
     def snapshot(self) -> dict:
         """Full serialisable state — for the API / frontend."""
         t = time.localtime()
@@ -1182,11 +1196,11 @@ class Chloe:
             "avatar":      portrait_meta(
                 self.activity, self.affect.mood, self.affect.intensity
             ),
-            "interests":   derive_interests(self.memories),
+            "interests":   self._build_interests(),
             "memories":    to_dicts(get_vivid(self.memories, 10)),
             "ideas":       ideas_to_dicts(self.ideas),
             "chat":        self.chat_history[-100:],
-            "graph":       self.graph.to_dict(),
+            "graph":       self._snapshot_graph(),
             "log":         self.log[:30],
             "tick":        self._tick,
             "busy":        self._busy,
@@ -1208,7 +1222,7 @@ class Chloe:
             # Layer 5
             "goals":       goals_to_dicts(self.goals),
             # Layer 7+8
-            "affect_records": affect_records_to_dicts(self.affect_records),
+            "affect_records": affect_records_to_dicts(self.affect_records[-200:]),
             "preferences":    derive_preferences(self.affect_records),
             # Layer 13: Friction & Inner Depth
             "tensions":    tensions_to_dicts(self.tensions),
@@ -1441,6 +1455,8 @@ class Chloe:
             # Trait weight decay + core promotion
             self.identity = decay_traits(self.identity)
             self.identity = check_core_promotion(self.identity)
+            # Graph node decay — weak/forgotten nodes shrink and eventually vanish
+            self.graph = decay_graph(self.graph)
 
             # C3: decay emotional residue from intense affect records
             self.affect_records = decay_affect_residue(self.affect_records)
@@ -1516,7 +1532,7 @@ class Chloe:
     async def _fire_event(self):
         """Run an autonomous LLM event in the background."""
         self._busy = True
-        interests    = derive_interests(self.memories)
+        interests    = self._build_interests()
         identity     = self.identity
         t            = time.localtime()
         season       = f"{wthr.describe_season(t.tm_mon)}, {circadian_phase(t.tm_hour)}"
@@ -1883,7 +1899,7 @@ class Chloe:
             t        = time.localtime()
             hour     = t.tm_hour
             season   = f"{wthr.describe_season(t.tm_mon)}, {circadian_phase(hour)}"
-            interests  = derive_interests(self.memories)
+            interests  = self._build_interests()
             _out_q     = self.ideas[0].text if self.ideas else self.affect.mood
             vivid      = self.memory_index.query(_out_q, self.memories, 4)
             prefs      = derive_preferences(self.affect_records)
@@ -2282,7 +2298,7 @@ class Chloe:
                     identity=self.identity,
                     vitals=self.vitals,
                     memories=self.memory_index.query(pm["text"], self.memories, 5),
-                    interests=derive_interests(self.memories),
+                    interests=self._build_interests(),
                     ideas=[i.text for i in self.ideas],
                     uptime=self._uptime_human(),
                     weather=self.weather,
@@ -2459,10 +2475,16 @@ class Chloe:
             )
 
             for prop in proposals:
-                name   = prop.get("name", "").strip()
-                weight = float(prop.get("weight_suggestion", 0.15))
-                eids   = prop.get("evidence_memory_ids", [])
+                raw_name = prop.get("name", "").strip()
+                weight   = float(prop.get("weight_suggestion", 0.15))
+                eids     = prop.get("evidence_memory_ids", [])
+                if not raw_name:
+                    continue
+                # Hard validation: name must be in the fixed vocabulary
+                from .identity import canonical_trait as _canon
+                name = _canon(raw_name)
                 if not name:
+                    self._log(f'trait proposal "{raw_name}" not in vocabulary — skipped')
                     continue
 
                 # Generate behavioral profile for new trait

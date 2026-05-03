@@ -701,7 +701,7 @@ button, .mtab, .person-pill, .sidebar-label, .topbar-name, .topbar-stat {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────
-const API     = 'http://localhost:8000';
+const API     = window.location.origin;
 const POLL_MS = 4000;
 
 const MOOD_COLORS = {
@@ -1918,26 +1918,28 @@ function draw(ctx, canvas) {
     const dragged = n === draggingNode;
     // item 34: opacity bonus for repeatedly-hit nodes (caps at +0.18)
     const hitGlow = Math.min(0.18, Math.log1p(n.hit_count || 0) * 0.03);
+    // fade weak nodes — sqrt scale so decay is visible but not abrupt
+    const fade = n.depth === 0 ? 1 : Math.pow(Math.min(1, (n.strength || 0.8) / 0.8), 0.6);
 
     if (sel || dragged) {
       ctx.beginPath(); ctx.arc(n.x, n.y, r+8, 0, Math.PI*2);
-      ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.globalAlpha = dragged ? 0.5 : 0.25;
+      ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.globalAlpha = (dragged ? 0.5 : 0.25) * fade;
       ctx.stroke(); ctx.globalAlpha = 1;
     }
     if (n.is_new) {
       ctx.beginPath(); ctx.arc(n.x, n.y, r*1.8, 0, Math.PI*2);
-      ctx.fillStyle = col; ctx.globalAlpha = 0.15; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.fillStyle = col; ctx.globalAlpha = 0.15 * fade; ctx.fill(); ctx.globalAlpha = 1;
     }
 
     ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI*2);
-    ctx.fillStyle = col; ctx.globalAlpha = (n.depth === 0 ? 0.25 : 0.15) + hitGlow;
+    ctx.fillStyle = col; ctx.globalAlpha = ((n.depth === 0 ? 0.25 : 0.15) + hitGlow) * fade;
     ctx.fill(); ctx.globalAlpha = 1;
 
     ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI*2);
     ctx.strokeStyle = col; ctx.lineWidth = (sel||dragged) ? 1.5 : 0.7 + hitGlow * 3;
-    ctx.globalAlpha = (sel||dragged) ? 1 : 0.5 + hitGlow; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.globalAlpha = ((sel||dragged) ? 1 : 0.5 + hitGlow) * fade; ctx.stroke(); ctx.globalAlpha = 1;
 
-    ctx.fillStyle = col; ctx.globalAlpha = (sel||dragged) ? 1 : 0.65 + hitGlow * 0.5;
+    ctx.fillStyle = col; ctx.globalAlpha = ((sel||dragged) ? 1 : 0.65 + hitGlow * 0.5) * fade;
     ctx.font = `${n.depth===0?500:400} ${n.depth===0?10:8}px 'DM Mono', monospace`;
     ctx.textAlign = 'center';
     ctx.fillText(n.label.toUpperCase(), n.x, n.y+r+11);

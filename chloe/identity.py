@@ -159,6 +159,107 @@ def get_contradiction_for_trait(identity: Identity, trait_id: str):
     return None
 
 
+# ── TRAIT VOCABULARY ─────────────────────────────────────────
+# Traits must be drawn from this fixed list. Single words or short fixed phrases.
+# Organised as positive / neutral / negative — all equally valid for emergence.
+
+TRAIT_VOCABULARY: frozenset = frozenset({
+    # Positive
+    "Accessible","Active","Adaptable","Admirable","Adventurous","Agreeable","Alert",
+    "Allocentric","Amiable","Anticipative","Appreciative","Articulate","Aspiring",
+    "Athletic","Attractive","Balanced","Benevolent","Brilliant","Calm","Capable",
+    "Captivating","Caring","Challenging","Charismatic","Charming","Cheerful","Clean",
+    "Clear-headed","Clever","Colorful","Companionly","Compassionate","Conciliatory",
+    "Confident","Conscientious","Considerate","Constant","Contemplative","Cooperative",
+    "Courageous","Courteous","Creative","Cultured","Curious","Daring","Debonair",
+    "Decent","Decisive","Dedicated","Deep","Dignified","Directed","Disciplined",
+    "Discreet","Dramatic","Dutiful","Dynamic","Earnest","Ebullient","Educated",
+    "Efficient","Elegant","Eloquent","Empathetic","Energetic","Enthusiastic","Esthetic",
+    "Exciting","Extraordinary","Fair","Faithful","Farsighted","Felicific","Firm",
+    "Flexible","Focused","Forceful","Forgiving","Forthright","Freethinking","Friendly",
+    "Fun-loving","Gallant","Generous","Gentle","Genuine","Good-natured","Gracious",
+    "Hardworking","Healthy","Hearty","Helpful","Heroic","High-minded","Honest",
+    "Honorable","Humble","Humorous","Idealistic","Imaginative","Impressive","Incisive",
+    "Incorruptible","Independent","Individualistic","Innovative","Inoffensive","Insightful",
+    "Insouciant","Intelligent","Intuitive","Invulnerable","Kind","Knowledgeable",
+    "Leaderly","Leisurely","Liberal","Logical","Lovable","Loyal","Lyrical",
+    "Magnanimous","Many-sided","Mature","Methodical","Meticulous","Moderate","Modest",
+    "Multi-leveled","Neat","Nonauthoritarian","Objective","Observant","Open","Optimistic",
+    "Orderly","Organized","Original","Painstaking","Passionate","Patient","Patriotic",
+    "Peaceful","Perceptive","Perfectionist","Personable","Persuasive","Planful",
+    "Playful","Polished","Popular","Practical","Precise","Principled","Profound",
+    "Protean","Protective","Providential","Prudent","Punctual","Purposeful","Rational",
+    "Realistic","Reflective","Relaxed","Reliable","Resourceful","Respectful",
+    "Responsible","Responsive","Reverential","Romantic","Rustic","Sage","Sane",
+    "Scholarly","Scrupulous","Secure","Selfless","Self-critical","Self-reliant",
+    "Sensitive","Sentimental","Serious","Sexy","Sharing","Shrewd","Simple","Skillful",
+    "Sober","Sociable","Solid","Sophisticated","Spontaneous","Sporting","Stable",
+    "Steadfast","Steady","Stoic","Strong","Studious","Suave","Subtle","Sweet",
+    "Sympathetic","Systematic","Tasteful","Thorough","Tidy","Tolerant","Trusting",
+    "Understanding","Undogmatic","Unfoolable","Upright","Urbane","Venturesome",
+    "Vivacious","Warm","Well-read","Well-rounded","Winning","Wise","Witty","Youthful",
+    # Neutral
+    "Absentminded","Aggressive","Ambitious","Amusing","Artful","Ascetic","Authoritarian",
+    "Big-thinking","Boyish","Breezy","Businesslike","Busy","Casual","Cerebral",
+    "Chummy","Circumspect","Competitive","Complex","Confidential","Conservative",
+    "Contradictory","Crisp","Cute","Deceptive","Determined","Dominating","Dreamy",
+    "Driving","Droll","Dry","Earthy","Emotional","Enigmatic","Experimental","Familial",
+    "Folksy","Formal","Freewheeling","Frugal","Glamorous","Guileless","High-spirited",
+    "Hurried","Hypnotic","Iconoclastic","Idiosyncratic","Impassive","Impersonal",
+    "Impressionable","Intense","Irreverent","Maternal","Mellow","Modern","Moralistic",
+    "Mystical","Neutral","Noncommittal","Noncompetitive","Obedient","Old-fashioned",
+    "Ordinary","Outspoken","Paternalistic","Physical","Placid","Political","Predictable",
+    "Preoccupied","Private","Progressive","Proud","Pure","Questioning","Quiet",
+    "Reserved","Restrained","Retiring","Sarcastic","Self-conscious","Sensual",
+    "Skeptical","Smooth","Soft","Solemn","Solitary","Stern","Strict","Stubborn",
+    "Stylish","Subjective","Surprising","Tough","Unaggressive","Unambitious",
+    "Unceremonious","Unchanging","Undemanding","Unfathomable","Unhurried","Uninhibited",
+    "Whimsical",
+    # Negative
+    "Abrasive","Abrupt","Agonizing","Aimless","Aloof","Amoral","Angry","Anxious",
+    "Apathetic","Arbitrary","Argumentative","Arrogant","Artificial","Asocial",
+    "Barbaric","Bewildered","Bizarre","Bland","Blunt","Brittle","Brutal","Calculating",
+    "Callous","Cantankerous","Careless","Cautious","Charmless","Childish","Clumsy",
+    "Coarse","Cold","Colorless","Complacent","Compulsive","Conceited","Condemnatory",
+    "Conformist","Confused","Contemptible","Conventional","Cowardly","Crafty","Crass",
+    "Critical","Crude","Cruel","Cynical","Decadent","Deceitful","Demanding","Dependent",
+    "Desperate","Destructive","Devious","Difficult","Discontented","Discouraging",
+    "Dishonest","Disloyal","Disorderly","Disorganized","Disputatious","Disrespectful",
+    "Disruptive","Dissolute","Distractible","Disturbing","Dogmatic","Domineering",
+    "Dull","Egocentric","Envious","Erratic","Escapist","Excitable","Extravagant",
+    "Extreme","Faithless","False","Fanatical","Fatalistic","Fearful","Fickle","Fixed",
+    "Foolish","Forgetful","Frightening","Frivolous","Gloomy","Graceless","Greedy",
+    "Grim","Gullible","Hateful","Haughty","Hedonistic","Hesitant","Hidebound",
+    "High-handed","Hostile","Ignorant","Imitative","Impatient","Impractical",
+    "Impulsive","Inconsiderate","Incurious","Indecisive","Indulgent","Inert",
+    "Inhibited","Insecure","Insensitive","Insincere","Insulting","Intolerant",
+    "Irascible","Irrational","Irresponsible","Irritable","Lazy","Loquacious",
+    "Malicious","Mannered","Mannerless","Mawkish","Mechanical","Meddlesome",
+    "Melancholic","Messy","Miserable","Miserly","Misguided","Moody","Morbid",
+    "Naive","Narcissistic","Narrow-minded","Negativistic","Neglectful","Neurotic",
+    "Nihilistic","Obnoxious","Obsessive","Odd","Opinionated","Opportunistic",
+    "Outrageous","Overimaginative","Paranoid","Passive","Pedantic","Perverse",
+    "Petty","Phlegmatic","Pompous","Possessive","Power-hungry","Prejudiced",
+    "Presumptuous","Pretentious","Prim","Procrastinating","Provocative","Pugnacious",
+    "Quirky","Reactionary","Reactive","Regretful","Repressed","Resentful","Rigid",
+    "Ritualistic","Sadistic","Sanctimonious","Scheming","Scornful","Secretive",
+    "Sedentary","Selfish","Self-indulgent","Shallow","Shortsighted","Shy","Silly",
+    "Single-minded","Sloppy","Slow","Sly","Softheaded","Sordid","Stiff","Stupid",
+    "Submissive","Superficial","Superstitious","Suspicious","Tactless","Tasteless",
+    "Tense","Thoughtless","Timid","Transparent","Treacherous","Trendy","Troublesome",
+    "Uncaring","Uncharitable","Uncooperative","Uncreative","Undisciplined",
+    "Unfriendly","Ungrateful","Unhealthy","Unimaginative","Unreliable","Unstable",
+    "Vacuous","Vague","Vindictive","Vulnerable","Weak","Weak-willed","Willful",
+    "Wishful","Zany",
+})
+
+# Lowercase lookup for validation
+_TRAIT_VOCAB_LOWER: frozenset = frozenset(t.lower() for t in TRAIT_VOCABULARY)
+
+# Compact string for inclusion in LLM prompts
+TRAIT_VOCAB_PROMPT: str = ", ".join(sorted(TRAIT_VOCABULARY))
+
+
 # ── PROMPT BLOCK ─────────────────────────────────────────────
 
 def _trait_label(weight: float) -> str:
@@ -175,26 +276,33 @@ _NO_TRAITS_YET = "a young woman in her early twenties, still becoming who she is
 
 
 def identity_block(identity: Identity) -> str:
-    """Format identity for injection into LLM prompts.
-    Returns a brief fallback when no traits have formed yet."""
+    """Format identity for injection into LLM prompts."""
     traits = active_traits(identity)
     if not traits:
         return _NO_TRAITS_YET
 
-    lines = ["Who you are right now:"]
-    for t in traits[:6]:
-        label = _trait_label(t.weight)
-        lines.append(f"- [{label}]: {t.name} ({t.weight:.2f})")
+    parts = [f"{t.name} ({_trait_label(t.weight)})" for t in traits[:6]]
+    result = "someone who is " + ", ".join(parts)
 
     if identity.contradictions:
-        lines.append("\nSomething unresolved in you:")
-        for c in identity.contradictions[:2]:
+        for c in identity.contradictions[:1]:
             ta = get_trait_by_id(identity, c.trait_a_id)
             tb = get_trait_by_id(identity, c.trait_b_id)
             if ta and tb:
-                lines.append(f'- you seem to be both "{ta.name}" and "{tb.name}" — this hasn\'t resolved')
+                result += f" — though she seems both {ta.name} and {tb.name} at once"
 
-    return "\n".join(lines)
+    return result
+
+
+def is_valid_trait(name: str) -> bool:
+    """Return True if name is in the allowed trait vocabulary."""
+    return name.strip().lower() in _TRAIT_VOCAB_LOWER
+
+
+def canonical_trait(name: str) -> str | None:
+    """Return the properly-cased canonical trait name, or None if not found."""
+    name_lower = name.strip().lower()
+    return next((t for t in TRAIT_VOCABULARY if t.lower() == name_lower), None)
 
 
 # ── MUTATIONS ────────────────────────────────────────────────

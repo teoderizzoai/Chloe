@@ -75,62 +75,51 @@ class Graph:
 # ── SEED GRAPH ───────────────────────────────────────────────
 
 def seed_graph() -> Graph:
-    nodes = [
-        Node(id="root", label="Chloe", depth=0, strength=1.0, fixed=True, x=0, y=0),
-        
-        # --- THE 10 HUMAN PILLARS ---
-        
-        # 1. Soundscape (Spotify, YouTube, background noise)
-        Node(id="p1", label="Music & Audio", depth=1, strength=0.8),
-        
-        # 2. Visual Style (Art, UI design, "Does this look good?")
-        Node(id="p2", label="Aesthetics & Design", depth=1, strength=0.7),
-        
-        # 3. The Daily Bread (Cooking, ordering in, caffeine intake)
-        Node(id="p3", label="Food & Drink", depth=1, strength=0.7),
-        
-        # 4. Digital Playground (Gaming, Steam, late-night play)
-        Node(id="p4", label="Games & Play", depth=1, strength=0.9),
-        
-        # 5. The Grind (Coding, writing, spreadsheets, "The Mission")
-        Node(id="p5", label="Work & Ambition", depth=1, strength=0.8),
-        
-        # 6. Rabbit Holes (Wikipedia, random facts, learning new stuff)
-        Node(id="p6", label="Curiosity & Learning", depth=1, strength=0.7),
-        
-        # 7. Physical World (Weather, travel, "The Outside")
-        Node(id="p7", label="Nature & Places", depth=1, strength=0.6),
-        
-        # 8. Human Connection (Social media, chat, "What are they thinking?")
-        Node(id="p8", label="Social & People", depth=1, strength=0.7),
-        
-        # 9. Wellness (Sleep schedules, stress levels, "Take a breath")
-        Node(id="p9", label="Health & Rest", depth=1, strength=0.6),
-        
-        # 10. Tech & Future (AI, gadgets, the tools we use)
-        Node(id="p10", label="Technology & Tools", depth=1, strength=0.7),
-    ]
-    
-    # Edge uses from_id / to_id (see to_dict keys "from" / "to" for the frontend)
-    edges = [Edge(from_id="root", to_id=n.id) for n in nodes if n.id != "root"]
-    return Graph(nodes=nodes, edges=edges)
+    """Start with just the root node. Interests emerge organically via G3/G4."""
+    return Graph(
+        nodes=[Node(id="root", label="Chloe", depth=0, strength=1.0, fixed=True, x=0, y=0)],
+        edges=[],
+    )
 
 
 # ── MUTATIONS ────────────────────────────────────────────────
 
+_ABSTRACT_WORDS = {
+    "shadow", "dissolution", "surrender", "paradox", "threshold", "liminal",
+    "archetype", "integration", "fragmentation", "suppression", "repression",
+    "projection", "sublimation", "disintegration", "vulnerability", "visceral",
+    "embodied", "somatic", "deconstruction", "infrastructure", "paradigm",
+    "self-judgment", "consciousness", "mortality", "erasure", "dissolution",
+    "bifurcation", "crystallisation", "crystallization", "stereotopic", "parallax",
+}
+
+MAX_NODE_DEPTH = 4  # hard cap on how deep the graph can grow
+
+
+def _is_acceptable_label(label: str) -> bool:
+    """Return False if a label contains abstract/psychological keywords or is too deep."""
+    words = {w.strip("().,") for w in label.lower().split()}
+    return not (words & _ABSTRACT_WORDS)
+
+
 def expand(graph: Graph, parent_id: str, new_node_defs: list[dict]) -> Graph:
     """Add LLM-generated nodes branching from a parent node.
-    new_node_defs: [{"id": ..., "label": ..., "note": ...}]"""
+    new_node_defs: [{"id": ..., "label": ..., "note": ...}]
+    Silently drops nodes with abstract/psychological labels or past MAX_NODE_DEPTH."""
     parent = _find_node(graph, parent_id)
     if not parent:
+        return graph
+
+    if parent.depth >= MAX_NODE_DEPTH:
         return graph
 
     angle_offset = random.uniform(0, 2 * math.pi)
     new_nodes: list[Node] = []
     new_edges: list[Edge] = []
+    accepted = [d for d in new_node_defs if _is_acceptable_label(d.get("label", ""))]
 
-    for i, defn in enumerate(new_node_defs):
-        angle = angle_offset + (i / len(new_node_defs)) * 2 * math.pi
+    for i, defn in enumerate(accepted):
+        angle = angle_offset + (i / max(len(accepted), 1)) * 2 * math.pi
         dist  = 150 + random.uniform(-20, 20)
         uid   = f"{defn['id']}_{int(time.time())}"
 
@@ -244,6 +233,18 @@ def find_node_by_label(graph: Graph, label: str) -> Node | None:
     return next((n for n in graph.nodes if n.label.lower() == label_lower), None)
 
 
+def graph_interests(graph: Graph, top_n: int = 6) -> list[str]:
+    """Labels of the most reinforced/strongest non-root nodes.
+    Used to bias reading, conversation, and prompts toward things
+    Chloe has genuinely built up interest in, not just recently tagged."""
+    candidates = sorted(
+        [n for n in graph.nodes if n.id != "root"],
+        key=lambda n: n.hit_count * 0.6 + n.strength * 0.4,
+        reverse=True,
+    )
+    return [n.label for n in candidates[:top_n]]
+
+
 # ── THINK EXPANSION ──────────────────────────────────────────
 
 def pick_think_expansion_target(graph: Graph) -> "Node | None":
@@ -285,6 +286,55 @@ def graph_knowledge_context(graph: Graph, max_nodes: int = 6) -> str:
     deep.sort(key=lambda n: n.hit_count, reverse=True)
     lines = [f"{n.label} — {n.note}" for n in deep[:max_nodes]]
     return "Things she's genuinely traced:\n" + "\n".join(lines)
+
+
+# ── DECAY ────────────────────────────────────────────────────
+
+# At TICK_SECONDS=300, this rate means:
+#   ~7.5% strength lost per day → node at 1.0 fades below 0.08 in ~30 days
+#   node at 0.3 fades below 0.08 in ~16 days
+# reinforce_node (+0.02 per hit) offsets ~1 hit every 3-4 days.
+_DECAY_RATE_PER_TICK = 0.000266
+_MIN_STRENGTH        = 0.08  # below this the node is pruned
+
+
+def decay_graph(graph: Graph) -> Graph:
+    """Per-tick strength decay for all non-root nodes.
+    Nodes not reinforced will shrink and eventually be pruned.
+    Pruning cascades: children of a pruned node are also removed."""
+
+    # 1. Apply multiplicative decay; collect survivors
+    decayed: list[Node] = []
+    for n in graph.nodes:
+        if n.id == "root":
+            decayed.append(n)
+            continue
+        new_strength = n.strength * (1.0 - _DECAY_RATE_PER_TICK)
+        if new_strength > _MIN_STRENGTH:
+            decayed.append(Node(**{**n.to_dict(), "strength": new_strength}))
+
+    # 2. BFS from root to prune disconnected subtrees
+    surviving_ids = {n.id for n in decayed}
+    edges_by_parent: dict[str, list[str]] = {}
+    for e in graph.edges:
+        if e.from_id in surviving_ids and e.to_id in surviving_ids:
+            edges_by_parent.setdefault(e.from_id, []).append(e.to_id)
+
+    reachable: set[str] = set()
+    queue = ["root"]
+    while queue:
+        nid = queue.pop()
+        if nid in reachable:
+            continue
+        reachable.add(nid)
+        queue.extend(edges_by_parent.get(nid, []))
+
+    surviving_ids &= reachable
+    return Graph(
+        nodes=[n for n in decayed if n.id in surviving_ids],
+        edges=[e for e in graph.edges
+               if e.from_id in surviving_ids and e.to_id in surviving_ids],
+    )
 
 
 # ── HELPERS ──────────────────────────────────────────────────
