@@ -56,6 +56,9 @@ def _call(system: str, messages: list[dict], max_tokens: int = MAX_TOKENS,
             max_output_tokens=max_tokens,
         ),
     )
+    if response.text is None:
+        finish = getattr(response.candidates[0], "finish_reason", "unknown") if response.candidates else "unknown"
+        raise ValueError(f"empty response from API (finish_reason={finish})")
     text = response.text.strip()
     # Strip dashes at source - instructions alone are not reliable enough
     text = text.replace('\u2014', ', ')   # em dash -> comma
